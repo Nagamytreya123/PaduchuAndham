@@ -45,11 +45,13 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@Valid @RequestBody LoginRequest req) {
-        try {
+        try
+        {
             Authentication authentication = authManager.authenticate(
                     new UsernamePasswordAuthenticationToken(req.getEmail(), req.getPassword())
             );
-        } catch (BadCredentialsException ex) {
+        }
+        catch (BadCredentialsException ex) {
             return ResponseEntity.status(401).body("Invalid credentials");
         }
 
