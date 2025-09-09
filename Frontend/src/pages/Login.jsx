@@ -12,11 +12,11 @@ import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import Typography from "@mui/material/Typography";
 import Paper from "@mui/material/Paper";
 import { Alert } from "@mui/material";
-import GoogleButton from "../components/OAuthGoogleButton";
+import OAuthGoogleButton from "../components/OAuthGoogleButton";
 
 export default function Login() {
   const navigate = useNavigate();
-  const { login, signInWithGoogleSimulated } = useAuth();
+  const { login, setAppToken } = useAuth();
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -29,26 +29,28 @@ export default function Login() {
     setError(null);
     setLoading(true);
     try {
-      await login(form);
+      await login({ usernameOrEmail: form.email, password: form.password });
       navigate("/profile");
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Login failed");
     } finally {
       setLoading(false);
     }
   };
 
-  const onGoogle = async () => {
-    setLoading(true);
-    setError(null);
+  const onGoogleSuccess = (data) => {
     try {
-      await signInWithGoogleSimulated();
+      const jwt = data?.token;
+      if (!jwt) throw new Error("No token from Google sign-in");
+      setAppToken(jwt); // store token & set user via AuthProvider
       navigate("/profile");
     } catch (err) {
       setError(err.message || "Google sign-in failed");
-    } finally {
-      setLoading(false);
     }
+  };
+
+  const onGoogleError = (err) => {
+    setError(err?.message || "Google sign-in failed");
   };
 
   return (
@@ -57,7 +59,6 @@ export default function Login() {
         minHeight: "100vh",
         position: "relative",
         overflow: "hidden",
-        // background image (cover)
         backgroundImage: `url('/assets/bg-clothing.jpg')`,
         backgroundSize: "cover",
         backgroundPosition: "center",
@@ -166,8 +167,9 @@ export default function Login() {
               {loading ? "Signing in..." : "Sign In"}
             </Button>
 
-            <GoogleButton
-              onClick={onGoogle}
+            <OAuthGoogleButton
+              onSuccess={onGoogleSuccess}
+              onError={onGoogleError}
               disabled={loading}
               sx={{ mt: 1 }}
             />
