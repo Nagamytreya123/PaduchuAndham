@@ -1,3 +1,5 @@
-node_modules/
-env/
-dist/
+# dotenv files
+.env
+.env.local
+.env.development
+.env.production
