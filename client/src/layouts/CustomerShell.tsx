@@ -35,7 +35,18 @@ export function CustomerShell() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', pb: isXs ? 8 : 0 }}>
-      <AppBar position="sticky" elevation={0} color="inherit" sx={{ borderBottom: 1, borderColor: 'divider' }}>
+      <AppBar
+        position="sticky"
+        elevation={0}
+        color="inherit"
+        sx={{
+          borderBottom: '1px solid',
+          borderColor: 'rgba(198, 198, 198, 0.15)',
+          backgroundColor: 'rgba(238, 238, 238, 0.7)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+        }}
+      >
         <Toolbar sx={{ gap: 2 }}>
           <Typography
             variant="h6"
@@ -64,9 +75,24 @@ export function CustomerShell() {
                 </Button>
               )}
               {!user && (
-                <Typography component={RouterLink} to="/login" color="primary" sx={{ textDecoration: 'none', fontWeight: 600 }}>
-                  Sign in
-                </Typography>
+                <>
+                  <Typography
+                    component={RouterLink}
+                    to="/login?mode=signup"
+                    color="inherit"
+                    sx={{ textDecoration: 'none', fontWeight: 600 }}
+                  >
+                    Join
+                  </Typography>
+                  <Typography
+                    component={RouterLink}
+                    to="/login"
+                    color="primary"
+                    sx={{ textDecoration: 'none', fontWeight: 600 }}
+                  >
+                    Sign in
+                  </Typography>
+                </>
               )}
             </>
           )}

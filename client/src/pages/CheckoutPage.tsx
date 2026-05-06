@@ -5,6 +5,8 @@ import TextField from '@mui/material/TextField';
 import Button from '@mui/material/Button';
 import Alert from '@mui/material/Alert';
 import CircularProgress from '@mui/material/CircularProgress';
+import Box from '@mui/material/Box';
+import Chip from '@mui/material/Chip';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import { useCart } from '../context/CartContext';
@@ -33,6 +35,7 @@ export function CheckoutPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [phone, setPhone] = useState('');
   const [address, setAddress] = useState({
     line1: '',
     line2: '',
@@ -83,6 +86,9 @@ export function CheckoutPage() {
       const RazorpayCtor = (window as unknown as { Razorpay: new (opts: Record<string, unknown>) => { open: () => void } })
         .Razorpay;
 
+      const contactDigits = phone.replace(/\D/g, '');
+      const prefillContact =
+        contactDigits.length >= 10 ? `+91${contactDigits.slice(-10)}` : undefined;
       const options: Record<string, unknown> = {
         key: orderRes.keyId,
         amount: orderRes.amount,
@@ -90,11 +96,23 @@ export function CheckoutPage() {
         order_id: orderRes.razorpayOrderId,
         name: 'Paduchu Shop',
         description: 'Order payment',
+        /** Let Razorpay render default method tabs; dashboard toggles what appears (UPI works in test mode when enabled there). */
+        method: {
+          card: true,
+          upi: true,
+          netbanking: true,
+          wallet: true,
+          emi: true,
+        },
         prefill: {
           name: user?.name,
           email: user?.email,
+          ...(prefillContact ? { contact: prefillContact } : {}),
         },
-        theme: { color: '#1565c0' },
+        notes: {
+          orderRef: orderRes.orderId.slice(-8),
+        },
+        theme: { color: '#000000' },
         handler: async (response: {
           razorpay_order_id: string;
           razorpay_payment_id: string;
@@ -151,11 +169,38 @@ export function CheckoutPage() {
         Total {formatInrFromPaise(totalPaise)}
       </Typography>
 
+      <Box>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+          Accepted on checkout
+        </Typography>
+        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+          <Chip size="small" variant="outlined" label="UPI" />
+          <Chip size="small" variant="outlined" label="Cards" />
+          <Chip size="small" variant="outlined" label="EMI" />
+          <Chip size="small" variant="outlined" label="Wallets" />
+          <Chip size="small" variant="outlined" label="Net banking" />
+          <Chip size="small" variant="outlined" label="Pay later" />
+        </Stack>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+          You will complete payment securely in Razorpay. Exact methods depend on your Razorpay dashboard (same range as typical fashion apps).
+        </Typography>
+      </Box>
+
       {error && (
         <Alert severity="error" onClose={() => setError(null)}>
           {error}
         </Alert>
       )}
+
+      <TextField
+        label="Mobile (for UPI / SMS)"
+        fullWidth
+        placeholder="10-digit mobile"
+        value={phone}
+        onChange={(e) => setPhone(e.target.value)}
+        inputProps={{ inputMode: 'numeric', maxLength: 15 }}
+        helperText="Optional; pre-fills Razorpay for faster UPI and card flows"
+      />
 
       <TextField
         label="Address line 1"
@@ -203,7 +248,7 @@ export function CheckoutPage() {
       </Stack>
 
       <Button variant="contained" size="large" disabled={!valid || busy} onClick={() => void pay()}>
-        {busy ? <CircularProgress size={24} color="inherit" /> : 'Pay with Razorpay'}
+        {busy ? <CircularProgress size={24} color="inherit" /> : 'Pay securely'}
       </Button>
     </Stack>
   );

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import passport from 'passport';
 import rateLimit from 'express-rate-limit';
-import { env } from '../config/env.js';
+import { env, getAdminEmailSet } from '../config/env.js';
 import { ensureGoogleStrategy, issueAuthCookie } from '../auth/google.js';
 import { UserModel } from '../models/User.js';
 const router = Router();
@@ -112,6 +112,50 @@ router.post('/dev-login', async (req, res) => {
       email: user.email,
       name: user.name,
       role: user.role,
+    },
+  });
+});
+
+/** Dev-only: create a customer (or admin if email is in ADMIN_EMAILS) and sign in */
+router.post('/dev-signup', async (req, res) => {
+  if (env.NODE_ENV === 'production') {
+    res.status(404).end();
+    return;
+  }
+  const { email, name } = req.body as { email?: string; name?: string };
+  if (!email?.trim()) {
+    res.status(400).json({ error: 'email required' });
+    return;
+  }
+  const normalized = email.toLowerCase().trim();
+  const existing = await UserModel.findOne({ email: normalized });
+  if (existing) {
+    res.status(409).json({ error: 'An account with this email already exists' });
+    return;
+  }
+  const adminEmails = getAdminEmailSet();
+  const role = adminEmails.has(normalized) ? 'admin' : 'customer';
+  const displayName = name?.trim() || normalized.split('@')[0] || 'Customer';
+  const created = await UserModel.create({
+    email: normalized,
+    name: displayName,
+    role,
+  });
+  const token = issueAuthCookie(created._id.toString(), role);
+  res.cookie(env.JWT_COOKIE_NAME, token, {
+    httpOnly: true,
+    secure: false,
+    sameSite: 'lax',
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    path: '/',
+  });
+  res.json({
+    ok: true,
+    user: {
+      id: created._id.toString(),
+      email: created.email,
+      name: created.name,
+      role: created.role,
     },
   });
 });

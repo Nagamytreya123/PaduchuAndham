@@ -1,14 +1,27 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { config as dotenvConfig } from 'dotenv';
+import { config as dotenvConfig, parse as dotenvParse } from 'dotenv';
 import { z } from 'zod';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-// Load from repo root first, then server/.env (so either layout works with npm --prefix server).
 const rootEnvPath = path.resolve(__dirname, '../../../.env');
 const serverEnvPath = path.resolve(__dirname, '../../.env');
+
+// Root first. Then merge server/.env entries only when non-empty, so blanks in server/.env never wipe Razorpay (etc.) defined in root .env.
 dotenvConfig({ path: rootEnvPath });
-dotenvConfig({ path: serverEnvPath, override: true });
+if (fs.existsSync(serverEnvPath)) {
+  const parsed = dotenvParse(fs.readFileSync(serverEnvPath, 'utf8'));
+  for (const [key, raw] of Object.entries(parsed)) {
+    const value = typeof raw === 'string' ? raw.trim() : '';
+    if (value !== '') process.env[key] = raw.trim();
+  }
+}
+
+for (const key of ['RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET', 'RAZORPAY_WEBHOOK_SECRET'] as const) {
+  const v = process.env[key];
+  if (v !== undefined && v.trim() === '') Reflect.deleteProperty(process.env, key);
+}
 
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
@@ -43,6 +56,19 @@ function load(): Env {
 }
 
 export const env = load();
+
+if (
+  env.NODE_ENV === 'development' &&
+  !(env.RAZORPAY_KEY_ID?.trim() && env.RAZORPAY_KEY_SECRET?.trim())
+) {
+  console.warn(
+    `[env] Razorpay keys are missing after load. Checked root .env at ${rootEnvPath} (exists: ${fs.existsSync(rootEnvPath)}).`,
+    fs.existsSync(serverEnvPath)
+      ? `Also server/.env at ${serverEnvPath} (non-empty lines override empty ones only—see env.ts).`
+      : '',
+    'If Cursor shows keys but checkout fails: save `.env` to disk (Ctrl+S), then restart `npm run dev`.',
+  );
+}
 
 export function getAdminEmailSet(): Set<string> {
   const raw = env.ADMIN_EMAILS ?? '';

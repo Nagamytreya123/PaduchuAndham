@@ -46,7 +46,11 @@ router.post('/', checkoutLimiter, async (req, res) => {
     return;
   }
   if (!env.RAZORPAY_KEY_ID || !env.RAZORPAY_KEY_SECRET) {
-    res.status(503).json({ error: 'Payments are not configured' });
+    res.status(503).json({
+      error:
+        'Payments are not configured: set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in .env (see .env.example). Restart the API after saving.',
+      code: 'PAYMENTS_NOT_CONFIGURED',
+    });
     return;
   }
 
@@ -78,10 +82,16 @@ router.post('/', checkoutLimiter, async (req, res) => {
     });
   }
 
+  const amountPaise = Math.round(amount);
+  if (amountPaise < 100) {
+    res.status(400).json({ error: 'Order total must be at least ₹1 (100 paise)' });
+    return;
+  }
+
   const order = await OrderModel.create({
     user: req.user!.id,
     items: lineItems,
-    amount,
+    amount: amountPaise,
     currency: 'INR',
     status: 'pending',
     address: {
@@ -96,14 +106,27 @@ router.post('/', checkoutLimiter, async (req, res) => {
   });
 
   const receipt = order._id.toString().slice(-20);
-  const razorpayOrder = await rzp.orders.create({
-    amount,
-    currency: 'INR',
-    receipt,
-    notes: {
-      orderId: order._id.toString(),
-    },
-  });
+  let razorpayOrder: { id: string };
+  try {
+    razorpayOrder = await rzp.orders.create({
+      amount: amountPaise,
+      currency: 'INR',
+      receipt,
+      notes: {
+        orderId: order._id.toString(),
+      },
+    });
+  } catch (e: unknown) {
+    const msg =
+      e && typeof e === 'object' && 'error' in e && e.error && typeof e.error === 'object' && 'description' in e.error
+        ? String((e.error as { description?: string }).description)
+        : null;
+    res.status(502).json({
+      error: msg ?? 'Could not create Razorpay order. Check API keys and your Razorpay account.',
+      code: 'RAZORPAY_ORDER_FAILED',
+    });
+    return;
+  }
 
   order.razorpayOrderId = razorpayOrder.id;
   await order.save();
@@ -111,7 +134,7 @@ router.post('/', checkoutLimiter, async (req, res) => {
   res.status(201).json({
     orderId: order._id.toString(),
     razorpayOrderId: razorpayOrder.id,
-    amount,
+    amount: amountPaise,
     currency: 'INR',
     keyId: env.RAZORPAY_KEY_ID,
   });
@@ -170,7 +193,10 @@ router.post('/verify-payment', checkoutLimiter, async (req, res) => {
     return;
   }
   if (!env.RAZORPAY_KEY_SECRET) {
-    res.status(503).json({ error: 'Payments are not configured' });
+    res.status(503).json({
+      error: 'Payments are not configured: set RAZORPAY_KEY_SECRET in .env.',
+      code: 'PAYMENTS_NOT_CONFIGURED',
+    });
     return;
   }
 
