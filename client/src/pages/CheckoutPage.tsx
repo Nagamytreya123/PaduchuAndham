@@ -52,7 +52,7 @@ export function CheckoutPage() {
     address.postalCode.trim().length > 0;
 
   const payloadItems = useMemo(
-    () => lines.map((l) => ({ productId: l.productId, qty: l.qty })),
+    () => lines.map((l) => ({ productId: l.productId, qty: l.qty, unitPricePaise: l.price })),
     [lines],
   );
 

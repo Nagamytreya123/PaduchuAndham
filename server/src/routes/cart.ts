@@ -12,6 +12,10 @@ const lineSchema = z.object({
   price: z.number().int().min(0),
   qty: z.number().int().min(1),
   image: z.string().max(2000).optional(),
+  bundleGroupId: z.string().min(1).max(200).optional(),
+  bundleDisplayName: z.string().min(1).max(500).optional(),
+  bundleUnitTotalPaise: z.number().int().min(0).optional(),
+  bundleImage: z.string().max(2000).optional(),
 });
 
 const putBodySchema = z.object({
@@ -29,6 +33,10 @@ router.get('/', async (req, res) => {
     price: it.price,
     qty: it.qty,
     image: it.image,
+    bundleGroupId: it.bundleGroupId,
+    bundleDisplayName: it.bundleDisplayName,
+    bundleUnitTotalPaise: it.bundleUnitTotalPaise,
+    bundleImage: it.bundleImage,
   }));
   res.json({ items });
 });
@@ -49,6 +57,10 @@ router.put('/', async (req, res) => {
     price: it.price,
     qty: it.qty,
     image: it.image,
+    bundleGroupId: it.bundleGroupId,
+    bundleDisplayName: it.bundleDisplayName,
+    bundleUnitTotalPaise: it.bundleUnitTotalPaise,
+    bundleImage: it.bundleImage,
   }));
 
   await CartModel.findOneAndUpdate(

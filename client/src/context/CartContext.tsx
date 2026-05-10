@@ -14,10 +14,86 @@ import { useAuth } from './AuthContext';
 export type CartLine = {
   productId: string;
   name: string;
+  /** Per-unit price in paise (split for bundles — used at checkout). */
   price: number;
   qty: number;
   image?: string;
+  /** Present on every line that belongs to one jewellery combo or watch+bracelet bundle. */
+  bundleGroupId?: string;
+  bundleDisplayName?: string;
+  /** Full bundle price for one set (paise). */
+  bundleUnitTotalPaise?: number;
+  bundleImage?: string;
 };
+
+export type AddBundleInput = {
+  groupId: string;
+  displayName: string;
+  unitTotalPaise: number;
+  image?: string;
+  components: { productId: string; name: string; unitPricePaise: number; image?: string }[];
+  qty: number;
+};
+
+/** For header badge: standalone qty + bundle set qty (each bundle group counted once). */
+export function cartBadgeCount(lines: CartLine[]): number {
+  const seenBundle = new Set<string>();
+  let n = 0;
+  for (const l of lines) {
+    if (l.bundleGroupId) {
+      if (!seenBundle.has(l.bundleGroupId)) {
+        seenBundle.add(l.bundleGroupId);
+        n += l.qty;
+      }
+    } else {
+      n += l.qty;
+    }
+  }
+  return n;
+}
+
+function mergeCartLines(server: CartLine[], guest: CartLine[]): CartLine[] {
+  const collectGroups = (lines: CartLine[]) => {
+    const m = new Map<string, CartLine[]>();
+    for (const l of lines) {
+      if (!l.bundleGroupId) continue;
+      const arr = m.get(l.bundleGroupId) ?? [];
+      arr.push(l);
+      m.set(l.bundleGroupId, arr);
+    }
+    return m;
+  };
+  const sg = collectGroups(server);
+  const gg = collectGroups(guest);
+  const bundleOut: CartLine[] = [];
+  const allGids = new Set([...sg.keys(), ...gg.keys()]);
+  for (const gid of allGids) {
+    const s = sg.get(gid);
+    const g = gg.get(gid);
+    if (s && g) {
+      const qty = s[0]!.qty + g[0]!.qty;
+      bundleOut.push(...s.map((l) => ({ ...l, qty })));
+    } else if (s) bundleOut.push(...s);
+    else if (g) bundleOut.push(...g);
+  }
+  const bundledPids = new Set(bundleOut.map((l) => l.productId));
+
+  const standaloneMap = new Map<string, CartLine>();
+  for (const l of server) {
+    if (l.bundleGroupId) continue;
+    if (bundledPids.has(l.productId)) continue;
+    standaloneMap.set(l.productId, { ...l });
+  }
+  for (const l of guest) {
+    if (l.bundleGroupId) continue;
+    if (bundledPids.has(l.productId)) continue;
+    const ex = standaloneMap.get(l.productId);
+    if (ex) standaloneMap.set(l.productId, { ...ex, qty: ex.qty + l.qty });
+    else standaloneMap.set(l.productId, { ...l });
+  }
+
+  return [...standaloneMap.values(), ...bundleOut];
+}
 
 /** Legacy single-key cart before per-guest isolation */
 const LEGACY_STORAGE_KEY = 'paduchu-cart-v1';
@@ -26,8 +102,11 @@ const GUEST_STORAGE_KEY = 'paduchu-cart-v1:guest';
 type CartCtx = {
   lines: CartLine[];
   add: (line: Omit<CartLine, 'qty'> & { qty?: number }) => void;
+  addBundle: (input: AddBundleInput) => void;
   setQty: (productId: string, qty: number) => void;
+  setBundleQty: (bundleGroupId: string, qty: number) => void;
   remove: (productId: string) => void;
+  removeBundle: (bundleGroupId: string) => void;
   clear: () => void;
   totalPaise: number;
 };
@@ -53,22 +132,6 @@ function loadGuestCart(): CartLine[] {
     localStorage.removeItem(LEGACY_STORAGE_KEY);
   }
   return legacy;
-}
-
-function mergeCartLines(server: CartLine[], guest: CartLine[]): CartLine[] {
-  const map = new Map<string, CartLine>();
-  for (const line of server) {
-    map.set(line.productId, { ...line });
-  }
-  for (const line of guest) {
-    const existing = map.get(line.productId);
-    if (existing) {
-      map.set(line.productId, { ...existing, qty: existing.qty + line.qty });
-    } else {
-      map.set(line.productId, { ...line });
-    }
-  }
-  return Array.from(map.values());
 }
 
 export function CartProvider({ children }: { children: ReactNode }) {
@@ -143,25 +206,74 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const add = useCallback((line: Omit<CartLine, 'qty'> & { qty?: number }) => {
     setLines((prev) => {
       const qty = line.qty ?? 1;
-      const idx = prev.findIndex((l) => l.productId === line.productId);
+      const idx = prev.findIndex((l) => l.productId === line.productId && !l.bundleGroupId);
       if (idx === -1) {
         return [...prev, { ...line, qty }];
       }
       const copy = [...prev];
-      copy[idx] = { ...copy[idx], qty: copy[idx].qty + qty };
+      copy[idx] = { ...copy[idx], qty: copy[idx]!.qty + qty };
       return copy;
+    });
+  }, []);
+
+  const addBundle = useCallback((input: AddBundleInput) => {
+    const ids = new Set(input.components.map((c) => c.productId));
+    setLines((prev) => {
+      const existingForGroup = prev.filter((l) => l.bundleGroupId === input.groupId);
+      const mergedQty = (existingForGroup[0]?.qty ?? 0) + input.qty;
+
+      const filtered = prev.filter((l) => {
+        if (l.bundleGroupId === input.groupId) return false;
+        if (ids.has(l.productId)) return false;
+        return true;
+      });
+      const newLines: CartLine[] = input.components.map((c) => ({
+        productId: c.productId,
+        name: c.name,
+        price: c.unitPricePaise,
+        qty: mergedQty,
+        image: c.image,
+        bundleGroupId: input.groupId,
+        bundleDisplayName: input.displayName,
+        bundleUnitTotalPaise: input.unitTotalPaise,
+        bundleImage: input.image,
+      }));
+      return [...filtered, ...newLines];
+    });
+  }, []);
+
+  const setBundleQty = useCallback((bundleGroupId: string, qty: number) => {
+    setLines((prev) => {
+      if (qty <= 0) return prev.filter((l) => l.bundleGroupId !== bundleGroupId);
+      return prev.map((l) => (l.bundleGroupId === bundleGroupId ? { ...l, qty } : l));
     });
   }, []);
 
   const setQty = useCallback((productId: string, qty: number) => {
     setLines((prev) => {
+      const line = prev.find((l) => l.productId === productId);
+      if (line?.bundleGroupId) {
+        return prev
+          .map((l) => (l.bundleGroupId === line.bundleGroupId ? { ...l, qty } : l))
+          .filter((l) => l.qty > 0);
+      }
       if (qty <= 0) return prev.filter((l) => l.productId !== productId);
-      return prev.map((l) => (l.productId === productId ? { ...l, qty } : l));
+      return prev.map((l) => (l.productId === productId && !l.bundleGroupId ? { ...l, qty } : l));
     });
   }, []);
 
+  const removeBundle = useCallback((bundleGroupId: string) => {
+    setLines((prev) => prev.filter((l) => l.bundleGroupId !== bundleGroupId));
+  }, []);
+
   const remove = useCallback((productId: string) => {
-    setLines((prev) => prev.filter((l) => l.productId !== productId));
+    setLines((prev) => {
+      const hit = prev.find((l) => l.productId === productId);
+      if (hit?.bundleGroupId) {
+        return prev.filter((l) => l.bundleGroupId !== hit.bundleGroupId);
+      }
+      return prev.filter((l) => l.productId !== productId);
+    });
   }, []);
 
   const clear = useCallback(() => setLines([]), []);
@@ -172,12 +284,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
     () => ({
       lines,
       add,
+      addBundle,
       setQty,
+      setBundleQty,
       remove,
+      removeBundle,
       clear,
       totalPaise,
     }),
-    [lines, add, setQty, remove, clear, totalPaise],
+    [lines, add, addBundle, setQty, setBundleQty, remove, removeBundle, clear, totalPaise],
   );
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;

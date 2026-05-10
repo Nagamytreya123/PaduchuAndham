@@ -12,7 +12,10 @@ import { LoginPage } from './pages/LoginPage';
 import { OrdersPage } from './pages/account/OrdersPage';
 import { DashboardPage } from './pages/admin/DashboardPage';
 import { AdminProductsPage } from './pages/admin/AdminProductsPage';
+import { AdminJewelleryCombosPage } from './pages/admin/AdminJewelleryCombosPage';
 import { AdminOrdersPage } from './pages/admin/AdminOrdersPage';
+import { AdminReviewsPage } from './pages/admin/AdminReviewsPage';
+import { JewelleryComboDetailPage } from './pages/JewelleryComboDetailPage';
 
 function ProtectedCustomer({ children }: { children: ReactElement }) {
   const { user, loading } = useAuth();
@@ -51,6 +54,7 @@ export function App() {
       <Route element={<CustomerShell />}>
         <Route index element={<HomePage />} />
         <Route path="products/:id" element={<ProductDetailPage />} />
+        <Route path="jewellery-combos/:id" element={<JewelleryComboDetailPage />} />
         <Route path="cart" element={<CartPage />} />
         <Route
           path="checkout"
@@ -84,7 +88,9 @@ export function App() {
       >
         <Route index element={<DashboardPage />} />
         <Route path="products" element={<AdminProductsPage />} />
+        <Route path="jewellery-combos" element={<AdminJewelleryCombosPage />} />
         <Route path="orders" element={<AdminOrdersPage />} />
+        <Route path="reviews" element={<AdminReviewsPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

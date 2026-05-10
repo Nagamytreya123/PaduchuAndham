@@ -7,6 +7,11 @@ const cartItemSchema = new Schema(
     price: { type: Number, required: true, min: 0 },
     qty: { type: Number, required: true, min: 1 },
     image: { type: String },
+    /** Same id on every line in a jewellery combo or watch+bracelet bundle (storefront grouping). */
+    bundleGroupId: { type: String },
+    bundleDisplayName: { type: String },
+    bundleUnitTotalPaise: { type: Number, min: 0 },
+    bundleImage: { type: String },
   },
   { _id: false },
 );

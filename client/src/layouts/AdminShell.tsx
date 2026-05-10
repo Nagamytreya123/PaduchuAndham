@@ -14,6 +14,7 @@ import {
   IconInventory,
   IconLogout,
   IconMenu,
+  IconReviews,
   IconShipping,
 } from '../icons';
 import useMediaQuery from '@mui/material/useMediaQuery';
@@ -26,7 +27,9 @@ const drawerWidth = 260;
 const links = [
   { to: '/admin', label: 'Overview', icon: <IconDashboard fontSize="small" /> },
   { to: '/admin/products', label: 'Products', icon: <IconInventory fontSize="small" /> },
+  { to: '/admin/jewellery-combos', label: 'Jewellery combos', icon: <IconInventory fontSize="small" /> },
   { to: '/admin/orders', label: 'Orders', icon: <IconShipping fontSize="small" /> },
+  { to: '/admin/reviews', label: 'Reviews', icon: <IconReviews fontSize="small" /> },
 ];
 
 export function AdminShell() {

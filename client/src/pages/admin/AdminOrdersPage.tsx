@@ -17,7 +17,16 @@ type AdminOrder = {
   createdAt: string;
 };
 
-const statuses = ['pending', 'paid', 'processing', 'shipped', 'cancelled'] as const;
+const statuses = ['pending', 'paid', 'processing', 'shipped', 'delivered', 'cancelled'] as const;
+
+const ADMIN_STATUS_LABEL: Record<(typeof statuses)[number], string> = {
+  pending: 'Payment pending',
+  paid: 'Order placed',
+  processing: 'Processing',
+  shipped: 'Shipped',
+  delivered: 'Delivered',
+  cancelled: 'Cancelled',
+};
 
 export function AdminOrdersPage() {
   const [orders, setOrders] = useState<AdminOrder[]>([]);
@@ -71,7 +80,14 @@ export function AdminOrdersPage() {
           <Stack spacing={1}>
             <Stack direction="row" justifyContent="space-between" alignItems="flex-start" flexWrap="wrap" gap={1}>
               <Typography fontWeight={700}>{formatInrFromPaise(o.amount)}</Typography>
-              <Chip label={o.status} size="small" />
+              <Chip
+                label={
+                  (statuses as readonly string[]).includes(o.status)
+                    ? ADMIN_STATUS_LABEL[o.status as (typeof statuses)[number]]
+                    : o.status
+                }
+                size="small"
+              />
             </Stack>
             <Typography variant="body2" color="text.secondary">
               Customer: {o.user?.email ?? '—'} ({o.user?.name ?? '—'})
@@ -89,7 +105,7 @@ export function AdminOrdersPage() {
             >
               {statuses.map((s) => (
                 <MenuItem key={s} value={s}>
-                  {s}
+                  {ADMIN_STATUS_LABEL[s]}
                 </MenuItem>
               ))}
             </TextField>

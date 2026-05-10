@@ -9,11 +9,11 @@ import BottomNavigationAction from '@mui/material/BottomNavigationAction';
 import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
 import Button from '@mui/material/Button';
-import { IconBag, IconHome, IconLogout, IconPerson } from '../icons';
+import { IconBag, IconHome, IconLogout, IconShipping } from '../icons';
 import Badge from '@mui/material/Badge';
 import { Link as RouterLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useCart } from '../context/CartContext';
+import { cartBadgeCount, useCart } from '../context/CartContext';
 
 export function CustomerShell() {
   const theme = useTheme();
@@ -28,10 +28,14 @@ export function CustomerShell() {
     navigate('/');
   }
 
-  const cartCount = lines.reduce((s, l) => s + l.qty, 0);
+  const cartCount = cartBadgeCount(lines);
 
   const bottomValue =
-    location.pathname.startsWith('/cart') ? 'cart' : location.pathname.startsWith('/account') ? 'account' : 'home';
+    location.pathname.startsWith('/cart')
+      ? 'cart'
+      : location.pathname.startsWith('/account')
+        ? 'orders'
+        : 'home';
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', pb: isXs ? 8 : 0 }}>
@@ -61,8 +65,13 @@ export function CustomerShell() {
               <Typography component={RouterLink} to="/cart" color="inherit" sx={{ textDecoration: 'none' }}>
                 Cart ({cartCount})
               </Typography>
-              <Typography component={RouterLink} to="/account/orders" color="inherit" sx={{ textDecoration: 'none' }}>
-                Account
+              <Typography
+                component={RouterLink}
+                to="/account/orders"
+                color="inherit"
+                sx={{ textDecoration: 'none', fontWeight: 600 }}
+              >
+                My orders
               </Typography>
               {user?.role === 'admin' && (
                 <Typography component={RouterLink} to="/admin" color="secondary.main" sx={{ textDecoration: 'none', fontWeight: 700 }}>
@@ -109,7 +118,16 @@ export function CustomerShell() {
         </Toolbar>
       </AppBar>
 
-      <Container maxWidth="lg" sx={{ py: { xs: 2, sm: 3 }, flex: 1 }}>
+      <Container
+        maxWidth={location.pathname === '/' ? false : 'lg'}
+        disableGutters={location.pathname === '/'}
+        sx={{
+          flex: 1,
+          width: '100%',
+          maxWidth: location.pathname === '/' ? '100%' : undefined,
+          py: location.pathname === '/' ? 0 : { xs: 2, sm: 3 },
+        }}
+      >
         <Outlet />
       </Container>
 
@@ -120,7 +138,7 @@ export function CustomerShell() {
           onChange={(_, v) => {
             if (v === 'home') navigate('/');
             if (v === 'cart') navigate('/cart');
-            if (v === 'account') navigate('/account/orders');
+            if (v === 'orders') navigate('/account/orders');
           }}
           sx={{
             position: 'fixed',
@@ -142,7 +160,7 @@ export function CustomerShell() {
               </Badge>
             }
           />
-          <BottomNavigationAction label="Account" value="account" icon={<IconPerson />} />
+          <BottomNavigationAction label="My orders" value="orders" icon={<IconShipping />} />
         </BottomNavigation>
       )}
     </Box>

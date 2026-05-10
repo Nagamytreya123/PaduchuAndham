@@ -6,7 +6,7 @@ import { requireAuth, requireAdmin } from '../middleware/auth.js';
 const router = Router();
 router.use(requireAuth, requireAdmin);
 
-const statusSchema = z.enum(['pending', 'paid', 'processing', 'shipped', 'cancelled']);
+const statusSchema = z.enum(['pending', 'paid', 'processing', 'shipped', 'delivered', 'cancelled']);
 
 router.get('/', async (_req, res) => {
   const orders = await OrderModel.find().sort({ createdAt: -1 }).limit(200).populate('user', 'email name').lean();

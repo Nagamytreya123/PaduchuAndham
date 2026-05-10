@@ -14,7 +14,7 @@ export function ProductCard({ product }: { product: ProductSummary }) {
   const showCompare = product.compareAtPrice != null && product.compareAtPrice > product.price;
 
   return (
-    <Card elevation={2} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <Card elevation={0} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <CardActionArea component={RouterLink} to={`/products/${product.id}`} sx={{ flex: 1, alignItems: 'stretch' }}>
         <CardMedia
           component={img ? 'img' : 'div'}
@@ -22,18 +22,26 @@ export function ProductCard({ product }: { product: ProductSummary }) {
           sx={{
             aspectRatio: '4/3',
             objectFit: 'cover',
-            bgcolor: 'grey.100',
+            bgcolor: 'rgba(255, 255, 255, 0.05)',
             minHeight: 160,
           }}
           loading="lazy"
         />
         <CardContent sx={{ flexGrow: 1 }}>
-          <Chip label={product.category} size="small" sx={{ mb: 1, fontWeight: 600 }} />
+          <Stack direction="row" gap={0.5} flexWrap="wrap" sx={{ mb: 1 }}>
+            <Chip label={product.category} size="small" sx={{ fontWeight: 600 }} />
+          </Stack>
           <Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom noWrap>
             {product.name}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }} noWrap>
-            {product.subcategory || product.description}
+            {[
+              product.subcategory,
+              product.jewelryDetails?.materialType,
+              product.watchDetails?.color,
+            ]
+              .filter(Boolean)
+              .join(' · ') || product.description}
           </Typography>
           <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
             <Typography variant="subtitle2" color="primary.main">

@@ -1,8 +1,8 @@
 import crypto from 'crypto';
 import express from 'express';
 import { OrderModel } from '../models/Order.js';
-import { ProductModel } from '../models/Product.js';
 import { env } from '../config/env.js';
+import { completePaidOrder } from '../services/completePaidOrder.js';
 
 const router = express.Router();
 
@@ -51,6 +51,12 @@ router.post('/razorpay', express.raw({ type: 'application/json' }), async (req, 
   const orderId = paymentEntity?.order_id;
   const paymentId = paymentEntity?.id;
 
+  const ev = parsed.event;
+  if (ev && ev !== 'payment.captured') {
+    res.json({ received: true });
+    return;
+  }
+
   if (!orderId || !paymentId) {
     res.json({ received: true });
     return;
@@ -66,13 +72,7 @@ router.post('/razorpay', express.raw({ type: 'application/json' }), async (req, 
     return;
   }
 
-  order.status = 'paid';
-  order.razorpayPaymentId = paymentId;
-  await order.save();
-
-  for (const item of order.items) {
-    await ProductModel.updateOne({ _id: item.productId }, { $inc: { stock: -item.qty } });
-  }
+  await completePaidOrder(order, paymentId);
 
   res.json({ received: true });
 });

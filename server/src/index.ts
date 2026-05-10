@@ -14,6 +14,9 @@ import productsRoutes from './routes/products.js';
 import adminProductsRoutes from './routes/adminProducts.js';
 import ordersRoutes from './routes/orders.js';
 import adminOrdersRoutes from './routes/adminOrders.js';
+import adminReviewsRoutes from './routes/adminReviews.js';
+import adminJewelleryCombosRoutes from './routes/adminJewelleryCombos.js';
+import jewelleryCombosRoutes from './routes/jewelleryCombos.js';
 import cartRoutes from './routes/cart.js';
 import webhookRoutes from './routes/webhooks.js';
 
@@ -61,9 +64,12 @@ app.get('/api/health', (_req, res) => {
 app.use('/api/auth', optionalAuth, authRoutes);
 app.use('/api/cart', optionalAuth, cartRoutes);
 app.use('/api/products', optionalAuth, productsRoutes);
+app.use('/api/jewellery-combos', optionalAuth, jewelleryCombosRoutes);
 app.use('/api/admin/products', optionalAuth, adminProductsRoutes);
+app.use('/api/admin/jewellery-combos', optionalAuth, adminJewelleryCombosRoutes);
 app.use('/api/orders', optionalAuth, ordersRoutes);
 app.use('/api/admin/orders', optionalAuth, adminOrdersRoutes);
+app.use('/api/admin/reviews', optionalAuth, adminReviewsRoutes);
 
 app.use((_req, res) => {
   res.status(404).json({ error: 'Not found' });

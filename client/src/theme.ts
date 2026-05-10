@@ -1,64 +1,64 @@
 import { createTheme } from '@mui/material/styles';
 
-/** High-end editorial system: Noto Serif + Inter, monochromatic surfaces, 0px radius. */
+/** Luxury editorial system: Cormorant Garamond + Inter, monochromatic dark surfaces. */
 export const theme = createTheme({
   palette: {
-    mode: 'light',
+    mode: 'dark',
     primary: {
-      main: '#000000',
-      contrastText: '#e2e2e2',
+      main: '#D6B36A',
+      contrastText: '#0F0F10',
     },
     secondary: {
-      main: '#3b3b3b',
-      contrastText: '#e2e2e2',
+      main: '#8A8175',
+      contrastText: '#F5F5F5',
     },
     background: {
-      default: '#f9f9f9',
-      paper: '#ffffff',
+      default: '#0F0F10',
+      paper: '#1a1a1a',
     },
     text: {
-      primary: '#1b1b1b',
-      secondary: 'rgba(27, 27, 27, 0.62)',
+      primary: '#F5F5F5',
+      secondary: '#E8DCCB',
     },
-    divider: 'rgba(198, 198, 198, 0.15)',
+    divider: 'rgba(214, 179, 106, 0.15)',
     action: {
-      hover: 'rgba(27, 27, 27, 0.04)',
-      selected: 'rgba(27, 27, 27, 0.08)',
+      hover: 'rgba(214, 179, 106, 0.08)',
+      selected: 'rgba(214, 179, 106, 0.16)',
     },
   },
   typography: {
     fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
     h1: {
-      fontFamily: '"Noto Serif", "Georgia", serif',
-      fontSize: '2.5rem',
+      fontFamily: '"Cormorant Garamond", "Playfair Display", "Noto Serif", serif',
+      fontSize: '3.5rem',
       fontWeight: 400,
       lineHeight: 1.15,
       letterSpacing: '-0.02em',
     },
     h2: {
-      fontFamily: '"Noto Serif", "Georgia", serif',
-      fontSize: '2rem',
+      fontFamily: '"Cormorant Garamond", "Playfair Display", "Noto Serif", serif',
+      fontSize: '2.5rem',
       fontWeight: 400,
       lineHeight: 1.2,
     },
     h3: {
-      fontFamily: '"Noto Serif", "Georgia", serif',
-      fontSize: '1.5rem',
+      fontFamily: '"Cormorant Garamond", "Playfair Display", "Noto Serif", serif',
+      fontSize: '1.75rem',
       fontWeight: 500,
       lineHeight: 1.25,
     },
     h4: {
-      fontFamily: '"Noto Serif", "Georgia", serif',
-      fontSize: '1.25rem',
+      fontFamily: '"Cormorant Garamond", "Playfair Display", "Noto Serif", serif',
+      fontSize: '1.5rem',
       fontWeight: 500,
     },
     h5: {
-      fontFamily: '"Noto Serif", "Georgia", serif',
-      fontSize: '1.125rem',
+      fontFamily: '"Cormorant Garamond", "Playfair Display", "Noto Serif", serif',
+      fontSize: '1.25rem',
       fontWeight: 600,
     },
     h6: {
-      fontFamily: '"Noto Serif", "Georgia", serif',
+      fontFamily: '"Cormorant Garamond", "Playfair Display", "Noto Serif", serif',
       fontWeight: 600,
     },
     subtitle1: {
@@ -67,7 +67,7 @@ export const theme = createTheme({
       lineHeight: 1.4,
     },
     body1: {
-      fontSize: '0.875rem',
+      fontSize: '1rem',
       lineHeight: 1.6,
     },
     body2: {
@@ -75,15 +75,16 @@ export const theme = createTheme({
       lineHeight: 1.6,
     },
     caption: {
-      fontSize: '0.6875rem',
+      fontSize: '0.75rem',
       letterSpacing: '0.1rem',
       textTransform: 'uppercase',
       fontWeight: 500,
     },
     button: {
       textTransform: 'none',
-      fontWeight: 600,
-      letterSpacing: '0.02em',
+      fontWeight: 500,
+      letterSpacing: '0.05em',
+      fontFamily: '"Inter", sans-serif',
     },
     subtitle2: {
       fontWeight: 600,
@@ -105,7 +106,8 @@ export const theme = createTheme({
     MuiCssBaseline: {
       styleOverrides: {
         body: {
-          backgroundColor: '#f9f9f9',
+          backgroundColor: '#0F0F10',
+          color: '#F5F5F5',
         },
       },
     },
@@ -113,13 +115,16 @@ export const theme = createTheme({
       styleOverrides: {
         root: {
           borderRadius: 0,
-          paddingLeft: '1.4rem',
-          paddingRight: '1.4rem',
+          paddingLeft: '2rem',
+          paddingRight: '2rem',
+          paddingTop: '0.75rem',
+          paddingBottom: '0.75rem',
         },
         containedPrimary: {
-          background: 'linear-gradient(180deg, #000000 0%, #3b3b3b 100%)',
+          background: '#D6B36A',
+          color: '#0F0F10',
           '&:hover': {
-            background: 'linear-gradient(180deg, #1a1a1a 0%, #4a4a4a 100%)',
+            background: '#b39556',
           },
         },
       },
@@ -142,7 +147,8 @@ export const theme = createTheme({
       styleOverrides: {
         root: {
           boxShadow: 'none',
-          borderColor: 'rgba(198, 198, 198, 0.15)',
+          borderColor: 'rgba(214, 179, 106, 0.15)',
+          backgroundColor: 'transparent',
         },
       },
     },
@@ -150,20 +156,26 @@ export const theme = createTheme({
       defaultProps: {
         elevation: 0,
       },
+      styleOverrides: {
+        root: {
+          backgroundColor: 'transparent',
+          backgroundImage: 'none',
+        },
+      },
     },
     MuiTab: {
       styleOverrides: {
         root: {
           textTransform: 'none',
-          fontWeight: 600,
-          fontSize: '0.9375rem',
+          fontWeight: 500,
+          fontSize: '1rem',
         },
       },
     },
     MuiTabs: {
       styleOverrides: {
         indicator: {
-          backgroundColor: '#000000',
+          backgroundColor: '#D6B36A',
           height: 2,
         },
       },
@@ -171,7 +183,7 @@ export const theme = createTheme({
     MuiOutlinedInput: {
       styleOverrides: {
         notchedOutline: {
-          borderColor: 'rgba(198, 198, 198, 0.15)',
+          borderColor: 'rgba(214, 179, 106, 0.25)',
         },
       },
     },
