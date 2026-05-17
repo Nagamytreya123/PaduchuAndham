@@ -9,7 +9,9 @@ import { ProductDetailPage } from './pages/ProductDetailPage';
 import { CartPage } from './pages/CartPage';
 import { CheckoutPage } from './pages/CheckoutPage';
 import { LoginPage } from './pages/LoginPage';
+import { AccountPage } from './pages/account/AccountPage';
 import { OrdersPage } from './pages/account/OrdersPage';
+import { SavedAddressesPage } from './pages/account/SavedAddressesPage';
 import { DashboardPage } from './pages/admin/DashboardPage';
 import { AdminProductsPage } from './pages/admin/AdminProductsPage';
 import { AdminJewelleryCombosPage } from './pages/admin/AdminJewelleryCombosPage';
@@ -73,8 +75,9 @@ export function App() {
             </ProtectedCustomer>
           }
         >
-          <Route index element={<Navigate to="orders" replace />} />
+          <Route index element={<AccountPage />} />
           <Route path="orders" element={<OrdersPage />} />
+          <Route path="addresses" element={<SavedAddressesPage />} />
         </Route>
       </Route>
 

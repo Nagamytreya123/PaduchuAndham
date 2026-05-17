@@ -3,14 +3,11 @@ import Typography from '@mui/material/Typography';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Button from '@mui/material/Button';
-import Paper from '@mui/material/Paper';
 import Alert from '@mui/material/Alert';
 import Grid from '@mui/material/Grid';
-import Card from '@mui/material/Card';
 import CardMedia from '@mui/material/CardMedia';
 import CardContent from '@mui/material/CardContent';
 import Box from '@mui/material/Box';
-import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
@@ -24,6 +21,16 @@ import { IconDelete } from '../../icons';
 import type { AdminProductRow } from '../../types/product';
 import type { JewelleryComboSummary } from '../../types/jewelleryCombo';
 import { formatInrFromPaise } from '../../utils/format';
+import { AdminLoadingPlaceholder } from '../../components/admin/AdminLoadingPlaceholder';
+import {
+  AdminPageHeader,
+  DashboardCard,
+  MotionButton,
+  PageTransitionWrapper,
+  PremiumModal,
+} from '../../components/admin/premium';
+import { motion } from 'framer-motion';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 
 const OBJECT_ID_RE = /^[a-fA-F0-9]{24}$/;
 
@@ -81,6 +88,7 @@ function jewelleryProductOptions(products: AdminProductRow[], selectedIds: strin
 }
 
 export function AdminJewelleryCombosPage() {
+  const reduced = useReducedMotion();
   const [products, setProducts] = useState<AdminProductRow[]>([]);
   const [combos, setCombos] = useState<JewelleryComboSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -208,22 +216,20 @@ export function AdminJewelleryCombosPage() {
     }
   }
 
-  if (loading) return <Typography>Loading…</Typography>;
+  if (loading) return <AdminLoadingPlaceholder variant="grid" />;
 
   return (
-    <Stack spacing={2}>
-      <Stack direction="row" alignItems="center" justifyContent="space-between" flexWrap="wrap" gap={1}>
-        <Typography variant="h5" fontWeight={700}>
-          Jewellery combos
-        </Typography>
-        <Button variant="contained" onClick={openCreate}>
-          New combo
-        </Button>
-      </Stack>
-      <Typography variant="body2" color="text.secondary">
-        Combos are separate from individual products. Each has its own name and image, and links two or more jewellery
-        SKUs at one set price. They are not part of the jewellery product form or jewellery subtype filters.
-      </Typography>
+    <PageTransitionWrapper>
+    <Stack spacing={2.5}>
+      <AdminPageHeader
+        title="Jewellery combos"
+        description="Combos are separate from individual products. Each has its own name and image, and links two or more jewellery SKUs at one set price. They are not part of the jewellery product form or jewellery subtype filters."
+        actions={
+          <MotionButton variant="contained" onClick={openCreate}>
+            New combo
+          </MotionButton>
+        }
+      />
 
       {error && (
         <Alert severity="error" onClose={() => setError(null)}>
@@ -236,56 +242,63 @@ export function AdminJewelleryCombosPage() {
           const thumb = c.images[0];
           return (
             <Grid item xs={12} sm={6} md={4} key={c.id}>
-              <Card elevation={2} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                <Box sx={{ position: 'relative' }}>
-                  <CardMedia
-                    component={thumb ? 'img' : 'div'}
-                    image={thumb || undefined}
-                    sx={{ aspectRatio: '4/3', objectFit: 'cover', bgcolor: 'grey.100', minHeight: 140 }}
-                  />
-                  {c.isActive === false && (
-                    <Chip
-                      label="Hidden"
-                      size="small"
-                      color="warning"
-                      sx={{ position: 'absolute', top: 8, left: 8, fontWeight: 700 }}
+              <motion.div
+                initial={reduced ? false : { opacity: 0, y: 16, filter: 'blur(6px)' }}
+                whileInView={reduced ? undefined : { opacity: 1, y: 0, filter: 'blur(0px)' }}
+                viewport={{ once: true, margin: '-10%' }}
+                transition={{ duration: reduced ? 0 : 0.55, ease: [0.22, 1, 0.36, 1] }}
+              >
+                <DashboardCard sx={{ height: '100%', display: 'flex', flexDirection: 'column', p: 0, overflow: 'hidden' }}>
+                  <Box sx={{ position: 'relative' }}>
+                    <CardMedia
+                      component={thumb ? 'img' : 'div'}
+                      image={thumb || undefined}
+                      sx={{ aspectRatio: '4/3', objectFit: 'cover', bgcolor: 'grey.900', minHeight: 140 }}
                     />
-                  )}
-                </Box>
-                <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
-                  <Typography variant="subtitle1" fontWeight={800}>
-                    {c.name}
-                  </Typography>
-                  <Typography variant="body2" color="primary.main" fontWeight={700}>
-                    {formatInrFromPaise(c.price)}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {c.productIds.length} linked products
-                  </Typography>
-                  <Stack direction="row" gap={1} sx={{ mt: 'auto' }}>
-                    <Button size="small" variant="outlined" onClick={() => openEdit(c)}>
-                      Edit
-                    </Button>
-                    <IconButton size="small" color="error" aria-label="delete" onClick={() => void removeCombo(c.id)}>
-                      <IconDelete />
-                    </IconButton>
-                  </Stack>
-                </CardContent>
-              </Card>
+                    {c.isActive === false && (
+                      <Chip
+                        label="Hidden"
+                        size="small"
+                        color="warning"
+                        sx={{ position: 'absolute', top: 8, left: 8, fontWeight: 700 }}
+                      />
+                    )}
+                  </Box>
+                  <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 1, p: 2.5 }}>
+                    <Typography variant="subtitle1" fontWeight={800}>
+                      {c.name}
+                    </Typography>
+                    <Typography variant="body2" color="primary.main" fontWeight={700}>
+                      {formatInrFromPaise(c.price)}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {c.productIds.length} linked products
+                    </Typography>
+                    <Stack direction="row" gap={1} sx={{ mt: 'auto' }}>
+                      <Button size="small" variant="outlined" onClick={() => openEdit(c)} sx={{ cursor: 'pointer' }}>
+                        Edit
+                      </Button>
+                      <IconButton size="small" color="error" aria-label="delete" onClick={() => void removeCombo(c.id)} sx={{ cursor: 'pointer' }}>
+                        <IconDelete />
+                      </IconButton>
+                    </Stack>
+                  </CardContent>
+                </DashboardCard>
+              </motion.div>
             </Grid>
           );
         })}
       </Grid>
 
       {combos.length === 0 && (
-        <Paper variant="outlined" sx={{ p: 3 }}>
+        <DashboardCard sx={{ p: 3 }}>
           <Typography color="text.secondary">
             No jewellery combos yet. Create one with its own image and linked products.
           </Typography>
-        </Paper>
+        </DashboardCard>
       )}
 
-      <Dialog open={dialogOpen} onClose={() => !saving && setDialogOpen(false)} fullWidth maxWidth="sm">
+      <PremiumModal open={dialogOpen} onClose={() => !saving && setDialogOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle>{editId ? 'Edit combo' : 'New jewellery combo'}</DialogTitle>
         <DialogContent dividers>
           <Stack spacing={2} sx={{ pt: 1 }}>
@@ -395,7 +408,8 @@ export function AdminJewelleryCombosPage() {
             {saving ? 'Saving…' : 'Save'}
           </Button>
         </DialogActions>
-      </Dialog>
+      </PremiumModal>
     </Stack>
+    </PageTransitionWrapper>
   );
 }

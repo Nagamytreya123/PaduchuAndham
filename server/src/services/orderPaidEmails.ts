@@ -24,6 +24,9 @@ export type PaidOrderNotifyPayload = {
     state: string;
     postalCode: string;
     country?: string;
+    label?: string;
+    recipientName?: string;
+    recipientMobile?: string;
   };
   razorpayPaymentId: string;
   placedAtIso: string;
@@ -70,15 +73,41 @@ function lineTotalPaise(i: PaidOrderLine): number {
   return i.price * i.qty;
 }
 
-function addressBlock(addr: PaidOrderNotifyPayload['address']): string {
-  return [
-    addr.line1,
-    addr.line2,
-    `${addr.city}, ${addr.state} ${addr.postalCode}`,
-    addr.country ?? 'IN',
-  ]
-    .filter(Boolean)
+type OrderAddressEmail = PaidOrderNotifyPayload['address'];
+
+function addressRows(addr: OrderAddressEmail): { label: string; value: string }[] {
+  const rows: { label: string; value: string }[] = [];
+  const push = (label: string, value: string | undefined | null) => {
+    const v = typeof value === 'string' ? value.trim() : '';
+    if (v) rows.push({ label, value: v });
+  };
+  push('Address label', addr.label);
+  push('Recipient name', addr.recipientName);
+  push('Recipient mobile', addr.recipientMobile);
+  push('Address line 1', addr.line1);
+  push('Address line 2', addr.line2);
+  push('City', addr.city);
+  push('State / UT', addr.state);
+  push('PIN / Postal code', addr.postalCode);
+  const country = (addr.country ?? 'IN').trim() || 'IN';
+  rows.push({ label: 'Country', value: country });
+  return rows;
+}
+
+function addressTextBlock(addr: OrderAddressEmail): string {
+  return addressRows(addr)
+    .map((r) => `${r.label}: ${r.value}`)
     .join('\n');
+}
+
+function addressHtmlBlock(addr: OrderAddressEmail): string {
+  const rows = addressRows(addr)
+    .map(
+      (r) =>
+        `<tr><td style="padding:6px 14px 6px 0;vertical-align:top;font-weight:600;color:#333;white-space:nowrap;border-bottom:1px solid #eee">${escapeHtml(r.label)}</td><td style="padding:6px 0;vertical-align:top;border-bottom:1px solid #eee">${escapeHtml(r.value)}</td></tr>`,
+    )
+    .join('');
+  return `<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;max-width:560px;border-collapse:collapse;font:inherit;background:#f9f9f9;border:1px solid #eee;border-radius:8px;overflow:hidden"><tbody>${rows}</tbody></table>`;
 }
 
 function itemsHtmlTable(items: PaidOrderLine[]): string {
@@ -166,7 +195,8 @@ function buildAdminBodies(
   customerName: string | undefined,
 ) {
   const total = rupeesFromPaise(payload.amountPaise);
-  const addr = addressBlock(payload.address);
+  const addrText = addressTextBlock(payload.address);
+  const addrHtml = addressHtmlBlock(payload.address);
   const customerBits =
     customerName || customerEmail
       ? `<p><strong>Customer:</strong> ${escapeHtml([customerName, customerEmail].filter(Boolean).join(' — '))}</p>`
@@ -184,7 +214,7 @@ function buildAdminBodies(
     itemsTextBlock(payload.items),
     '',
     'Ship to:',
-    addr,
+    addrText,
   ]
     .filter((l) => l != null)
     .join('\n');
@@ -199,7 +229,7 @@ ${customerBits}
 <h3 style="margin:24px 0 8px;border-top:1px solid #eee;padding-top:16px">Items</h3>
 ${itemsHtmlTable(payload.items)}
 <h3 style="margin:24px 0 8px">Ship to</h3>
-<pre style="white-space:pre-wrap;font:inherit;background:#f9f9f9;padding:12px;border-radius:8px;border:1px solid #eee">${escapeHtml(addr)}</pre>
+${addrHtml}
 </body></html>`;
 
   return { subject, text, html };
@@ -207,7 +237,8 @@ ${itemsHtmlTable(payload.items)}
 
 function buildCustomerBodies(payload: PaidOrderNotifyPayload, customerName: string | undefined) {
   const total = rupeesFromPaise(payload.amountPaise);
-  const addr = addressBlock(payload.address);
+  const addrText = addressTextBlock(payload.address);
+  const addrHtml = addressHtmlBlock(payload.address);
   const ordersUrl = `${env.CLIENT_URL.replace(/\/$/, '')}/account/orders`;
   const greet = customerName ? `Hi ${escapeHtml(customerName)},` : 'Hi,';
 
@@ -223,7 +254,7 @@ function buildCustomerBodies(payload: PaidOrderNotifyPayload, customerName: stri
     itemsTextBlock(payload.items),
     '',
     'Shipping address:',
-    addr,
+    addrText,
     '',
     `View your orders: ${ordersUrl}`,
     '',
@@ -240,7 +271,7 @@ function buildCustomerBodies(payload: PaidOrderNotifyPayload, customerName: stri
 <h3 style="margin:24px 0 8px;border-top:1px solid #eee;padding-top:16px">Your items</h3>
 ${itemsHtmlTable(payload.items)}
 <h3 style="margin:24px 0 8px">Shipping address</h3>
-<pre style="white-space:pre-wrap;font:inherit;background:#f9f9f9;padding:12px;border-radius:8px;border:1px solid #eee">${escapeHtml(addr)}</pre>
+${addrHtml}
 <p style="margin:24px 0"><a href="${escapeHtml(ordersUrl)}" style="display:inline-block;background:#111;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-weight:600">View my orders</a></p>
 <p style="color:#666;font-size:13px">If you did not place this order, please contact us right away.</p>
 </body></html>`;

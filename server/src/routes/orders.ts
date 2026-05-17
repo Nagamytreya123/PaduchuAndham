@@ -103,6 +103,9 @@ const checkoutLimiter = rateLimit({
 });
 
 const addressSchema = z.object({
+  label: z.string().max(80).optional(),
+  recipientName: z.string().max(120).optional(),
+  recipientMobile: z.string().max(20).optional(),
   line1: z.string().min(1).max(300),
   line2: z.string().max(300).optional(),
   city: z.string().min(1).max(120),
@@ -227,8 +230,17 @@ router.post('/', checkoutLimiter, async (req, res) => {
     currency: 'INR',
     status: 'pending',
     address: {
-      ...body.address,
+      line1: body.address.line1,
+      line2: body.address.line2,
+      city: body.address.city,
+      state: body.address.state,
+      postalCode: body.address.postalCode,
       country: body.address.country ?? 'IN',
+      ...(body.address.label?.trim() ? { label: body.address.label.trim() } : {}),
+      ...(body.address.recipientName?.trim() ? { recipientName: body.address.recipientName.trim() } : {}),
+      ...(body.address.recipientMobile?.trim()
+        ? { recipientMobile: body.address.recipientMobile.replace(/\s/g, '') }
+        : {}),
     },
   });
 

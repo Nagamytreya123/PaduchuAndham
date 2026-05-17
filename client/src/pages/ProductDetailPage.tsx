@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -21,18 +21,44 @@ import type { ProductSummary } from '../types/product';
 import { formatInrFromPaise } from '../utils/format';
 import { allocateWatchBraceletBundle } from '../utils/bundlePricing';
 import { ProductReviewsSection } from '../components/ProductReviewsSection';
+import { ProductShowcaseHero, PRODUCT_SHOWCASE_PREVIEW_LEN } from '../components/product/ProductShowcaseHero';
 
 export function ProductDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { add, addBundle, remove } = useCart();
   const [product, setProduct] = useState<ProductSummary | null>(null);
+  const [catalog, setCatalog] = useState<ProductSummary[]>([]);
+  const [slideDirection, setSlideDirection] = useState<1 | -1>(1);
+  const catalogIndexRef = useRef<number>(-1);
   const [qty, setQty] = useState(1);
   const [loading, setLoading] = useState(true);
   const [bundleBraceletId, setBundleBraceletId] = useState<string | null>(null);
 
   useEffect(() => {
+    void (async () => {
+      try {
+        const data = await apiFetch<{ products: ProductSummary[] }>('/api/products');
+        setCatalog(data.products.filter((p) => p.isActive !== false));
+      } catch {
+        setCatalog([]);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (!product || catalog.length === 0) return;
+    const i = catalog.findIndex((p) => p.id === product.id);
+    if (i < 0) return;
+    if (catalogIndexRef.current >= 0 && catalogIndexRef.current !== i) {
+      setSlideDirection(i > catalogIndexRef.current ? 1 : -1);
+    }
+    catalogIndexRef.current = i;
+  }, [product?.id, catalog]);
+
+  useEffect(() => {
     if (!id) return;
+    setLoading(true);
     void (async () => {
       try {
         const data = await apiFetch<{ product: ProductSummary }>(`/api/products/${id}`);
@@ -43,6 +69,10 @@ export function ProductDetailPage() {
         setLoading(false);
       }
     })();
+  }, [id]);
+
+  useEffect(() => {
+    setQty(1);
   }, [id]);
 
   useEffect(() => {
@@ -72,8 +102,23 @@ export function ProductDetailPage() {
   }
 
   const img = product.images[0];
+  const catalogIdx = catalog.findIndex((p) => p.id === product.id);
+  const prevProductId = catalogIdx > 0 ? catalog[catalogIdx - 1]!.id : null;
+  const nextProductId = catalogIdx >= 0 && catalogIdx < catalog.length - 1 ? catalog[catalogIdx + 1]!.id : null;
+  const peekNextProduct =
+    catalogIdx >= 0 && catalogIdx < catalog.length - 1 ? catalog[catalogIdx + 1]! : null;
+
+  function navigateToProduct(nextId: string, dir: 1 | -1) {
+    setSlideDirection(dir);
+    navigate(`/products/${nextId}`);
+  }
+
+  const descRest =
+    (product.description?.length ?? 0) > PRODUCT_SHOWCASE_PREVIEW_LEN
+      ? product.description!.slice(PRODUCT_SHOWCASE_PREVIEW_LEN).trim()
+      : null;
+
   const commitQty = Math.min(Math.max(1, qty), product.stock || 1);
-  const showCompare = product.compareAtPrice != null && product.compareAtPrice > product.price;
 
   const bracelets = product.matchingBracelets ?? [];
   const bundlePaiseRaw = product.watchBraceletBundlePrice;
@@ -103,49 +148,22 @@ export function ProductDetailPage() {
 
   return (
     <Stack spacing={2}>
-      <Box
-        sx={{
-          borderRadius: 2,
-          overflow: 'hidden',
-          bgcolor: 'grey.100',
-          aspectRatio: '4/3',
-          maxHeight: 420,
-        }}
-      >
-        {img ? (
-          <Box component="img" src={img} alt="" sx={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
-        ) : (
-          <Box sx={{ height: '100%', minHeight: 200 }} />
-        )}
-      </Box>
+      <ProductShowcaseHero
+        product={product}
+        direction={slideDirection}
+        prevId={prevProductId}
+        nextId={nextProductId}
+        peekNext={peekNextProduct}
+        catalogIndex={catalogIdx >= 0 ? catalogIdx : 0}
+        catalogLength={catalogIdx >= 0 ? catalog.length : 0}
+        onNavigate={navigateToProduct}
+      />
 
-      <Stack direction="row" gap={1} flexWrap="wrap" alignItems="center">
-        <Chip label={product.category} color="primary" size="small" sx={{ fontWeight: 700 }} />
-        {product.subcategory && <Chip label={product.subcategory} size="small" variant="outlined" />}
-        {product.sku && (
-          <Typography variant="caption" color="text.secondary">
-            SKU {product.sku}
-          </Typography>
-        )}
-      </Stack>
-
-      <Typography variant="h5" sx={{ fontWeight: 800 }}>
-        {product.name}
-      </Typography>
-      <Typography variant="body1" color="text.secondary">
-        {product.description || 'No description'}
-      </Typography>
-
-      <Stack direction="row" alignItems="baseline" gap={1.5} flexWrap="wrap">
-        <Typography variant="h6" color="primary.main">
-          {formatInrFromPaise(product.price)}
+      {descRest ? (
+        <Typography variant="body1" color="text.secondary" sx={{ lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>
+          {descRest}
         </Typography>
-        {showCompare && (
-          <Typography variant="body1" color="text.secondary" sx={{ textDecoration: 'line-through' }}>
-            {formatInrFromPaise(product.compareAtPrice!)}
-          </Typography>
-        )}
-      </Stack>
+      ) : null}
 
       {showWatchBraceletPair && selectedBracelet && pairChargePaise != null && (
         <Paper

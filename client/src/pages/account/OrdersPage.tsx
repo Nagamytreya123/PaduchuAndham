@@ -286,6 +286,15 @@ export function OrdersPage() {
           gap={2}
         >
           <Stack spacing={0.75}>
+            <Button
+              component={RouterLink}
+              to="/account"
+              variant="text"
+              size="small"
+              sx={{ alignSelf: 'flex-start', px: 0, minWidth: 0, fontWeight: 600, mb: -0.5 }}
+            >
+              ← Account
+            </Button>
             <Typography variant="h5" fontWeight={800} letterSpacing={-0.5}>
               My orders
             </Typography>

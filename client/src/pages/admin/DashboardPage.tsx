@@ -1,13 +1,19 @@
 import { useEffect, useState } from 'react';
 import Grid from '@mui/material/Grid';
-import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
 import { Link as RouterLink } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { apiFetch } from '../../api/client';
+import { AdminLoadingPlaceholder } from '../../components/admin/AdminLoadingPlaceholder';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
+import { AdminPageHeader, DashboardCard, MetricCard, PageTransitionWrapper } from '../../components/admin/premium';
+import { staggerContainer, staggerItem } from '../../motion/variants';
 
 export function DashboardPage() {
+  const reduced = useReducedMotion();
+  const [loading, setLoading] = useState(true);
   const [counts, setCounts] = useState<{
     products: number;
     orders: number;
@@ -31,47 +37,75 @@ export function DashboardPage() {
         });
       } catch {
         setCounts({ products: 0, orders: 0, reviews: 0, avgRating: null });
+      } finally {
+        setLoading(false);
       }
     })();
   }, []);
 
+  if (loading) {
+    return <AdminLoadingPlaceholder variant="dashboard" />;
+  }
+
   return (
-    <Stack spacing={2}>
-      <Typography variant="h5" fontWeight={700}>
-        Overview
-      </Typography>
-      <Grid container spacing={2}>
-        <Grid item xs={12} sm={4}>
-          <Paper sx={{ p: 2 }}>
-            <Typography variant="body2" color="text.secondary">
-              Products
-            </Typography>
-            <Typography variant="h4">{counts.products}</Typography>
-          </Paper>
+    <PageTransitionWrapper>
+      <Stack spacing={3}>
+        <AdminPageHeader
+          title="Overview"
+          description="At-a-glance metrics across your catalogue, fulfilment pipeline, and customer sentiment. Figures refresh from the same APIs used across admin tools."
+        />
+
+        <Grid
+          container
+          spacing={2.5}
+          component={motion.div}
+          variants={staggerContainer(0.09)}
+          initial={reduced ? false : 'hidden'}
+          animate="show"
+        >
+          <Grid item xs={12} sm={4} component={motion.div} variants={staggerItem}>
+            <MetricCard label="Products" value={counts.products} emphasize to="/admin/products" />
+          </Grid>
+          <Grid item xs={12} sm={4} component={motion.div} variants={staggerItem}>
+            <MetricCard
+              label="Orders"
+              value={counts.orders}
+              footnote="Recent fetch from admin orders"
+              to="/admin/orders"
+            />
+          </Grid>
+          <Grid item xs={12} sm={4} component={motion.div} variants={staggerItem}>
+            <DashboardCard float sx={{ p: 2.5, height: '100%', display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+              <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600 }}>
+                Reviews
+              </Typography>
+              <Typography variant="h3" sx={{ fontWeight: 700, fontFeatureSettings: '"tnum"', letterSpacing: '-0.02em' }}>
+                {counts.reviews}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Avg {counts.avgRating != null ? counts.avgRating.toFixed(1) : '—'} / 5
+              </Typography>
+              <Button
+                component={RouterLink}
+                to="/admin/reviews"
+                variant="outlined"
+                size="small"
+                sx={{
+                  alignSelf: 'flex-start',
+                  mt: 'auto',
+                  cursor: 'pointer',
+                  borderRadius: 2,
+                  transition: 'transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.22s ease',
+                  '&:hover': { transform: 'translateY(-1px)', boxShadow: (t) => t.shadows[4] },
+                  '&:active': { transform: 'scale(0.98)' },
+                }}
+              >
+                View all
+              </Button>
+            </DashboardCard>
+          </Grid>
         </Grid>
-        <Grid item xs={12} sm={4}>
-          <Paper sx={{ p: 2 }}>
-            <Typography variant="body2" color="text.secondary">
-              Orders (recent fetch)
-            </Typography>
-            <Typography variant="h4">{counts.orders}</Typography>
-          </Paper>
-        </Grid>
-        <Grid item xs={12} sm={4}>
-          <Paper sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column', gap: 1 }}>
-            <Typography variant="body2" color="text.secondary">
-              Reviews
-            </Typography>
-            <Typography variant="h4">{counts.reviews}</Typography>
-            <Typography variant="body2" color="text.secondary">
-              Avg {counts.avgRating != null ? counts.avgRating.toFixed(1) : '—'} / 5
-            </Typography>
-            <Button component={RouterLink} to="/admin/reviews" size="small" variant="outlined" sx={{ alignSelf: 'flex-start', mt: 'auto' }}>
-              View all
-            </Button>
-          </Paper>
-        </Grid>
-      </Grid>
-    </Stack>
+      </Stack>
+    </PageTransitionWrapper>
   );
 }

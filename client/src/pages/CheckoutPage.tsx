@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Typography from '@mui/material/Typography';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
+import MenuItem from '@mui/material/MenuItem';
 import Button from '@mui/material/Button';
 import Alert from '@mui/material/Alert';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -12,6 +13,8 @@ import { apiFetch } from '../api/client';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { formatInrFromPaise } from '../utils/format';
+import { ShippingAddressFields } from '../components/ShippingAddressFields';
+import { emptyShippingForm, type SavedAddressRow, type ShippingAddressForm } from '../types/address';
 
 function loadRazorpay(): Promise<boolean> {
   return new Promise((resolve) => {
@@ -36,14 +39,43 @@ export function CheckoutPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [phone, setPhone] = useState('');
-  const [address, setAddress] = useState({
-    line1: '',
-    line2: '',
-    city: '',
-    state: '',
-    postalCode: '',
-    country: 'IN',
-  });
+  const [address, setAddress] = useState<ShippingAddressForm>(() => emptyShippingForm());
+  const [savedRows, setSavedRows] = useState<SavedAddressRow[]>([]);
+  const [selectedSavedId, setSelectedSavedId] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await apiFetch<{ addresses: SavedAddressRow[] }>('/api/me/addresses');
+        if (cancelled) return;
+        setSavedRows(res.addresses);
+        const def = res.addresses.find((a) => a.isDefault);
+        if (def) {
+          setSelectedSavedId(def.id);
+          setAddress({
+            label: '',
+            recipientName: def.recipientName ?? '',
+            recipientMobile: def.recipientMobile ?? '',
+            line1: def.line1,
+            line2: def.line2 ?? '',
+            city: def.city,
+            state: def.state,
+            postalCode: def.postalCode,
+            country: def.country || 'IN',
+          });
+          if (def.recipientMobile?.trim()) {
+            setPhone(def.recipientMobile.trim());
+          }
+        }
+      } catch {
+        /* ignore — checkout still works with a typed address */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const valid =
     address.line1.trim().length > 0 &&
@@ -55,6 +87,28 @@ export function CheckoutPage() {
     () => lines.map((l) => ({ productId: l.productId, qty: l.qty, unitPricePaise: l.price })),
     [lines],
   );
+
+  const addressForOrder = useMemo(() => {
+    const fromSaved = selectedSavedId ? savedRows.find((r) => r.id === selectedSavedId) : undefined;
+    const label = fromSaved?.label?.trim();
+    const name = address.recipientName.trim() || undefined;
+    const mobileRaw = address.recipientMobile.trim() || phone.trim();
+    const mobileDigits = mobileRaw.replace(/\D/g, '');
+    const recipientMobile =
+      mobileDigits.length >= 10 ? mobileRaw.replace(/\s/g, '') || mobileDigits : undefined;
+
+    return {
+      line1: address.line1.trim(),
+      line2: address.line2.trim() || undefined,
+      city: address.city.trim(),
+      state: address.state.trim(),
+      postalCode: address.postalCode.trim(),
+      country: address.country.trim() || 'IN',
+      ...(label ? { label } : {}),
+      ...(name ? { recipientName: name } : {}),
+      ...(recipientMobile ? { recipientMobile } : {}),
+    };
+  }, [address, selectedSavedId, savedRows, phone]);
 
   async function pay() {
     setError(null);
@@ -74,7 +128,7 @@ export function CheckoutPage() {
         method: 'POST',
         body: JSON.stringify({
           items: payloadItems,
-          address,
+          address: addressForOrder,
         }),
       });
 
@@ -129,7 +183,7 @@ export function CheckoutPage() {
               }),
             });
             clear();
-            navigate('/account/orders', { replace: true });
+            navigate('/account', { replace: true });
           } catch (e) {
             setError(e instanceof Error ? e.message : 'Verification failed');
           } finally {
@@ -202,50 +256,59 @@ export function CheckoutPage() {
         helperText="Optional; pre-fills Razorpay for faster UPI and card flows"
       />
 
-      <TextField
-        label="Address line 1"
-        required
-        fullWidth
-        value={address.line1}
-        onChange={(e) => setAddress((a) => ({ ...a, line1: e.target.value }))}
+      {savedRows.length > 0 && (
+        <TextField
+          select
+          label="Ship to"
+          fullWidth
+          value={selectedSavedId}
+          onChange={(e) => {
+            const v = e.target.value;
+            setSelectedSavedId(v);
+            if (!v) {
+              setAddress(emptyShippingForm());
+              return;
+            }
+            const row = savedRows.find((r) => r.id === v);
+            if (row) {
+              setAddress({
+                label: '',
+                recipientName: row.recipientName ?? '',
+                recipientMobile: row.recipientMobile ?? '',
+                line1: row.line1,
+                line2: row.line2 ?? '',
+                city: row.city,
+                state: row.state,
+                postalCode: row.postalCode,
+                country: row.country || 'IN',
+              });
+              if (row.recipientMobile?.trim()) {
+                setPhone(row.recipientMobile.trim());
+              }
+            }
+          }}
+        >
+          <MenuItem value="">
+            <em>Enter a new address</em>
+          </MenuItem>
+          {savedRows.map((r) => (
+            <MenuItem key={r.id} value={r.id}>
+              {r.label}
+              {r.recipientName ? ` — ${r.recipientName}` : ''}
+              {r.isDefault ? ' (default)' : ''}
+            </MenuItem>
+          ))}
+        </TextField>
+      )}
+
+      <ShippingAddressFields
+        value={address}
+        showLabel={false}
+        onChange={(next) => {
+          setAddress(next);
+          setSelectedSavedId('');
+        }}
       />
-      <TextField
-        label="Address line 2"
-        fullWidth
-        value={address.line2}
-        onChange={(e) => setAddress((a) => ({ ...a, line2: e.target.value }))}
-      />
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-        <TextField
-          label="City"
-          required
-          fullWidth
-          value={address.city}
-          onChange={(e) => setAddress((a) => ({ ...a, city: e.target.value }))}
-        />
-        <TextField
-          label="State"
-          required
-          fullWidth
-          value={address.state}
-          onChange={(e) => setAddress((a) => ({ ...a, state: e.target.value }))}
-        />
-      </Stack>
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-        <TextField
-          label="PIN / Postal code"
-          required
-          fullWidth
-          value={address.postalCode}
-          onChange={(e) => setAddress((a) => ({ ...a, postalCode: e.target.value }))}
-        />
-        <TextField
-          label="Country"
-          fullWidth
-          value={address.country}
-          onChange={(e) => setAddress((a) => ({ ...a, country: e.target.value }))}
-        />
-      </Stack>
 
       <Button variant="contained" size="large" disabled={!valid || busy} onClick={() => void pay()}>
         {busy ? <CircularProgress size={24} color="inherit" /> : 'Pay securely'}

@@ -53,7 +53,10 @@ router.get(
       path: '/',
     });
     const dest = u.role === 'admin' ? '/admin' : '/account';
-    res.redirect(`${env.CLIENT_URL}${dest}`);
+    const bridge =
+      `${env.CLIENT_URL.replace(/\/$/, '')}/login?` +
+      new URLSearchParams({ celebrate: '1', redirect: dest }).toString();
+    res.redirect(bridge);
   },
 );
 

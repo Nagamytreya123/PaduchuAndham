@@ -43,6 +43,11 @@ export async function completePaidOrder(
       state: order.address.state,
       postalCode: order.address.postalCode,
       country: order.address.country,
+      ...(order.address.label?.trim() ? { label: order.address.label.trim() } : {}),
+      ...(order.address.recipientName?.trim() ? { recipientName: order.address.recipientName.trim() } : {}),
+      ...(order.address.recipientMobile?.trim()
+        ? { recipientMobile: order.address.recipientMobile.trim() }
+        : {}),
     },
     razorpayPaymentId: paymentId,
     placedAtIso,

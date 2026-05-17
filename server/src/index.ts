@@ -19,6 +19,7 @@ import adminJewelleryCombosRoutes from './routes/adminJewelleryCombos.js';
 import jewelleryCombosRoutes from './routes/jewelleryCombos.js';
 import cartRoutes from './routes/cart.js';
 import webhookRoutes from './routes/webhooks.js';
+import meRoutes from './routes/me.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -62,6 +63,7 @@ app.get('/api/health', (_req, res) => {
 });
 
 app.use('/api/auth', optionalAuth, authRoutes);
+app.use('/api/me', meRoutes);
 app.use('/api/cart', optionalAuth, cartRoutes);
 app.use('/api/products', optionalAuth, productsRoutes);
 app.use('/api/jewellery-combos', optionalAuth, jewelleryCombosRoutes);

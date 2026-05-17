@@ -91,7 +91,7 @@ export const theme = createTheme({
     },
   },
   shape: {
-    borderRadius: 0,
+    borderRadius: 12,
   },
   breakpoints: {
     values: {
@@ -114,11 +114,11 @@ export const theme = createTheme({
     MuiButton: {
       styleOverrides: {
         root: {
-          borderRadius: 0,
-          paddingLeft: '2rem',
-          paddingRight: '2rem',
-          paddingTop: '0.75rem',
-          paddingBottom: '0.75rem',
+          borderRadius: 12,
+          paddingLeft: '1.5rem',
+          paddingRight: '1.5rem',
+          paddingTop: '0.65rem',
+          paddingBottom: '0.65rem',
         },
         containedPrimary: {
           background: '#D6B36A',
@@ -190,7 +190,8 @@ export const theme = createTheme({
     MuiChip: {
       styleOverrides: {
         root: {
-          borderRadius: 0,
+          borderRadius: 999,
+          fontWeight: 600,
         },
       },
     },

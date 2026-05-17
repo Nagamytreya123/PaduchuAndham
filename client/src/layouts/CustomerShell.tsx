@@ -9,7 +9,7 @@ import BottomNavigationAction from '@mui/material/BottomNavigationAction';
 import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
 import Button from '@mui/material/Button';
-import { IconBag, IconHome, IconLogout, IconShipping } from '../icons';
+import { IconBag, IconHome, IconLogout, IconPerson } from '../icons';
 import Badge from '@mui/material/Badge';
 import { Link as RouterLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -30,12 +30,13 @@ export function CustomerShell() {
 
   const cartCount = cartBadgeCount(lines);
 
-  const bottomValue =
-    location.pathname.startsWith('/cart')
-      ? 'cart'
-      : location.pathname.startsWith('/account')
-        ? 'orders'
-        : 'home';
+  const isFullBleedRoute = location.pathname === '/' || location.pathname === '/login';
+
+  const bottomValue = location.pathname.startsWith('/cart')
+    ? 'cart'
+    : location.pathname.startsWith('/account')
+      ? 'account'
+      : 'home';
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', pb: isXs ? 8 : 0 }}>
@@ -67,11 +68,11 @@ export function CustomerShell() {
               </Typography>
               <Typography
                 component={RouterLink}
-                to="/account/orders"
+                to="/account"
                 color="inherit"
                 sx={{ textDecoration: 'none', fontWeight: 600 }}
               >
-                My orders
+                Account
               </Typography>
               {user?.role === 'admin' && (
                 <Typography component={RouterLink} to="/admin" color="secondary.main" sx={{ textDecoration: 'none', fontWeight: 700 }}>
@@ -119,13 +120,14 @@ export function CustomerShell() {
       </AppBar>
 
       <Container
-        maxWidth={location.pathname === '/' ? false : 'lg'}
-        disableGutters={location.pathname === '/'}
+        maxWidth={isFullBleedRoute ? false : 'lg'}
+        disableGutters={isFullBleedRoute}
         sx={{
           flex: 1,
           width: '100%',
-          maxWidth: location.pathname === '/' ? '100%' : undefined,
-          py: location.pathname === '/' ? 0 : { xs: 2, sm: 3 },
+          maxWidth: isFullBleedRoute ? '100%' : undefined,
+          py: location.pathname === '/' || location.pathname === '/login' ? 0 : { xs: 2, sm: 3 },
+          bgcolor: location.pathname === '/login' ? 'transparent' : undefined,
         }}
       >
         <Outlet />
@@ -138,7 +140,7 @@ export function CustomerShell() {
           onChange={(_, v) => {
             if (v === 'home') navigate('/');
             if (v === 'cart') navigate('/cart');
-            if (v === 'orders') navigate('/account/orders');
+            if (v === 'account') navigate('/account');
           }}
           sx={{
             position: 'fixed',
@@ -160,7 +162,7 @@ export function CustomerShell() {
               </Badge>
             }
           />
-          <BottomNavigationAction label="My orders" value="orders" icon={<IconShipping />} />
+          <BottomNavigationAction label="Account" value="account" icon={<IconPerson />} />
         </BottomNavigation>
       )}
     </Box>

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import Typography from '@mui/material/Typography';
 import Stack from '@mui/material/Stack';
-import Paper from '@mui/material/Paper';
 import Grid from '@mui/material/Grid';
 import Rating from '@mui/material/Rating';
 import Button from '@mui/material/Button';
@@ -10,8 +9,20 @@ import LinearProgress from '@mui/material/LinearProgress';
 import Link from '@mui/material/Link';
 import Chip from '@mui/material/Chip';
 import Alert from '@mui/material/Alert';
+import { motion } from 'framer-motion';
 import { Link as RouterLink } from 'react-router-dom';
 import { apiFetch } from '../../api/client';
+import { AdminLoadingPlaceholder } from '../../components/admin/AdminLoadingPlaceholder';
+import {
+  AdminPageHeader,
+  DashboardCard,
+  FloatingPanel,
+  MetricCard,
+  MotionButton,
+  PageTransitionWrapper,
+} from '../../components/admin/premium';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
+import { staggerContainer, staggerItem } from '../../motion/variants';
 
 const PAGE = 25;
 
@@ -34,6 +45,7 @@ type AdminReviewRow = {
 };
 
 export function AdminReviewsPage() {
+  const reduced = useReducedMotion();
   const [summary, setSummary] = useState<ReviewSummary | null>(null);
   const [reviews, setReviews] = useState<AdminReviewRow[]>([]);
   const [hasMore, setHasMore] = useState(false);
@@ -121,183 +133,195 @@ export function AdminReviewsPage() {
     : 1;
 
   return (
-    <Stack spacing={3}>
-      <Stack spacing={0.5}>
-        <Typography variant="h5" fontWeight={700}>
-          Reviews & ratings
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          Monitor customer feedback, star distribution, and jump to products or filter by product id.
-        </Typography>
-      </Stack>
+    <PageTransitionWrapper>
+      <Stack spacing={3}>
+        <AdminPageHeader
+          title="Reviews & ratings"
+          description="Monitor customer feedback, star distribution, and jump to products or filter by product id."
+        />
 
-      {error && (
-        <Alert severity="error" onClose={() => setError(null)}>
-          {error}
-        </Alert>
-      )}
+        {error && (
+          <Alert severity="error" onClose={() => setError(null)}>
+            {error}
+          </Alert>
+        )}
 
-      {loading && !summary ? (
-        <Typography color="text.secondary">Loading…</Typography>
-      ) : summary ? (
-        <>
-          <Grid container spacing={2}>
-            <Grid item xs={12} sm={4}>
-              <Paper sx={{ p: 2, height: '100%' }}>
-                <Typography variant="body2" color="text.secondary">
-                  Total reviews
-                </Typography>
-                <Typography variant="h4" fontWeight={800}>
-                  {summary.total}
-                </Typography>
-              </Paper>
-            </Grid>
-            <Grid item xs={12} sm={4}>
-              <Paper sx={{ p: 2, height: '100%' }}>
-                <Typography variant="body2" color="text.secondary" gutterBottom>
-                  Average rating
-                </Typography>
-                <Stack direction="row" alignItems="center" gap={1}>
-                  <Rating value={summary.averageRating ?? 0} precision={0.1} readOnly size="large" />
-                  <Typography variant="h5" fontWeight={800}>
-                    {summary.averageRating != null ? summary.averageRating.toFixed(1) : '—'}
+        {loading && !summary ? (
+          <AdminLoadingPlaceholder variant="reviews" />
+        ) : summary ? (
+          <>
+            <Grid
+              container
+              spacing={2.5}
+              component={motion.div}
+              variants={staggerContainer(0.08)}
+              initial={reduced ? false : 'hidden'}
+              animate="show"
+            >
+              <Grid item xs={12} sm={4} component={motion.div} variants={staggerItem}>
+                <MetricCard label="Total reviews" value={summary.total} emphasize />
+              </Grid>
+              <Grid item xs={12} sm={4} component={motion.div} variants={staggerItem}>
+                <DashboardCard float sx={{ p: 2.5, height: '100%' }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600 }}>
+                    Average rating
                   </Typography>
-                </Stack>
-              </Paper>
-            </Grid>
-            <Grid item xs={12} sm={4}>
-              <Paper sx={{ p: 2, height: '100%' }}>
-                <Typography variant="body2" color="text.secondary" gutterBottom>
-                  Star distribution
-                </Typography>
-                <Stack spacing={1}>
-                  {[5, 4, 3, 2, 1].map((n) => {
-                    const key = String(n) as keyof ReviewSummary['byRating'];
-                    const c = summary.byRating[key];
-                    return (
-                      <Stack key={n} direction="row" alignItems="center" gap={1}>
-                        <Typography variant="caption" sx={{ width: 28 }}>
-                          {n}★
-                        </Typography>
-                        <LinearProgress
-                          variant="determinate"
-                          value={(c / maxBar) * 100}
-                          sx={{ flex: 1, height: 8, borderRadius: 1 }}
-                        />
-                        <Typography variant="caption" sx={{ width: 32, textAlign: 'right' }}>
-                          {c}
-                        </Typography>
-                      </Stack>
-                    );
-                  })}
-                </Stack>
-              </Paper>
-            </Grid>
-          </Grid>
-
-          <Paper sx={{ p: 2 }}>
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'center' }}>
-              <TextField
-                size="small"
-                label="Filter by product id"
-                placeholder="24-char Mongo id"
-                value={productFilterInput}
-                onChange={(e) => setProductFilterInput(e.target.value)}
-                sx={{ flex: 1, maxWidth: 400 }}
-              />
-              <Button variant="contained" onClick={() => applyFilter()}>
-                Apply
-              </Button>
-              {productId ? (
-                <Button color="inherit" onClick={() => clearFilter()}>
-                  Clear
-                </Button>
-              ) : null}
-            </Stack>
-            {productId ? (
-              <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                Showing reviews for product <strong>{productId}</strong>
-              </Typography>
-            ) : null}
-          </Paper>
-
-          <Typography variant="subtitle1" fontWeight={700}>
-            All reviews ({reviews.length}
-            {hasMore ? '+' : ''})
-          </Typography>
-
-          <Stack spacing={1.5}>
-            {reviews.length === 0 && !loading ? (
-              <Typography color="text.secondary">No reviews yet.</Typography>
-            ) : (
-              reviews.map((r) => (
-                <Paper key={r.id} variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
-                  <Stack spacing={1}>
-                    <Stack
-                      direction={{ xs: 'column', sm: 'row' }}
-                      justifyContent="space-between"
-                      alignItems={{ xs: 'flex-start', sm: 'center' }}
-                      gap={1}
-                    >
-                      <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
-                        <Rating value={r.rating} readOnly size="small" />
-                        <Typography variant="caption" color="text.secondary">
-                          {new Date(r.createdAt).toLocaleString()}
-                        </Typography>
-                      </Stack>
-                      <Stack direction="row" gap={0.5} flexWrap="wrap">
-                        {r.product && (
-                          <Chip
-                            size="small"
-                            label={r.product.category || 'Product'}
-                            variant="outlined"
-                            sx={{ fontWeight: 600 }}
-                          />
-                        )}
-                      </Stack>
-                    </Stack>
-
-                    {r.product && (
-                      <Typography variant="body1" fontWeight={700}>
-                        <Link component={RouterLink} to={`/products/${r.product.id}`} underline="hover">
-                          {r.product.name}
-                        </Link>
-                      </Typography>
-                    )}
-
-                    {r.title && (
-                      <Typography variant="subtitle2" fontWeight={700}>
-                        {r.title}
-                      </Typography>
-                    )}
-                    <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-wrap' }}>
-                      {r.body}
+                  <Stack direction="row" alignItems="center" gap={1} sx={{ mt: 1 }}>
+                    <Rating value={summary.averageRating ?? 0} precision={0.1} readOnly size="large" />
+                    <Typography variant="h4" fontWeight={800} sx={{ fontFeatureSettings: '"tnum"' }}>
+                      {summary.averageRating != null ? summary.averageRating.toFixed(1) : '—'}
                     </Typography>
-
-                    <Stack direction="row" flexWrap="wrap" gap={1} alignItems="center">
-                      <Typography variant="caption" color="text.secondary">
-                        By {r.reviewerName}
-                        {r.user?.email ? ` · ${r.user.email}` : ''}
-                      </Typography>
-                      {r.order && (
-                        <Typography variant="caption" color="text.secondary">
-                          Order #{r.order.id.slice(-8)} · {r.order.status}
-                        </Typography>
-                      )}
-                    </Stack>
                   </Stack>
-                </Paper>
-              ))
-            )}
-          </Stack>
+                </DashboardCard>
+              </Grid>
+              <Grid item xs={12} sm={4} component={motion.div} variants={staggerItem}>
+                <DashboardCard float sx={{ p: 2.5, height: '100%' }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600 }} gutterBottom>
+                    Star distribution
+                  </Typography>
+                  <Stack spacing={1.25} sx={{ mt: 1 }}>
+                    {[5, 4, 3, 2, 1].map((n) => {
+                      const key = String(n) as keyof ReviewSummary['byRating'];
+                      const c = summary.byRating[key];
+                      return (
+                        <Stack key={n} direction="row" alignItems="center" gap={1}>
+                          <Typography variant="caption" sx={{ width: 28, fontWeight: 600 }}>
+                            {n}★
+                          </Typography>
+                          <LinearProgress
+                            variant="determinate"
+                            value={(c / maxBar) * 100}
+                            sx={{
+                              flex: 1,
+                              height: 10,
+                              borderRadius: 999,
+                              bgcolor: 'action.hover',
+                              '& .MuiLinearProgress-bar': { borderRadius: 999 },
+                            }}
+                          />
+                          <Typography variant="caption" sx={{ width: 32, textAlign: 'right', fontFeatureSettings: '"tnum"' }}>
+                            {c}
+                          </Typography>
+                        </Stack>
+                      );
+                    })}
+                  </Stack>
+                </DashboardCard>
+              </Grid>
+            </Grid>
 
-          {hasMore && (
-            <Button variant="outlined" onClick={() => void handleLoadMore()} disabled={loadingMore}>
-              {loadingMore ? 'Loading…' : 'Load more'}
-            </Button>
-          )}
-        </>
-      ) : null}
-    </Stack>
+            <FloatingPanel>
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'center' }}>
+                <TextField
+                  size="small"
+                  label="Filter by product id"
+                  placeholder="24-char Mongo id"
+                  value={productFilterInput}
+                  onChange={(e) => setProductFilterInput(e.target.value)}
+                  sx={{ flex: 1, maxWidth: 400, '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
+                />
+                <MotionButton variant="contained" onClick={() => applyFilter()}>
+                  Apply
+                </MotionButton>
+                {productId ? (
+                  <Button color="inherit" onClick={() => clearFilter()} sx={{ cursor: 'pointer' }}>
+                    Clear
+                  </Button>
+                ) : null}
+              </Stack>
+              {productId ? (
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 1.5, display: 'block' }}>
+                  Showing reviews for product <strong>{productId}</strong>
+                </Typography>
+              ) : null}
+            </FloatingPanel>
+
+            <Typography variant="subtitle1" fontWeight={700}>
+              All reviews ({reviews.length}
+              {hasMore ? '+' : ''})
+            </Typography>
+
+            <Stack spacing={1.75}>
+              {reviews.length === 0 && !loading ? (
+                <Typography color="text.secondary">No reviews yet.</Typography>
+              ) : (
+                reviews.map((r) => (
+                  <motion.div
+                    key={r.id}
+                    initial={reduced ? false : { opacity: 0, y: 22, filter: 'blur(6px)' }}
+                    whileInView={reduced ? undefined : { opacity: 1, y: 0, filter: 'blur(0px)' }}
+                    viewport={{ once: true, margin: '-12% 0px' }}
+                    transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+                  >
+                    <DashboardCard sx={{ p: 2.5 }}>
+                      <Stack spacing={1}>
+                        <Stack
+                          direction={{ xs: 'column', sm: 'row' }}
+                          justifyContent="space-between"
+                          alignItems={{ xs: 'flex-start', sm: 'center' }}
+                          gap={1}
+                        >
+                          <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
+                            <Rating value={r.rating} readOnly size="small" />
+                            <Typography variant="caption" color="text.secondary">
+                              {new Date(r.createdAt).toLocaleString()}
+                            </Typography>
+                          </Stack>
+                          <Stack direction="row" gap={0.5} flexWrap="wrap">
+                            {r.product && (
+                              <Chip
+                                size="small"
+                                label={r.product.category || 'Product'}
+                                variant="outlined"
+                                sx={{ fontWeight: 600 }}
+                              />
+                            )}
+                          </Stack>
+                        </Stack>
+
+                        {r.product && (
+                          <Typography variant="body1" fontWeight={700}>
+                            <Link component={RouterLink} to={`/products/${r.product.id}`} underline="hover">
+                              {r.product.name}
+                            </Link>
+                          </Typography>
+                        )}
+
+                        {r.title && (
+                          <Typography variant="subtitle2" fontWeight={700}>
+                            {r.title}
+                          </Typography>
+                        )}
+                        <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-wrap' }}>
+                          {r.body}
+                        </Typography>
+
+                        <Stack direction="row" flexWrap="wrap" gap={1} alignItems="center">
+                          <Typography variant="caption" color="text.secondary">
+                            By {r.reviewerName}
+                            {r.user?.email ? ` · ${r.user.email}` : ''}
+                          </Typography>
+                          {r.order && (
+                            <Typography variant="caption" color="text.secondary">
+                              Order #{r.order.id.slice(-8)} · {r.order.status}
+                            </Typography>
+                          )}
+                        </Stack>
+                      </Stack>
+                    </DashboardCard>
+                  </motion.div>
+                ))
+              )}
+            </Stack>
+
+            {hasMore && (
+              <MotionButton variant="outlined" onClick={() => void handleLoadMore()} disabled={loadingMore}>
+                {loadingMore ? 'Loading…' : 'Load more'}
+              </MotionButton>
+            )}
+          </>
+        ) : null}
+      </Stack>
+    </PageTransitionWrapper>
   );
 }

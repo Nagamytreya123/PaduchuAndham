@@ -4,7 +4,6 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Autocomplete from '@mui/material/Autocomplete';
 import Button from '@mui/material/Button';
-import Paper from '@mui/material/Paper';
 import Alert from '@mui/material/Alert';
 import IconButton from '@mui/material/IconButton';
 import Chip from '@mui/material/Chip';
@@ -15,7 +14,6 @@ import Card from '@mui/material/Card';
 import CardMedia from '@mui/material/CardMedia';
 import CardContent from '@mui/material/CardContent';
 import Box from '@mui/material/Box';
-import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
@@ -28,6 +26,8 @@ import { Link as RouterLink } from 'react-router-dom';
 import { IconDelete, IconAdd, IconRemove } from '../../icons';
 import type { AdminProductRow, AdminSalesSummary } from '../../types/product';
 import { formatInrFromPaise } from '../../utils/format';
+import { AdminLoadingPlaceholder } from '../../components/admin/AdminLoadingPlaceholder';
+import { AdminPageHeader, DashboardCard, MotionButton, PageTransitionWrapper, PremiumModal } from '../../components/admin/premium';
 import {
   COLLECTION_CATEGORY_FILTERS,
   filterKeyToApiCategory,
@@ -889,28 +889,24 @@ export function AdminProductsPage() {
     return list;
   }, [products, catalogFilterKey, jewellerySubFilter]);
 
-  if (loading) return <Typography>Loading…</Typography>;
+  if (loading) return <AdminLoadingPlaceholder variant="products" />;
 
   const subcategoryEntries = salesSummary
     ? Object.entries(salesSummary.bySubcategory).sort((a, b) => b[1] - a[1])
     : [];
 
   return (
-    <Stack spacing={2}>
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ xs: 'stretch', sm: 'flex-start' }} justifyContent="space-between">
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography variant="h5" fontWeight={700}>
-            Products
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            Same layout customers see, plus units sold and stock controls. Sales totals include orders that are paid,
-            processing, shipped, or delivered.
-          </Typography>
-        </Box>
-        <Button variant="contained" onClick={() => setAddDialogOpen(true)} sx={{ flexShrink: 0, alignSelf: { sm: 'center' } }}>
-          Add product
-        </Button>
-      </Stack>
+    <PageTransitionWrapper>
+    <Stack spacing={2.5}>
+      <AdminPageHeader
+        title="Products"
+        description="Same layout customers see, plus units sold and stock controls. Sales totals include orders that are paid, processing, shipped, or delivered."
+        actions={
+          <MotionButton variant="contained" onClick={() => setAddDialogOpen(true)} sx={{ flexShrink: 0 }}>
+            Add product
+          </MotionButton>
+        }
+      />
 
       <ToggleButtonGroup
         exclusive
@@ -956,7 +952,7 @@ export function AdminProductsPage() {
       )}
 
       {salesSummary && (
-        <Paper sx={{ p: 2 }}>
+        <DashboardCard sx={{ p: 2.5 }}>
           <Typography variant="subtitle1" fontWeight={700} gutterBottom>
             Sales overview
           </Typography>
@@ -977,7 +973,7 @@ export function AdminProductsPage() {
               ))}
             </Stack>
           )}
-        </Paper>
+        </DashboardCard>
       )}
 
       <Typography variant="subtitle1" fontWeight={700}>
@@ -1003,7 +999,7 @@ export function AdminProductsPage() {
         </Typography>
       )}
 
-      <Dialog
+      <PremiumModal
         open={addDialogOpen}
         onClose={() => !addSaving && setAddDialogOpen(false)}
         fullWidth
@@ -1254,9 +1250,9 @@ export function AdminProductsPage() {
             {addSaving ? 'Saving…' : 'Save product'}
           </Button>
         </DialogActions>
-      </Dialog>
+      </PremiumModal>
 
-      <Dialog open={editOpen} onClose={() => !editSaving && setEditOpen(false)} fullWidth maxWidth="md">
+      <PremiumModal open={editOpen} onClose={() => !editSaving && setEditOpen(false)} fullWidth maxWidth="md">
         <DialogTitle>Edit product</DialogTitle>
         <DialogContent dividers>
           <Stack spacing={2} sx={{ pt: 1 }}>
@@ -1441,7 +1437,8 @@ export function AdminProductsPage() {
             {editSaving ? 'Saving…' : 'Save'}
           </Button>
         </DialogActions>
-      </Dialog>
+      </PremiumModal>
     </Stack>
+    </PageTransitionWrapper>
   );
 }

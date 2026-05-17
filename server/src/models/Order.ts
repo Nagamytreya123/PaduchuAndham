@@ -12,6 +12,9 @@ const orderItemSchema = new Schema(
 
 const addressSchema = new Schema(
   {
+    label: { type: String, trim: true, maxlength: 80 },
+    recipientName: { type: String, trim: true, maxlength: 120 },
+    recipientMobile: { type: String, trim: true, maxlength: 20 },
     line1: { type: String, required: true },
     line2: { type: String },
     city: { type: String, required: true },
