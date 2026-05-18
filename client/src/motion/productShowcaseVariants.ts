@@ -61,6 +61,41 @@ export const showcaseSlideVariants: Variants = {
   }),
 };
 
+/** Narrow viewports: smaller travel + scale so the card does not read as an oversized “wide strip” off-screen. */
+export const showcaseSlideVariantsMobile: Variants = {
+  enter: (dir: number) => ({
+    x: dir >= 0 ? 56 : -56,
+    scale: 1.02,
+    opacity: 0,
+    filter: 'blur(6px)',
+    zIndex: 1,
+  }),
+  center: () => ({
+    x: 0,
+    scale: 1,
+    opacity: 1,
+    filter: 'blur(0px)',
+    zIndex: 2,
+    transition: {
+      x: { type: 'spring', stiffness: 260, damping: 38, mass: 0.85 },
+      opacity: { duration: 0.38, ease: SHOWCASE_EASE, delay: 0.03 },
+      filter: { duration: 0.45, ease: SHOWCASE_EASE, delay: 0.04 },
+      scale: { type: 'spring', stiffness: 300, damping: 36, mass: 0.85 },
+    },
+  }),
+  exit: (dir: number) => ({
+    x: dir >= 0 ? -72 : 72,
+    scale: 0.96,
+    opacity: 0,
+    filter: 'blur(5px)',
+    zIndex: 0,
+    transition: {
+      duration: 0.55,
+      ease: SHOWCASE_EASE,
+    },
+  }),
+};
+
 /** Softer slide when user prefers reduced motion */
 export const showcaseSlideReduced: Variants = {
   enter: { x: 0, opacity: 0 },
@@ -180,21 +215,15 @@ export const imageFrameReduced: Variants = {
   exit: { opacity: 0, transition: tween(0.16) },
 };
 
-/** Peek column (adjacent SKU) — subordinate depth vs hero */
-export const peekColumnVariantsWithDir: Variants = {
-  enter: (dir: number) => ({ opacity: 0, x: dir >= 0 ? 20 : -20, scale: 0.88 }),
+/** Tighter image frame motion on small screens (single-column hero). */
+export const imageFrameVariantsMobile: Variants = {
+  enter: { scale: 1.02, opacity: 0.92 },
   center: {
-    opacity: 0.72,
-    x: 0,
-    scale: 0.91,
-    transition: { delay: 0.1, ...tween(0.5, 0) },
+    scale: 1,
+    opacity: 1,
+    transition: settleSpring,
   },
-  exit: (dir: number) => ({
-    opacity: 0,
-    x: dir >= 0 ? -14 : 14,
-    scale: 0.88,
-    transition: tween(0.42),
-  }),
+  exit: { scale: 0.97, opacity: 0.55, filter: 'blur(4px)', transition: tween(0.42) },
 };
 
 /** Idle float on hero product (6–12px, slow — spec §4) */
@@ -205,12 +234,3 @@ export function floatingIdle(reduced: boolean): false | { y: number[]; transitio
     transition: { duration: 10, repeat: Infinity, ease: 'easeInOut' },
   };
 }
-
-/** Nav chevrons / dots — hover scale 1.04–1.08, soft glow (spec §4) */
-export const navButtonHover = {
-  scale: 1.06,
-  boxShadow: '0 0 22px rgba(214, 179, 106, 0.32)',
-  transition: { type: 'spring' as const, stiffness: 400, damping: 24 },
-};
-
-export const navButtonTap = { scale: 0.94 };

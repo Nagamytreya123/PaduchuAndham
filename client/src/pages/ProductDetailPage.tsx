@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -33,7 +33,13 @@ export function ProductDetailPage() {
   const catalogIndexRef = useRef<number>(-1);
   const [qty, setQty] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [bundleBraceletId, setBundleBraceletId] = useState<string | null>(null);
+  /** After first successful product load, never show full-page skeleton on `id` changes (swipe / in-app navigation). */
+  const skipFullPageSkeletonRef = useRef(false);
+  const catalogRef = useRef<ProductSummary[]>([]);
+  catalogRef.current = catalog;
+  const fetchAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -58,18 +64,55 @@ export function ProductDetailPage() {
 
   useEffect(() => {
     if (!id) return;
-    setLoading(true);
+    fetchAbortRef.current?.abort();
+    const ac = new AbortController();
+    fetchAbortRef.current = ac;
+
+    const fromList = catalogRef.current.find((p) => p.id === id);
+    if (fromList) {
+      setProduct(fromList);
+    }
+
+    const showFullSkeleton = !skipFullPageSkeletonRef.current;
+    if (showFullSkeleton) {
+      setLoading(true);
+    }
+    setFetchError(null);
+
     void (async () => {
       try {
-        const data = await apiFetch<{ product: ProductSummary }>(`/api/products/${id}`);
+        const data = await apiFetch<{ product: ProductSummary }>(`/api/products/${id}`, { signal: ac.signal });
+        if (ac.signal.aborted) return;
         setProduct(data.product);
-      } catch {
-        setProduct(null);
+        skipFullPageSkeletonRef.current = true;
+      } catch (e) {
+        if (ac.signal.aborted) return;
+        setFetchError(e instanceof Error ? e.message : 'Failed to load product');
+        if (!fromList) {
+          setProduct(null);
+        } else {
+          skipFullPageSkeletonRef.current = true;
+        }
       } finally {
         setLoading(false);
       }
     })();
+
+    return () => {
+      ac.abort();
+    };
   }, [id]);
+
+  /** When the catalog arrives after the first `id` fetch, align list row if we still need it. */
+  useEffect(() => {
+    if (!id || catalog.length === 0) return;
+    setProduct((prev) => {
+      const row = catalog.find((p) => p.id === id);
+      if (!row) return prev;
+      if (prev?.id === id) return prev;
+      return row;
+    });
+  }, [catalog, id]);
 
   useEffect(() => {
     setQty(1);
@@ -88,16 +131,32 @@ export function ProductDetailPage() {
     }
   }, [product]);
 
-  if (loading) {
+  const navigateToProduct = useCallback((nextId: string, dir: 1 | -1) => {
+    const fromCatalog = catalogRef.current.find((p) => p.id === nextId);
+    if (fromCatalog) {
+      setProduct(fromCatalog);
+    }
+    setSlideDirection(dir);
+    navigate(`/products/${nextId}`, { replace: true });
+  }, [navigate]);
+
+  if (loading && !product) {
     return <Skeleton variant="rounded" height={320} />;
   }
 
   if (!product) {
     return (
-      <Typography color="text.secondary">
-        Product not found.{' '}
-        <Button onClick={() => navigate('/')}>Back home</Button>
-      </Typography>
+      <Stack spacing={1}>
+        <Typography color="text.secondary">
+          Product not found.{' '}
+          <Button onClick={() => navigate('/')}>Back home</Button>
+        </Typography>
+        {fetchError ? (
+          <Typography variant="caption" color="error">
+            {fetchError}
+          </Typography>
+        ) : null}
+      </Stack>
     );
   }
 
@@ -105,13 +164,6 @@ export function ProductDetailPage() {
   const catalogIdx = catalog.findIndex((p) => p.id === product.id);
   const prevProductId = catalogIdx > 0 ? catalog[catalogIdx - 1]!.id : null;
   const nextProductId = catalogIdx >= 0 && catalogIdx < catalog.length - 1 ? catalog[catalogIdx + 1]!.id : null;
-  const peekNextProduct =
-    catalogIdx >= 0 && catalogIdx < catalog.length - 1 ? catalog[catalogIdx + 1]! : null;
-
-  function navigateToProduct(nextId: string, dir: 1 | -1) {
-    setSlideDirection(dir);
-    navigate(`/products/${nextId}`);
-  }
 
   const descRest =
     (product.description?.length ?? 0) > PRODUCT_SHOWCASE_PREVIEW_LEN
@@ -148,14 +200,16 @@ export function ProductDetailPage() {
 
   return (
     <Stack spacing={2}>
+      {fetchError && product ? (
+        <Typography variant="caption" color="error" role="alert">
+          {fetchError}
+        </Typography>
+      ) : null}
       <ProductShowcaseHero
         product={product}
         direction={slideDirection}
         prevId={prevProductId}
         nextId={nextProductId}
-        peekNext={peekNextProduct}
-        catalogIndex={catalogIdx >= 0 ? catalogIdx : 0}
-        catalogLength={catalogIdx >= 0 ? catalog.length : 0}
         onNavigate={navigateToProduct}
       />
 

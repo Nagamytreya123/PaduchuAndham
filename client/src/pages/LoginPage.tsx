@@ -791,6 +791,77 @@ export function LoginPage() {
           </motion.div>
         )}
       </Box>
+
+      {authExitStage !== 'idle' && (
+        <Box
+          component="aside"
+          aria-live="polite"
+          aria-atomic="true"
+          sx={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 3,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            pointerEvents: 'none',
+            px: 2,
+            textAlign: 'center',
+          }}
+        >
+          <motion.div
+            key={authExitStage}
+            initial={reducedMotion ? false : { opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: reducedMotion ? 0 : 0.38, ease: [0.22, 1, 0.36, 1] }}
+            style={{ maxWidth: 440 }}
+          >
+            <Box
+              sx={{
+                px: { xs: 2.5, sm: 3.25 },
+                py: { xs: 2.25, sm: 2.75 },
+                borderRadius: 2,
+                bgcolor: 'rgba(18, 16, 14, 0.72)',
+                border: '1px solid rgba(214, 179, 106, 0.28)',
+                backdropFilter: 'blur(10px)',
+                WebkitBackdropFilter: 'blur(10px)',
+                boxShadow: '0 18px 48px rgba(0,0,0,0.45)',
+              }}
+            >
+              <Typography
+                variant="h4"
+                sx={{
+                  fontFamily: '"Cormorant Garamond", "Playfair Display", "Noto Serif", serif',
+                  fontWeight: 500,
+                  fontSize: { xs: '1.65rem', sm: '2rem' },
+                  lineHeight: 1.25,
+                  color: 'primary.main',
+                  letterSpacing: '0.03em',
+                  textShadow:
+                    '0 0 1px rgba(15,15,16,0.55), 0 1px 2px rgba(15,15,16,0.65), 0 0 18px rgba(214,179,106,0.22)',
+                  mb: 1.25,
+                }}
+              >
+                {authExitStage === 'collapsing' ? 'Signing you in…' : 'Entering Paduchu Shop…'}
+              </Typography>
+              <Typography
+                variant="body2"
+                sx={{
+                  color: 'rgba(196, 176, 138, 0.98)',
+                  letterSpacing: '0.12em',
+                  textTransform: 'uppercase',
+                  fontSize: '0.72rem',
+                  fontWeight: 600,
+                  textShadow: '0 1px 2px rgba(15,15,16,0.85)',
+                }}
+              >
+                {authExitStage === 'collapsing' ? 'Securing your session' : 'Opening your gallery'}
+              </Typography>
+            </Box>
+          </motion.div>
+        </Box>
+      )}
     </Box>
   );
 }
