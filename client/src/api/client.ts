@@ -1,4 +1,6 @@
-const base = typeof window !== 'undefined' ? '' : import.meta.env.VITE_API_URL ?? '';
+/** In production, set VITE_API_URL to your API origin (no trailing slash). Dev uses Vite proxy with this unset. */
+const raw = import.meta.env.VITE_API_URL ?? '';
+const base = raw.replace(/\/$/, '');
 
 async function parseJson(res: Response): Promise<unknown> {
   const text = await res.text();
