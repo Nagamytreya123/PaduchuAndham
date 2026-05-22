@@ -90,6 +90,7 @@ export function LoginPage() {
   const [devErr, setDevErr] = useState<string | null>(null);
   const [emailTouched, setEmailTouched] = useState(false);
   const [authExitStage, setAuthExitStage] = useState<AuthExitStage>('idle');
+  const [celebrateSynced, setCelebrateSynced] = useState(false);
   const authExitStageRef = useRef(authExitStage);
   authExitStageRef.current = authExitStage;
   const videoPhaseRef = useRef<'intro' | 'outro'>('intro');
@@ -182,11 +183,22 @@ export function LoginPage() {
   }, [reducedMotion]);
 
   useEffect(() => {
-    if (loading || !celebrate) return;
+    if (!celebrate) {
+      setCelebrateSynced(false);
+      return;
+    }
+    void (async () => {
+      await refresh();
+      setCelebrateSynced(true);
+    })();
+  }, [celebrate, refresh]);
+
+  useEffect(() => {
+    if (loading || !celebrate || !celebrateSynced) return;
     if (!user) {
       navigate('/login', { replace: true });
     }
-  }, [loading, celebrate, user, navigate]);
+  }, [loading, celebrate, celebrateSynced, user, navigate]);
 
   useEffect(() => {
     if (!celebrate || !user || loading || reducedMotion) return;

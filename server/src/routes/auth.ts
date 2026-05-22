@@ -4,6 +4,7 @@ import rateLimit from 'express-rate-limit';
 import { env, getAdminEmailSet } from '../config/env.js';
 import { ensureGoogleStrategy, issueAuthCookie } from '../auth/google.js';
 import { UserModel } from '../models/User.js';
+import { authCookieOptions, clearAuthCookieOptions } from '../utils/authCookie.js';
 const router = Router();
 
 const authLimiter = rateLimit({
@@ -45,13 +46,7 @@ router.get(
     }
     const token = issueAuthCookie(u.id, u.role);
     const maxAge = 7 * 24 * 60 * 60 * 1000;
-    res.cookie(env.JWT_COOKIE_NAME, token, {
-      httpOnly: true,
-      secure: env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge,
-      path: '/',
-    });
+    res.cookie(env.JWT_COOKIE_NAME, token, authCookieOptions(maxAge));
     const dest = u.role === 'admin' ? '/admin' : '/account';
     const bridge =
       `${env.CLIENT_URL.replace(/\/$/, '')}/login?` +
@@ -61,7 +56,7 @@ router.get(
 );
 
 router.post('/logout', (_req, res) => {
-  res.clearCookie(env.JWT_COOKIE_NAME, { path: '/' });
+  res.clearCookie(env.JWT_COOKIE_NAME, clearAuthCookieOptions());
   res.json({ ok: true });
 });
 
