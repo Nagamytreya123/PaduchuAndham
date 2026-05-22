@@ -1,6 +1,89 @@
 /**
  * Seed catalog: watches + bracelets + jewellery. Prices in paise (INR × 100).
  */
+
+const u = (photoId: string) =>
+  `https://images.unsplash.com/photo-${photoId}?w=800&q=80&auto=format`;
+
+/** HTTP-verified Unsplash IDs (many legacy seed URLs now 404). */
+const VERIFIED_PHOTO_IDS = [
+  '1523275335684-37898b6baf30',
+  '1524592094714-0f0654e20314',
+  '1573408301185-9146fe634ad0',
+  '1614164185128-e4ec99c436d7',
+  '1594534475808-b18fc33b045e',
+  '1434056886845-dac89ffe9b56',
+  '1587836374828-4dbafa94cf0e',
+  '1547996160-81dfa63595aa',
+  '1617038220319-276d3cfab638',
+  '1585123334904-845d60e97b29',
+  '1599643478518-a784e5dc4c8f',
+  '1526045431048-f857369baa09',
+  '1509042239860-f550ce710b93',
+  '1558618666-fcd25c85cd64',
+] as const;
+
+const WATCH_GALLERY_POOL = VERIFIED_PHOTO_IDS.map((id) => u(id));
+
+const BRACELET_GALLERY_POOL = [
+  u('1547996160-81dfa63595aa'),
+  u('1573408301185-9146fe634ad0'),
+  u('1585123334904-845d60e97b29'),
+  u('1599643478518-a784e5dc4c8f'),
+  u('1509042239860-f550ce710b93'),
+  u('1558618666-fcd25c85cd64'),
+  u('1434056886845-dac89ffe9b56'),
+  u('1526045431048-f857369baa09'),
+] as const;
+
+const JEWELLERY_GALLERY_POOL = [
+  u('1599643478518-a784e5dc4c8f'),
+  u('1573408301185-9146fe634ad0'),
+  u('1509042239860-f550ce710b93'),
+  u('1558618666-fcd25c85cd64'),
+  u('1585123334904-845d60e97b29'),
+  u('1547996160-81dfa63595aa'),
+  u('1434056886845-dac89ffe9b56'),
+  u('1617038220319-276d3cfab638'),
+  u('1526045431048-f857369baa09'),
+  u('1614164185128-e4ec99c436d7'),
+] as const;
+
+const GALLERY_COUNT = 4;
+
+function buildGallery(primary: string, pool: readonly string[], offset: number): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const add = (url: string) => {
+    if (!seen.has(url)) {
+      seen.add(url);
+      out.push(url);
+    }
+  };
+  add(primary);
+  for (let k = 0; k < pool.length * 2 && out.length < GALLERY_COUNT; k++) {
+    add(pool[(offset + k) % pool.length]!);
+  }
+  return out.slice(0, GALLERY_COUNT);
+}
+
+function enrichProductGalleries(items: SampleProductInput[]): SampleProductInput[] {
+  let watchI = 0;
+  let braceletI = 0;
+  let jewelleryI = 0;
+  return items.map((p) => {
+    if (p.category === 'Watches') {
+      const primary = WATCH_GALLERY_POOL[watchI % WATCH_GALLERY_POOL.length]!;
+      return { ...p, images: buildGallery(primary, WATCH_GALLERY_POOL, watchI++) };
+    }
+    if (p.category === 'Bracelets') {
+      const primary = BRACELET_GALLERY_POOL[braceletI % BRACELET_GALLERY_POOL.length]!;
+      return { ...p, images: buildGallery(primary, BRACELET_GALLERY_POOL, braceletI++) };
+    }
+    const primary = JEWELLERY_GALLERY_POOL[jewelleryI % JEWELLERY_GALLERY_POOL.length]!;
+    return { ...p, images: buildGallery(primary, JEWELLERY_GALLERY_POOL, jewelleryI++) };
+  });
+}
 export type WatchDetailsInput = {
   caseShape?: string;
   dial?: string;
@@ -431,19 +514,6 @@ const WATCH_BRACELET_CATALOG: SampleProductInput[] = [
   },
 ];
 
-const JEWELLERY_IMAGES = [
-  'https://images.unsplash.com/photo-1515562149807-7a168e96b8c8?w=800&q=80',
-  'https://images.unsplash.com/photo-1573408301185-9146fe634ad0?w=800&q=80',
-  'https://images.unsplash.com/photo-1611591437281-460bfbe1220c?w=800&q=80',
-  'https://images.unsplash.com/photo-1434056886845-dac89ffe9b56?w=800&q=80',
-  'https://images.unsplash.com/photo-1547996160-81dfa63595aa?w=800&q=80',
-  'https://images.unsplash.com/photo-1594534475808-b18fc33b045e?w=800&q=80',
-  'https://images.unsplash.com/photo-1585123334904-845d60e97b29?w=800&q=80',
-  'https://images.unsplash.com/photo-1617038220319-276d3cfab638?w=800&q=80',
-  'https://images.unsplash.com/photo-1526045431048-f857369baa09?w=800&q=80',
-  'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?w=800&q=80',
-] as const;
-
 const JEWELLERY_CARE =
   'Store in a dry pouch; keep away from perfumes and lotions on metal. Wipe with a soft dry cloth after wear.';
 
@@ -605,7 +675,7 @@ function buildJewellerySamples(): SampleProductInput[] {
         price,
         compareAtPrice: compare,
         stock: 8 + ((n * 3) % 28),
-        images: [JEWELLERY_IMAGES[i % JEWELLERY_IMAGES.length]],
+        images: [JEWELLERY_GALLERY_POOL[i % JEWELLERY_GALLERY_POOL.length]!],
         materials: [...ms.materials],
         tags: [...tagSets[i % tagSets.length]],
         jewelryDetails: {
@@ -643,4 +713,7 @@ function slugFragment(name: string): string {
     .slice(0, 48);
 }
 
-export const SAMPLE_CATALOG: SampleProductInput[] = [...WATCH_BRACELET_CATALOG, ...buildJewellerySamples()];
+export const SAMPLE_CATALOG: SampleProductInput[] = enrichProductGalleries([
+  ...WATCH_BRACELET_CATALOG,
+  ...buildJewellerySamples(),
+]);

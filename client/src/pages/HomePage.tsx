@@ -34,6 +34,13 @@ import {
   type JewellerySubFilterKey,
   type JewellerySubcategoryPreset,
 } from '../constants/jewellerySubcategories';
+import {
+  BRACELET_CATEGORY_TILE_IMAGE,
+  COMBO_CATEGORY_TILE_IMAGE,
+  JEWELLERY_CATEGORY_TILE_IMAGES,
+  WATCH_CATEGORY_TILE_IMAGE,
+} from '../constants/categoryTileImages';
+import { handleProductImageError, PRODUCT_IMAGE_FALLBACK } from '../utils/productImage';
 
 const TOTAL_FRAMES = 240;
 
@@ -51,22 +58,28 @@ const SHOP_INK = '#14221a';
 const SHOP_INK_MUTED = '#4a5c54';
 const FALLBACK_FRAME_STEP = 37;
 
+function categoryTileSrc(
+  tile: { key: string; label: string; image?: string },
+  index: number,
+): string {
+  if (tile.key.startsWith('jewellery-')) {
+    const sub = tile.label as JewellerySubcategoryPreset;
+    return JEWELLERY_CATEGORY_TILE_IMAGES[sub] ?? tile.image ?? PRODUCT_IMAGE_FALLBACK;
+  }
+  if (tile.key === 'watches') return WATCH_CATEGORY_TILE_IMAGE;
+  if (tile.key === 'bracelets') return BRACELET_CATEGORY_TILE_IMAGE;
+  if (tile.key === 'combos') return tile.image ?? COMBO_CATEGORY_TILE_IMAGE;
+  const fallbackFrame = (((index * FALLBACK_FRAME_STEP) % TOTAL_FRAMES) + 1).toString().padStart(4, '0');
+  return tile.image ?? `/frames/frame_${fallbackFrame}.webp`;
+}
+
 function ShopByCategoriesSection({
   combos,
   combosLoading,
-  categoryImagesLoading,
-  jewelleryImageBySub,
-  watchImage,
-  braceletImage,
 }: {
   combos: JewelleryComboSummary[];
   combosLoading: boolean;
-  categoryImagesLoading: boolean;
-  jewelleryImageBySub: Partial<Record<JewellerySubcategoryPreset, string>>;
-  watchImage?: string;
-  braceletImage?: string;
 }) {
-  const comboImage = combos[0]?.images[0];
   const showCombosTile = combosLoading || combos.length > 0;
 
   const tiles = useMemo(() => {
@@ -76,31 +89,22 @@ function ShopByCategoriesSection({
         key: `jewellery-${sub}`,
         label: sub,
         search: `?category=Jewellery&subcategory=${encodeURIComponent(sub)}`,
-        image: jewelleryImageBySub[sub],
       });
     }
     rows.push(
-      { key: 'watches', label: 'Watches', search: '?category=Watches', image: watchImage },
-      { key: 'bracelets', label: 'Bracelets', search: '?category=Bracelets', image: braceletImage },
+      { key: 'watches', label: 'Watches', search: '?category=Watches' },
+      { key: 'bracelets', label: 'Bracelets', search: '?category=Bracelets' },
     );
     if (showCombosTile) {
       rows.push({
         key: 'combos',
         label: 'Curated sets',
         search: '?category=combos',
-        image: comboImage,
+        image: combos[0]?.images[0],
       });
     }
     return rows;
-  }, [
-    jewelleryImageBySub,
-    watchImage,
-    braceletImage,
-    showCombosTile,
-    comboImage,
-    combosLoading,
-    combos.length,
-  ]);
+  }, [showCombosTile, combos]);
 
   return (
     <Box
@@ -144,12 +148,8 @@ function ShopByCategoriesSection({
 
         <Grid container spacing={{ xs: 2, sm: 2.5 }}>
           {tiles.map((tile, index) => {
-            const fallbackFrame = (((index * FALLBACK_FRAME_STEP) % TOTAL_FRAMES) + 1)
-              .toString()
-              .padStart(4, '0');
-            const src = tile.image || `/frames/frame_${fallbackFrame}.webp`;
-            const showSkeleton =
-              (tile.key !== 'combos' && categoryImagesLoading) || (tile.key === 'combos' && combosLoading);
+            const src = categoryTileSrc(tile, index);
+            const showSkeleton = tile.key === 'combos' && combosLoading;
 
             return (
               <Grid item xs={6} sm={4} md={3} key={tile.key}>
@@ -183,6 +183,7 @@ function ShopByCategoriesSection({
                             src={src}
                             alt=""
                             loading="lazy"
+                            onError={handleProductImageError}
                             sx={{
                               width: '100%',
                               height: '100%',
@@ -250,7 +251,8 @@ function JewelleryComboStorefrontCard({ combo, index }: { combo: JewelleryComboS
             <CardActionArea component={RouterLink} to={`/jewellery-combos/${combo.id}`}>
               <CardMedia
                 component={thumb ? 'img' : 'div'}
-                image={thumb || undefined}
+                image={thumb || COMBO_CATEGORY_TILE_IMAGE}
+                onError={thumb ? handleProductImageError : undefined}
                 sx={{
                   aspectRatio: '4/3',
                   objectFit: 'cover',
@@ -412,13 +414,6 @@ export function HomePage() {
   const [combos, setCombos] = useState<JewelleryComboSummary[]>([]);
   const [combosLoading, setCombosLoading] = useState(true);
 
-  const [categoryImagesLoading, setCategoryImagesLoading] = useState(true);
-  const [jewelleryImageBySub, setJewelleryImageBySub] = useState<
-    Partial<Record<JewellerySubcategoryPreset, string>>
-  >({});
-  const [watchCategoryImage, setWatchCategoryImage] = useState<string | undefined>();
-  const [braceletCategoryImage, setBraceletCategoryImage] = useState<string | undefined>();
-
   const containerRef = useRef<HTMLDivElement>(null);
   const collectionNavRef = useRef({ hash: '', search: '' });
   const { scrollYProgress } = useScroll({
@@ -483,35 +478,6 @@ export function HomePage() {
         setCombos([]);
       } finally {
         setCombosLoading(false);
-      }
-    })();
-  }, []);
-
-  useEffect(() => {
-    void (async () => {
-      setCategoryImagesLoading(true);
-      try {
-        const [j, w, b] = await Promise.all([
-          apiFetch<{ products: ProductSummary[] }>('/api/products?category=Jewellery'),
-          apiFetch<{ products: ProductSummary[] }>('/api/products?category=Watches'),
-          apiFetch<{ products: ProductSummary[] }>('/api/products?category=Bracelets'),
-        ]);
-        const bySub: Partial<Record<JewellerySubcategoryPreset, string>> = {};
-        for (const sub of HOME_JEWELLERY_CATEGORY_ORDER) {
-          const hit = j.products.find(
-            (p) => (p.subcategory ?? '').trim().toLowerCase() === sub.toLowerCase(),
-          );
-          if (hit?.images[0]) bySub[sub] = hit.images[0];
-        }
-        setJewelleryImageBySub(bySub);
-        setWatchCategoryImage(w.products[0]?.images[0]);
-        setBraceletCategoryImage(b.products[0]?.images[0]);
-      } catch {
-        setJewelleryImageBySub({});
-        setWatchCategoryImage(undefined);
-        setBraceletCategoryImage(undefined);
-      } finally {
-        setCategoryImagesLoading(false);
       }
     })();
   }, []);
@@ -665,14 +631,7 @@ export function HomePage() {
         </Container>
       </Box>
 
-      <ShopByCategoriesSection
-        combos={combos}
-        combosLoading={combosLoading}
-        categoryImagesLoading={categoryImagesLoading}
-        jewelleryImageBySub={jewelleryImageBySub}
-        watchImage={watchCategoryImage}
-        braceletImage={braceletCategoryImage}
-      />
+      <ShopByCategoriesSection combos={combos} combosLoading={combosLoading} />
 
       {/* Featured Collection Section */}
       <Box

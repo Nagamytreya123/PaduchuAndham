@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Stack from '@mui/material/Stack';
 import Chip from '@mui/material/Chip';
+import IconButton from '@mui/material/IconButton';
 import { alpha, useTheme } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import {
@@ -14,6 +15,7 @@ import {
 } from 'framer-motion';
 import type { PanInfo } from 'framer-motion';
 import type { ProductSummary } from '../../types/product';
+import { IconChevronLeft, IconChevronRight } from '../../icons';
 import { formatInrFromPaise } from '../../utils/format';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 import {
@@ -27,11 +29,15 @@ import {
   showcaseSlideVariants,
   showcaseSlideVariantsMobile,
   staggerTextContainer,
+  staggerTextContainerMobile,
   staggerTextItem,
+  staggerTextItemMobile,
   staggerTextReduced,
   wordmarkParallaxReduced,
   wordmarkParallaxVariants,
 } from '../../motion/productShowcaseVariants';
+import { ProductImageLightbox } from './ProductImageLightbox';
+import { handleProductImageError } from '../../utils/productImage';
 
 const SWIPE_COMMIT = 72;
 const SWIPE_VELOCITY = 420;
@@ -65,6 +71,8 @@ export function ProductShowcaseHero({
   const isCoarse = useMediaQuery('(hover: none), (pointer: coarse)');
   const isNarrow = useMediaQuery(theme.breakpoints.down('md'));
   const enableSwipe = isCoarse && !reduced;
+  /** Desktop/laptop only — touch devices keep swipe. */
+  const showCatalogNavButtons = !isCoarse && !isNarrow;
 
   /** Pointer parallax: 2–6px translate, ~2–4° tilt (spec §4) */
   const mx = useMotionValue(0);
@@ -77,6 +85,20 @@ export function ProductShowcaseHero({
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const titleId = `showcase-product-title-${product.id}`;
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+
+  const galleryImages = useMemo(
+    () => product.images.filter((url) => typeof url === 'string' && url.trim().length > 0),
+    [product.images],
+  );
+
+  const layoutId = `product-hero-image-${product.id}`;
+
+  useEffect(() => {
+    setActiveImageIndex(0);
+    setLightboxOpen(false);
+  }, [product.id]);
 
   const slideVariants = reduced
     ? showcaseSlideReduced
@@ -86,8 +108,16 @@ export function ProductShowcaseHero({
   const bgVariants = reduced ? parallaxBgReduced : parallaxBgVariants;
   const wmVariants = reduced ? wordmarkParallaxReduced : wordmarkParallaxVariants;
   const frameVariants = reduced ? imageFrameReduced : isNarrow ? imageFrameVariantsMobile : imageFrameVariants;
-  const textItemVariants = reduced ? staggerTextReduced : staggerTextItem;
-  const textContainerVariants = reduced ? { enter: {}, center: {}, exit: {} } : staggerTextContainer;
+  const textItemVariants = reduced
+    ? staggerTextReduced
+    : isNarrow
+      ? staggerTextItemMobile
+      : staggerTextItem;
+  const textContainerVariants = reduced
+    ? { enter: {}, center: {}, exit: {} }
+    : isNarrow
+      ? staggerTextContainerMobile
+      : staggerTextContainer;
 
   const descPreview = useMemo(() => {
     const d = product.description?.trim() || 'No description';
@@ -128,7 +158,7 @@ export function ProductShowcaseHero({
     }
   }
 
-  const img = product.images[0];
+  const img = galleryImages[activeImageIndex] ?? galleryImages[0];
 
   const heroImage = (
     <Box
@@ -178,18 +208,52 @@ export function ProductShowcaseHero({
             >
               {img ? (
                 <Box
-                  component="img"
-                  src={img}
-                  alt=""
-                  loading="eager"
-                  decoding="async"
+                  component={motion.button}
+                  type="button"
+                  onClick={() => setLightboxOpen(true)}
+                  aria-label={`View enlarged photo of ${product.name}`}
+                  initial={false}
+                  whileHover={reduced ? undefined : { scale: 1.015 }}
+                  whileTap={reduced ? undefined : { scale: 0.985 }}
                   sx={{
+                    display: 'block',
                     width: '100%',
                     height: '100%',
-                    objectFit: 'cover',
-                    display: 'block',
+                    p: 0,
+                    border: 0,
+                    cursor: 'zoom-in',
+                    bgcolor: 'transparent',
+                    position: 'relative',
                   }}
-                />
+                >
+                  {!lightboxOpen ? (
+                    <Box
+                      component={motion.img}
+                      layoutId={layoutId}
+                      src={img}
+                      alt=""
+                      loading="eager"
+                      decoding="async"
+                      onError={handleProductImageError}
+                      transition={{ type: 'spring', stiffness: 320, damping: 34 }}
+                      sx={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                        display: 'block',
+                      }}
+                    />
+                  ) : (
+                    <Box
+                      sx={{
+                        width: '100%',
+                        height: '100%',
+                        minHeight: 220,
+                        bgcolor: 'grey.900',
+                      }}
+                    />
+                  )}
+                </Box>
               ) : (
                 <Box sx={{ height: '100%', minHeight: 220 }} />
               )}
@@ -197,6 +261,56 @@ export function ProductShowcaseHero({
           </motion.div>
         </motion.div>
       </motion.div>
+
+      {galleryImages.length > 1 ? (
+        <Stack
+          direction="row"
+          spacing={1}
+          sx={{ mt: 1.25, flexWrap: 'wrap', justifyContent: 'center' }}
+          role="list"
+          aria-label={`${product.name} photo gallery`}
+        >
+          {galleryImages.map((url, i) => (
+            <Box
+              key={`${url}-${i}`}
+              component="button"
+              type="button"
+              role="listitem"
+              onClick={() => setActiveImageIndex(i)}
+              aria-label={`Show photo ${i + 1} of ${galleryImages.length}`}
+              aria-current={i === activeImageIndex ? 'true' : undefined}
+              sx={{
+                p: 0,
+                border: '2px solid',
+                borderColor: i === activeImageIndex ? 'primary.main' : alpha(theme.palette.common.white, 0.12),
+                borderRadius: 1.25,
+                overflow: 'hidden',
+                cursor: 'pointer',
+                width: { xs: 56, sm: 64 },
+                height: { xs: 56, sm: 64 },
+                flexShrink: 0,
+                bgcolor: 'grey.900',
+                opacity: i === activeImageIndex ? 1 : 0.72,
+                transition: 'opacity 0.2s, border-color 0.2s, transform 0.2s',
+                '&:hover': { opacity: 1 },
+                '&:focus-visible': {
+                  outline: `2px solid ${theme.palette.primary.main}`,
+                  outlineOffset: 2,
+                },
+              }}
+            >
+              <Box
+                component="img"
+                src={url}
+                alt=""
+                loading="lazy"
+                onError={handleProductImageError}
+                sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+              />
+            </Box>
+          ))}
+        </Stack>
+      ) : null}
     </Box>
   );
 
@@ -214,9 +328,10 @@ export function ProductShowcaseHero({
         onPointerLeave={handlePointerLeave}
         sx={{
           position: 'relative',
+          display: 'grid',
+          gridTemplateColumns: '1fr',
           borderRadius: { xs: 2.5, sm: 3.5 },
           overflow: 'hidden',
-          minHeight: { xs: 'auto', sm: 400 },
           isolation: 'isolate',
           px: { xs: 2, sm: 2.75 },
           py: { xs: 2, sm: 2.5 },
@@ -224,6 +339,56 @@ export function ProductShowcaseHero({
           boxShadow: `0 40px 100px ${alpha('#000', 0.35)}`,
         }}
       >
+        {showCatalogNavButtons ? (
+          <>
+            <IconButton
+              aria-label="Previous product"
+              disabled={!prevId}
+              onClick={() => prevId && onNavigate(prevId, -1)}
+              sx={{
+                position: 'absolute',
+                left: 12,
+                top: '42%',
+                zIndex: 10,
+                bgcolor: alpha(theme.palette.common.black, 0.45),
+                color: 'primary.main',
+                border: `1px solid ${alpha(theme.palette.primary.main, 0.35)}`,
+                '&:hover': {
+                  bgcolor: alpha(theme.palette.common.black, 0.62),
+                },
+                '&.Mui-disabled': {
+                  bgcolor: alpha(theme.palette.common.black, 0.2),
+                  color: alpha(theme.palette.primary.main, 0.35),
+                },
+              }}
+            >
+              <IconChevronLeft />
+            </IconButton>
+            <IconButton
+              aria-label="Next product"
+              disabled={!nextId}
+              onClick={() => nextId && onNavigate(nextId, 1)}
+              sx={{
+                position: 'absolute',
+                right: 12,
+                top: '42%',
+                zIndex: 10,
+                bgcolor: alpha(theme.palette.common.black, 0.45),
+                color: 'primary.main',
+                border: `1px solid ${alpha(theme.palette.primary.main, 0.35)}`,
+                '&:hover': {
+                  bgcolor: alpha(theme.palette.common.black, 0.62),
+                },
+                '&.Mui-disabled': {
+                  bgcolor: alpha(theme.palette.common.black, 0.2),
+                  color: alpha(theme.palette.primary.main, 0.35),
+                },
+              }}
+            >
+              <IconChevronRight />
+            </IconButton>
+          </>
+        ) : null}
         <AnimatePresence initial={false} custom={direction} mode="sync">
           <motion.div
             key={product.id}
@@ -233,8 +398,9 @@ export function ProductShowcaseHero({
             animate="center"
             exit="exit"
             style={{
-              position: 'relative',
+              gridArea: '1 / 1',
               width: '100%',
+              minWidth: 0,
               willChange: reduced ? 'opacity' : 'transform, opacity, filter',
             }}
           >
@@ -305,7 +471,11 @@ export function ProductShowcaseHero({
                 onDragEnd={handleDragEnd}
                 style={{ touchAction: enableSwipe ? 'pan-y' : undefined, position: 'relative' }}
                 role="region"
-                aria-label="Product showcase. Swipe left or right to browse nearby products in the catalogue."
+                aria-label={
+                  showCatalogNavButtons
+                    ? 'Product showcase. Use the previous and next buttons, or swipe on touch devices, to browse nearby products.'
+                    : 'Product showcase. Swipe left or right to browse nearby products in the catalogue.'
+                }
               >
                 <Typography
                   component="span"
@@ -392,6 +562,16 @@ export function ProductShowcaseHero({
           </motion.div>
         </AnimatePresence>
       </Box>
+
+      <ProductImageLightbox
+        open={lightboxOpen && galleryImages.length > 0}
+        images={galleryImages}
+        index={activeImageIndex}
+        productName={product.name}
+        layoutId={layoutId}
+        onClose={() => setLightboxOpen(false)}
+        onIndexChange={setActiveImageIndex}
+      />
     </Box>
   );
 }

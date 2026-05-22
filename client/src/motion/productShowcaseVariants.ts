@@ -192,6 +192,43 @@ export const staggerTextItem: Variants = {
   },
 };
 
+/** Narrow viewports: less vertical travel so copy does not read as “dropping in” below the image. */
+export const staggerTextItemMobile: Variants = {
+  enter: { opacity: 0, y: 8, filter: 'blur(4px)' },
+  center: {
+    opacity: 1,
+    y: 0,
+    filter: 'blur(0px)',
+    transition: tween(0.38, 0),
+  },
+  exit: (dir: number) => {
+    const d = dir ?? 1;
+    return {
+      opacity: 0,
+      y: d >= 0 ? 6 : -6,
+      x: d >= 0 ? 10 : -10,
+      filter: 'blur(3px)',
+      transition: tween(0.2),
+    };
+  },
+};
+
+export const staggerTextContainerMobile: Variants = {
+  enter: {},
+  center: {
+    transition: {
+      staggerChildren: 0.06,
+      delayChildren: 0.14,
+    },
+  },
+  exit: {
+    transition: {
+      staggerChildren: 0.03,
+      staggerDirection: -1,
+    },
+  },
+};
+
 export const staggerTextReduced: Variants = {
   enter: { opacity: 0 },
   center: { opacity: 1, transition: tween(0.18) },

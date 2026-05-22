@@ -8,6 +8,7 @@ import Stack from '@mui/material/Stack';
 import { Link as RouterLink } from 'react-router-dom';
 import type { ProductSummary } from '../types/product';
 import { formatInrFromPaise } from '../utils/format';
+import { handleProductImageError } from '../utils/productImage';
 
 export function ProductCard({ product }: { product: ProductSummary }) {
   const img = product.images[0];
@@ -26,6 +27,7 @@ export function ProductCard({ product }: { product: ProductSummary }) {
             minHeight: 160,
           }}
           loading="lazy"
+          onError={handleProductImageError}
         />
         <CardContent sx={{ flexGrow: 1 }}>
           <Stack direction="row" gap={0.5} flexWrap="wrap" sx={{ mb: 1 }}>
