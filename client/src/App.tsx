@@ -5,6 +5,8 @@ import { useAuth } from './context/AuthContext';
 import { CustomerShell } from './layouts/CustomerShell';
 import { AdminShell } from './layouts/AdminShell';
 import { HomePage } from './pages/HomePage';
+import { ShopPage } from './pages/ShopPage';
+import { WishlistPage } from './pages/WishlistPage';
 import { ProductDetailPage } from './pages/ProductDetailPage';
 import { CartPage } from './pages/CartPage';
 import { CheckoutPage } from './pages/CheckoutPage';
@@ -55,6 +57,8 @@ export function App() {
     <Routes>
       <Route element={<CustomerShell />}>
         <Route index element={<HomePage />} />
+        <Route path="shop" element={<ShopPage />} />
+        <Route path="wishlist" element={<WishlistPage />} />
         <Route path="products/:id" element={<ProductDetailPage />} />
         <Route path="jewellery-combos/:id" element={<JewelleryComboDetailPage />} />
         <Route path="cart" element={<CartPage />} />

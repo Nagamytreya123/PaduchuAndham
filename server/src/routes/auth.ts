@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type Request, type Response } from 'express';
 import passport from 'passport';
 import rateLimit from 'express-rate-limit';
 import { env, getAdminEmailSet } from '../config/env.js';
@@ -79,30 +79,27 @@ router.get('/me', async (req, res) => {
   });
 });
 
-/** Dev-only: set cookie after seed without OAuth */
-router.post('/dev-login', async (req, res) => {
-  if (env.NODE_ENV === 'production') {
-    res.status(404).end();
-    return;
-  }
+const maxAgeMs = 7 * 24 * 60 * 60 * 1000;
+
+function setSessionCookie(res: import('express').Response, userId: string, role: 'admin' | 'customer') {
+  const token = issueAuthCookie(userId, role);
+  res.cookie(env.JWT_COOKIE_NAME, token, authCookieOptions(maxAgeMs));
+}
+
+/** Email sign-in for returning customers (account must already exist). */
+async function emailLogin(req: Request, res: Response) {
   const { email } = req.body as { email?: string };
-  if (!email) {
-    res.status(400).json({ error: 'email required' });
+  if (!email?.trim()) {
+    res.status(400).json({ error: 'Email is required' });
     return;
   }
-  const user = await UserModel.findOne({ email: email.toLowerCase() }).lean();
+  const normalized = email.toLowerCase().trim();
+  const user = await UserModel.findOne({ email: normalized }).lean();
   if (!user) {
-    res.status(404).json({ error: 'User not found - run npm run seed' });
+    res.status(404).json({ error: 'No account found with this email. Sign up to create one.' });
     return;
   }
-  const token = issueAuthCookie(user._id.toString(), user.role as 'admin' | 'customer');
-  res.cookie(env.JWT_COOKIE_NAME, token, {
-    httpOnly: true,
-    secure: false,
-    sameSite: 'lax',
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-    path: '/',
-  });
+  setSessionCookie(res, user._id.toString(), user.role as 'admin' | 'customer');
   res.json({
     ok: true,
     user: {
@@ -112,23 +109,19 @@ router.post('/dev-login', async (req, res) => {
       role: user.role,
     },
   });
-});
+}
 
-/** Dev-only: create a customer (or admin if email is in ADMIN_EMAILS) and sign in */
-router.post('/dev-signup', async (req, res) => {
-  if (env.NODE_ENV === 'production') {
-    res.status(404).end();
-    return;
-  }
+/** Email sign-up with optional display name. */
+async function emailSignup(req: Request, res: Response) {
   const { email, name } = req.body as { email?: string; name?: string };
   if (!email?.trim()) {
-    res.status(400).json({ error: 'email required' });
+    res.status(400).json({ error: 'Email is required' });
     return;
   }
   const normalized = email.toLowerCase().trim();
   const existing = await UserModel.findOne({ email: normalized });
   if (existing) {
-    res.status(409).json({ error: 'An account with this email already exists' });
+    res.status(409).json({ error: 'An account with this email already exists. Try signing in.' });
     return;
   }
   const adminEmails = getAdminEmailSet();
@@ -139,14 +132,7 @@ router.post('/dev-signup', async (req, res) => {
     name: displayName,
     role,
   });
-  const token = issueAuthCookie(created._id.toString(), role);
-  res.cookie(env.JWT_COOKIE_NAME, token, {
-    httpOnly: true,
-    secure: false,
-    sameSite: 'lax',
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-    path: '/',
-  });
+  setSessionCookie(res, created._id.toString(), role);
   res.json({
     ok: true,
     user: {
@@ -156,6 +142,11 @@ router.post('/dev-signup', async (req, res) => {
       role: created.role,
     },
   });
-});
+}
+
+router.post('/login', emailLogin);
+router.post('/signup', emailSignup);
+router.post('/dev-login', emailLogin);
+router.post('/dev-signup', emailSignup);
 
 export default router;

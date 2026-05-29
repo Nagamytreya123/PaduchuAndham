@@ -9,11 +9,14 @@ import BottomNavigationAction from '@mui/material/BottomNavigationAction';
 import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
 import Button from '@mui/material/Button';
-import { IconBag, IconHome, IconLogout, IconPerson } from '../icons';
+import { IconBag, IconHeart, IconHome, IconLogout, IconPerson, IconShop } from '../icons';
 import Badge from '@mui/material/Badge';
 import { Link as RouterLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { cartBadgeCount, useCart } from '../context/CartContext';
+import { useWishlist } from '../context/WishlistContext';
+import { authSurface as authS } from '../constants/authSurface';
+import { shopSurface } from '../constants/shopSurface';
 
 export function CustomerShell() {
   const theme = useTheme();
@@ -22,6 +25,7 @@ export function CustomerShell() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const { lines } = useCart();
+  const { count: wishlistCount } = useWishlist();
 
   async function handleLogout() {
     await logout();
@@ -30,26 +34,47 @@ export function CustomerShell() {
 
   const cartCount = cartBadgeCount(lines);
 
-  const isFullBleedRoute = location.pathname === '/' || location.pathname === '/login';
+  /** Pages that render `StorefrontHeader` themselves — hide the shell AppBar to avoid double headers. */
+  const hasInPageStorefrontHeader =
+    location.pathname === '/' ||
+    location.pathname === '/shop' ||
+    location.pathname === '/wishlist' ||
+    location.pathname.startsWith('/products/') ||
+    location.pathname.startsWith('/jewellery-combos/');
+  const isFullBleedRoute = hasInPageStorefrontHeader || location.pathname === '/login';
+  const isLogin = location.pathname === '/login';
 
-  const bottomValue = location.pathname.startsWith('/cart')
-    ? 'cart'
-    : location.pathname.startsWith('/account')
-      ? 'account'
-      : 'home';
+  const bottomValue = location.pathname === '/shop'
+    ? 'shop'
+    : location.pathname === '/wishlist'
+      ? 'wishlist'
+      : location.pathname.startsWith('/account')
+        ? 'profile'
+        : 'home';
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', pb: isXs ? 8 : 0 }}>
+      {!hasInPageStorefrontHeader && (
       <AppBar
         position="sticky"
         elevation={0}
         color="inherit"
         sx={{
           borderBottom: '1px solid',
-          borderColor: 'rgba(198, 198, 198, 0.15)',
-          backgroundColor: 'rgba(238, 238, 238, 0.7)',
-          backdropFilter: 'blur(20px)',
-          WebkitBackdropFilter: 'blur(20px)',
+          ...(isLogin
+            ? {
+                borderColor: 'rgba(232, 216, 168, 0.22)',
+                backgroundColor: 'rgba(15, 13, 11, 0.9)',
+                backdropFilter: 'blur(20px)',
+                WebkitBackdropFilter: 'blur(20px)',
+                color: authS.text.primary,
+              }
+            : {
+                borderColor: 'rgba(198, 198, 198, 0.15)',
+                backgroundColor: 'rgba(238, 238, 238, 0.7)',
+                backdropFilter: 'blur(20px)',
+                WebkitBackdropFilter: 'blur(20px)',
+              }),
         }}
       >
         <Toolbar sx={{ gap: 2 }}>
@@ -57,9 +82,25 @@ export function CustomerShell() {
             variant="h6"
             component={RouterLink}
             to="/"
-            sx={{ flexGrow: 1, textDecoration: 'none', color: 'primary.main', fontWeight: 700 }}
+            sx={{
+              flexGrow: 1,
+              textDecoration: 'none',
+              ...(isLogin
+                ? {
+                    fontFamily: authS.font.display,
+                    fontWeight: 700,
+                    fontSize: { xs: '1.2rem', sm: '1.35rem' },
+                    letterSpacing: '0.03em',
+                    color: authS.text.display,
+                    textShadow: authS.accentGlow,
+                  }
+                : {
+                    color: 'primary.main',
+                    fontWeight: 700,
+                  }),
+            }}
           >
-            Paduchu Shop
+            Paduchuandham
           </Typography>
           {!isXs && (
             <>
@@ -111,13 +152,22 @@ export function CustomerShell() {
               <IconLogout fontSize="small" />
             </IconButton>
           )}
-          <IconButton component={RouterLink} to="/cart" aria-label="cart" sx={{ display: isXs ? 'flex' : 'none' }}>
+          <IconButton
+            component={RouterLink}
+            to="/cart"
+            aria-label="cart"
+            sx={{
+              display: isXs ? 'flex' : 'none',
+              ...(isLogin && { color: authS.text.display }),
+            }}
+          >
             <Badge badgeContent={cartCount} color="secondary">
               <IconBag />
             </Badge>
           </IconButton>
         </Toolbar>
       </AppBar>
+      )}
 
       <Container
         maxWidth={isFullBleedRoute ? false : 'lg'}
@@ -126,7 +176,7 @@ export function CustomerShell() {
           flex: 1,
           width: '100%',
           maxWidth: isFullBleedRoute ? '100%' : undefined,
-          py: location.pathname === '/' || location.pathname === '/login' ? 0 : { xs: 2, sm: 3 },
+          py: isFullBleedRoute ? 0 : { xs: 2, sm: 3 },
           bgcolor: location.pathname === '/login' ? 'transparent' : undefined,
         }}
       >
@@ -139,8 +189,9 @@ export function CustomerShell() {
           value={bottomValue}
           onChange={(_, v) => {
             if (v === 'home') navigate('/');
-            if (v === 'cart') navigate('/cart');
-            if (v === 'account') navigate('/account');
+            if (v === 'shop') navigate('/shop');
+            if (v === 'wishlist') navigate('/wishlist');
+            if (v === 'profile') navigate('/account');
           }}
           sx={{
             position: 'fixed',
@@ -148,21 +199,45 @@ export function CustomerShell() {
             left: 0,
             right: 0,
             borderTop: 1,
-            borderColor: 'divider',
             zIndex: theme.zIndex.appBar,
+            background: `linear-gradient(to top, ${shopSurface.cream} 0%, rgba(255, 255, 255, 0.96) 100%)`,
+            ...(isLogin
+              ? {
+                  bgcolor: 'rgba(15, 13, 11, 0.96)',
+                  borderColor: 'rgba(232, 216, 168, 0.18)',
+                  '& .MuiBottomNavigationAction-root': { color: authS.text.faint },
+                  '& .MuiBottomNavigationAction-root.Mui-selected': { color: authS.accent },
+                }
+              : {
+                  borderColor: 'rgba(26, 26, 26, 0.08)',
+                  '& .MuiBottomNavigationAction-root': {
+                    color: 'rgba(26, 26, 26, 0.45)',
+                    minWidth: 0,
+                    px: 0.5,
+                  },
+                  '& .MuiBottomNavigationAction-root.Mui-selected': {
+                    color: shopSurface.ink,
+                  },
+                  '& .MuiBottomNavigationAction-label': {
+                    fontSize: '0.65rem',
+                    fontWeight: 500,
+                    letterSpacing: '0.02em',
+                  },
+                }),
           }}
         >
-          <BottomNavigationAction label="Shop" value="home" icon={<IconHome />} />
+          <BottomNavigationAction label="Home" value="home" icon={<IconHome />} />
+          <BottomNavigationAction label="Shop" value="shop" icon={<IconShop />} />
           <BottomNavigationAction
-            label="Cart"
-            value="cart"
+            label="Wishlist"
+            value="wishlist"
             icon={
-              <Badge badgeContent={cartCount} color="secondary">
-                <IconBag />
+              <Badge badgeContent={wishlistCount} color="secondary" invisible={wishlistCount === 0}>
+                <IconHeart />
               </Badge>
             }
           />
-          <BottomNavigationAction label="Account" value="account" icon={<IconPerson />} />
+          <BottomNavigationAction label="Profile" value="profile" icon={<IconPerson />} />
         </BottomNavigation>
       )}
     </Box>

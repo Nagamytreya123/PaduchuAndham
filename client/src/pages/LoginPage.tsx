@@ -4,13 +4,13 @@ import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
 import TextField from '@mui/material/TextField';
 import Box from '@mui/material/Box';
+import Divider from '@mui/material/Divider';
 import Grid from '@mui/material/Grid';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import { IconGoogle, IconInfoOutlined } from '../icons';
 import Alert from '@mui/material/Alert';
 import CircularProgress from '@mui/material/CircularProgress';
-import Divider from '@mui/material/Divider';
 import Link from '@mui/material/Link';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
@@ -28,37 +28,36 @@ function useTabFromMode(searchParams: URLSearchParams) {
 
 const emailOk = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
 
-const textFieldLightSx = {
+const textFieldAuthSx = {
   '& .MuiOutlinedInput-root': {
     bgcolor: S.glass.inputBg,
-    borderRadius: 1,
+    borderRadius: 1.5,
+    color: S.text.primary,
+    fontFamily: S.font.body,
+    fontSize: '1rem',
     boxShadow: S.input.shadowInset,
     transition: 'box-shadow 0.2s ease, border-color 0.2s ease',
-    '& fieldset': {
-      borderColor: S.input.borderOnGlass,
-      borderWidth: 1,
-      transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
-    },
+    '& fieldset': { borderColor: S.input.border, borderWidth: 1 },
     '&:hover fieldset': { borderColor: S.input.borderHover },
     '&.Mui-focused': {
-      boxShadow: `0 0 0 2px ${S.accentFocusRing}, ${S.input.shadowInset}`,
+      boxShadow: `0 0 8px ${S.accentFocusRing}, ${S.input.shadowInset}`,
     },
-    '&.Mui-focused fieldset': {
-      borderColor: S.input.borderFocus,
-      borderWidth: 1,
-    },
+    '&.Mui-focused fieldset': { borderColor: S.input.borderFocus, borderWidth: 1 },
     '&.Mui-disabled': {
-      bgcolor: 'rgba(26,24,20,0.04)',
-      '& fieldset': { borderColor: 'rgba(26,24,20,0.12)' },
+      bgcolor: 'rgba(21, 19, 16, 0.25)',
+      '& fieldset': { borderColor: 'rgba(150, 144, 131, 0.2)' },
     },
     '&.Mui-error fieldset': { borderColor: S.error },
   },
-  '& .MuiInputLabel-root': { color: S.text.muted },
+  '& .MuiInputBase-input': { color: S.text.primary },
+  '& .MuiInputLabel-root': { color: S.text.muted, fontFamily: S.font.body },
   '& .MuiInputLabel-root.Mui-focused': { color: S.text.primary },
-  '& .MuiFormHelperText-root': { color: S.text.muted, mt: 0.75 },
+  '& .MuiFormHelperText-root': { color: S.text.faint, mt: 0.75, fontFamily: S.font.body },
 };
 
-const glassPanelSx = {
+const authCardSx = {
+  bgcolor: S.glass.cardBg,
+  borderRadius: 4,
   backdropFilter: S.glass.backdrop,
   WebkitBackdropFilter: S.glass.backdrop,
   border: `1px solid ${S.glass.border}`,
@@ -67,8 +66,8 @@ const glassPanelSx = {
 
 const authAmbientVideoSrc = `${ambientVideoUrl}#t=0.001`;
 
-/** First segment loops on the auth form; remainder plays once after successful auth. */
-const AUTH_VIDEO_INTRO_SEC = 2;
+/** Main body loops on login/signup; last segment plays once after successful auth. */
+const AUTH_VIDEO_OUTRO_SEC = 2;
 const AUTH_COLLAPSE_MS = 480;
 
 type AuthExitStage = 'idle' | 'collapsing' | 'outro';
@@ -84,10 +83,10 @@ export function LoginPage() {
   const tabFromUrl = useTabFromMode(searchParams);
   const [tab, setTab] = useState(tabFromUrl);
 
-  const [devEmail, setDevEmail] = useState('');
-  const [devName, setDevName] = useState('');
+  const [email, setEmail] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [busy, setBusy] = useState(false);
-  const [devErr, setDevErr] = useState<string | null>(null);
+  const [formErr, setFormErr] = useState<string | null>(null);
   const [emailTouched, setEmailTouched] = useState(false);
   const [authExitStage, setAuthExitStage] = useState<AuthExitStage>('idle');
   const [celebrateSynced, setCelebrateSynced] = useState(false);
@@ -125,8 +124,8 @@ export function LoginPage() {
 
     const go = () => {
       const dur = v.duration;
-      const t0 = AUTH_VIDEO_INTRO_SEC;
-      if (!Number.isFinite(dur) || dur <= t0 + 0.08) {
+      const t0 = Math.max(0, dur - AUTH_VIDEO_OUTRO_SEC);
+      if (!Number.isFinite(dur) || dur <= AUTH_VIDEO_OUTRO_SEC + 0.08) {
         finish();
         return;
       }
@@ -170,7 +169,10 @@ export function LoginPage() {
     const onTime = () => {
       if (videoPhaseRef.current !== 'intro') return;
       if (authExitStageRef.current !== 'idle') return;
-      if (v.currentTime >= AUTH_VIDEO_INTRO_SEC - 0.06) {
+      const dur = v.duration;
+      if (!Number.isFinite(dur) || dur <= AUTH_VIDEO_OUTRO_SEC + 0.08) return;
+      const loopEnd = dur - AUTH_VIDEO_OUTRO_SEC;
+      if (v.currentTime >= loopEnd - 0.06) {
         try {
           v.currentTime = 0;
         } catch {
@@ -207,7 +209,7 @@ export function LoginPage() {
     requestAnimationFrame(() => beginOutroThenNavigate());
   }, [celebrate, user, loading, reducedMotion, beginOutroThenNavigate]);
 
-  const emailInvalid = emailTouched && devEmail.trim().length > 0 && !emailOk(devEmail);
+  const emailInvalid = emailTouched && email.trim().length > 0 && !emailOk(email);
 
   function setModeInUrl(nextTab: number) {
     const next = new URLSearchParams(searchParams);
@@ -260,6 +262,8 @@ export function LoginPage() {
               transform: 'translateZ(0)',
             }}
           />
+          <Box sx={{ position: 'absolute', inset: 0, background: S.scrim, pointerEvents: 'none' }} />
+          <Box sx={{ position: 'absolute', inset: 0, background: S.scrimOverVideo, pointerEvents: 'none' }} />
         </Box>
         <Stack
           alignItems="center"
@@ -278,48 +282,48 @@ export function LoginPage() {
 
   const showAuthChrome = !user || authExitStage === 'collapsing';
 
-  async function devLogin() {
+  async function finishAuthSuccess() {
+    await refresh();
+    await new Promise((r) => setTimeout(r, AUTH_COLLAPSE_MS));
+    setAuthExitStage('outro');
+    outroNavOnceRef.current = false;
+    beginOutroThenNavigate();
+  }
+
+  async function emailSignIn() {
     setBusy(true);
-    setDevErr(null);
+    setFormErr(null);
     try {
       setAuthExitStage('collapsing');
-      await apiFetch('/api/auth/dev-login', {
+      await apiFetch('/api/auth/login', {
         method: 'POST',
-        body: JSON.stringify({ email: devEmail.trim().toLowerCase() }),
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
       });
-      await refresh();
-      await new Promise((r) => setTimeout(r, AUTH_COLLAPSE_MS));
-      setAuthExitStage('outro');
-      outroNavOnceRef.current = false;
-      beginOutroThenNavigate();
+      await finishAuthSuccess();
     } catch (e) {
       setAuthExitStage('idle');
-      setDevErr(e instanceof Error ? e.message : 'Sign in failed');
+      setFormErr(e instanceof Error ? e.message : 'Sign in failed');
     } finally {
       setBusy(false);
     }
   }
 
-  async function devSignup() {
+  async function emailSignUp() {
     setBusy(true);
-    setDevErr(null);
+    setFormErr(null);
     try {
       setAuthExitStage('collapsing');
-      await apiFetch('/api/auth/dev-signup', {
+      await apiFetch('/api/auth/signup', {
         method: 'POST',
         body: JSON.stringify({
-          email: devEmail.trim().toLowerCase(),
-          name: devName.trim() || undefined,
+          email: email.trim().toLowerCase(),
+          name: displayName.trim() || undefined,
         }),
       });
-      await refresh();
-      await new Promise((r) => setTimeout(r, AUTH_COLLAPSE_MS));
-      setAuthExitStage('outro');
-      outroNavOnceRef.current = false;
-      beginOutroThenNavigate();
+      await finishAuthSuccess();
     } catch (e) {
       setAuthExitStage('idle');
-      setDevErr(e instanceof Error ? e.message : 'Could not create account');
+      setFormErr(e instanceof Error ? e.message : 'Could not create account');
     } finally {
       setBusy(false);
     }
@@ -327,8 +331,8 @@ export function LoginPage() {
 
   const whySignInTitle =
     tab === 0
-      ? 'Sign in to track orders and finish checkout securely. Google is the default path; development offers email shortcuts after seeding.'
-      : 'We use Google for production sign-up. Local development can create users without OAuth when enabled.';
+      ? 'Sign in with Google or the email you used when you joined.'
+      : 'Create an account with Google or your email and name.';
 
   return (
     <Box
@@ -373,16 +377,19 @@ export function LoginPage() {
             transform: 'translateZ(0)',
           }}
         />
+        <Box sx={{ position: 'absolute', inset: 0, background: S.scrim, pointerEvents: 'none' }} />
+        <Box sx={{ position: 'absolute', inset: 0, background: S.scrimOverVideo, pointerEvents: 'none' }} />
       </Box>
 
       <Box
         sx={{
           position: 'relative',
           zIndex: 2,
-          maxWidth: 1120,
+          width: '100%',
+          maxWidth: { xs: 420, md: 1120 },
           mx: 'auto',
-          px: { xs: 2, sm: 3 },
-          py: { xs: 3, md: 5 },
+          px: { xs: 2, sm: 2.5 },
+          py: { xs: 2, md: 5 },
           bgcolor: 'transparent',
         }}
       >
@@ -413,50 +420,67 @@ export function LoginPage() {
                 role="region"
                 aria-label="Account sign in"
                 sx={{
-                  bgcolor: S.glass.formBg,
-                  borderRadius: 2,
-                  p: { xs: 2.5, sm: 3, md: 4 },
+                  p: { xs: 3, sm: 3.5, md: 4 },
                   height: '100%',
-                  backgroundImage: 'none',
                   transform: 'translateZ(0)',
                   WebkitTransform: 'translateZ(0)',
-                  ...glassPanelSx,
+                  ...authCardSx,
                 }}
               >
                 <motion.div {...panelMotionInner}>
                   <Box sx={{ maxWidth: 400, mx: 'auto' }}>
+                  <Typography
+                    variant="h4"
+                    component="h1"
+                    sx={{
+                      display: { xs: 'block', md: 'none' },
+                      textAlign: 'center',
+                      fontFamily: S.font.display,
+                      fontWeight: 700,
+                      fontSize: { xs: '2rem', sm: '2.25rem' },
+                      lineHeight: 1.2,
+                      color: S.text.display,
+                      letterSpacing: '-0.01em',
+                      textShadow: S.accentGlow,
+                      mb: 2.5,
+                    }}
+                  >
+                    {tab === 0 ? 'Welcome back' : 'Join the lookbook'}
+                  </Typography>
                   <Tabs
                     value={tab}
                     onChange={(_, v) => {
                       setTab(v);
-                      setDevErr(null);
+                      setFormErr(null);
                       setEmailTouched(false);
                       setModeInUrl(v);
                     }}
                     variant="fullWidth"
                     sx={{
-                      mb: 2,
-                      minHeight: 48,
+                      mb: 2.5,
+                      minHeight: 44,
                       bgcolor: 'transparent',
-                      '& .MuiTabs-flexContainer': { gap: 0.5 },
+                      borderBottom: `1px solid ${S.glass.borderDeep}`,
+                      '& .MuiTabs-flexContainer': { gap: 0 },
                       '& .MuiTab-root': {
                         py: 1.25,
-                        minHeight: 48,
-                        borderRadius: 1,
-                        color: S.text.muted,
-                        fontWeight: 500,
-                        transition: reducedMotion ? undefined : 'background-color 0.2s ease, color 0.2s ease',
-                        '&:hover': { bgcolor: 'rgba(255,255,255,0.22)' },
+                        minHeight: 44,
+                        fontFamily: S.font.body,
+                        fontSize: '0.875rem',
+                        fontWeight: 600,
+                        letterSpacing: '0.06em',
+                        textTransform: 'uppercase',
+                        color: S.text.faint,
+                        transition: reducedMotion ? undefined : 'color 0.25s ease',
+                        '&:hover': { color: S.text.muted },
                         '&.Mui-selected': {
-                          color: S.text.primary,
-                          fontWeight: 600,
-                          bgcolor: 'rgba(255, 255, 255, 0.28)',
+                          color: S.text.display,
                         },
                       },
                       '& .MuiTabs-indicator': {
-                        height: 3,
-                        borderRadius: '3px 3px 0 0',
+                        height: 2,
                         bgcolor: S.accent,
+                        boxShadow: S.accentGlow,
                       },
                     }}
                   >
@@ -465,12 +489,32 @@ export function LoginPage() {
                   </Tabs>
 
                   {err === 'auth' && (
-                    <Alert severity="warning" sx={{ mb: 2, borderRadius: 1, color: S.text.primary, bgcolor: 'rgba(184,146,46,0.12)' }}>
+                    <Alert
+                      severity="warning"
+                      sx={{
+                        mb: 2,
+                        borderRadius: 1.5,
+                        color: S.text.primary,
+                        bgcolor: S.warningBg,
+                        border: `1px solid ${S.glass.borderDeep}`,
+                        fontFamily: S.font.body,
+                      }}
+                    >
                       Google sign-in was cancelled or failed.
                     </Alert>
                   )}
                   {err === 'user' && (
-                    <Alert severity="error" sx={{ mb: 2, borderRadius: 1, bgcolor: S.errorBg, color: S.error }}>
+                    <Alert
+                      severity="error"
+                      sx={{
+                        mb: 2,
+                        borderRadius: 1.5,
+                        bgcolor: S.errorBg,
+                        color: S.error,
+                        border: `1px solid rgba(255, 180, 171, 0.25)`,
+                        fontFamily: S.font.body,
+                      }}
+                    >
                       Could not load your profile.
                     </Alert>
                   )}
@@ -488,8 +532,9 @@ export function LoginPage() {
                           variant="body2"
                           sx={{
                             color: S.text.muted,
+                            fontFamily: S.font.body,
+                            fontSize: '1rem',
                             lineHeight: 1.6,
-                            textShadow: '0 0 1px rgba(255,255,255,0.9), 0 1px 10px rgba(255,255,255,0.65)',
                           }}
                         >
                           {tab === 0
@@ -498,21 +543,28 @@ export function LoginPage() {
                         </Typography>
 
                         <Button
-                          variant="contained"
+                          variant="outlined"
                           size="large"
                           startIcon={<IconGoogle />}
                           component="a"
                           href="/api/auth/google"
                           fullWidth
                           sx={{
-                            py: 1.25,
-                            bgcolor: S.accent,
-                            color: S.text.onAccent,
+                            py: 1.35,
+                            bgcolor: 'rgba(21, 19, 16, 0.4)',
+                            borderColor: S.glass.borderDeep,
+                            color: S.text.primary,
+                            fontFamily: S.font.body,
                             fontWeight: 600,
-                            boxShadow: 'none',
-                            '&:hover': { bgcolor: S.accentHover, boxShadow: 'none' },
+                            fontSize: '0.875rem',
+                            letterSpacing: '0.04em',
+                            textTransform: 'none',
+                            '&:hover': {
+                              bgcolor: 'rgba(33, 31, 28, 0.55)',
+                              borderColor: S.glass.border,
+                            },
                             '&:focus-visible': {
-                              outline: `2px solid ${S.accent}`,
+                              outline: `2px solid ${S.accentFocusRing}`,
                               outlineOffset: 3,
                             },
                           }}
@@ -525,10 +577,12 @@ export function LoginPage() {
                           <Typography
                             variant="caption"
                             sx={{
-                              color: S.text.muted,
-                              letterSpacing: '0.14em',
+                              color: S.text.faint,
+                              fontFamily: S.font.body,
+                              letterSpacing: '0.12em',
                               fontWeight: 600,
-                              fontSize: '0.7rem',
+                              fontSize: '0.75rem',
+                              textTransform: 'uppercase',
                             }}
                           >
                             OR
@@ -536,122 +590,78 @@ export function LoginPage() {
                           <Divider sx={{ flex: 1, borderColor: S.glass.borderDeep }} />
                         </Stack>
 
-                        <Typography
-                          variant="subtitle2"
-                          component="h2"
-                          sx={{
-                            color: S.text.primary,
-                            fontWeight: 600,
-                            fontSize: '0.95rem',
-                            textShadow: '0 0 1px rgba(255,255,255,0.85), 0 1px 8px rgba(255,255,255,0.55)',
-                          }}
-                        >
-                          {tab === 0 ? 'Returning customer' : 'Development email'}
-                        </Typography>
-
-                        {import.meta.env.DEV && (
-                          <Box
-                            component="aside"
-                            aria-label="Development sign-in"
+                        <Stack spacing={2} component="form" onSubmit={(e) => e.preventDefault()}>
+                          {tab === 1 && (
+                            <TextField
+                              label="Your name"
+                              variant="outlined"
+                              fullWidth
+                              value={displayName}
+                              onChange={(e) => setDisplayName(e.target.value)}
+                              sx={textFieldAuthSx}
+                              autoComplete="name"
+                            />
+                          )}
+                          <TextField
+                            label="Email"
+                            variant="outlined"
+                            fullWidth
+                            required
+                            type="email"
+                            value={email}
+                            error={emailInvalid}
+                            helperText={emailInvalid ? 'Enter a valid email address.' : undefined}
+                            onChange={(e) => setEmail(e.target.value)}
+                            onBlur={() => setEmailTouched(true)}
+                            sx={textFieldAuthSx}
+                            autoComplete="email"
+                          />
+                          <Button
+                            type="submit"
+                            variant="contained"
+                            size="large"
+                            disabled={busy || !email.trim() || !emailOk(email)}
+                            onClick={() => void (tab === 0 ? emailSignIn() : emailSignUp())}
+                            fullWidth
                             sx={{
-                              border: `1px dashed ${S.input.borderOnGlass}`,
-                              borderRadius: 1,
-                              bgcolor: S.glass.nestedBg,
-                              backdropFilter: S.glass.nestedBackdrop,
-                              WebkitBackdropFilter: S.glass.nestedBackdrop,
-                              px: 1.5,
-                              py: 1.5,
+                              py: 1.35,
+                              fontFamily: S.font.body,
+                              fontWeight: 700,
+                              fontSize: '0.875rem',
+                              letterSpacing: '0.06em',
+                              textTransform: 'uppercase',
+                              color: S.text.onAccent,
+                              background: `linear-gradient(90deg, ${S.accent} 0%, #E8D8A8 100%)`,
+                              boxShadow: '0 4px 14px rgba(233, 195, 73, 0.2)',
+                              '&:hover': {
+                                background: `linear-gradient(90deg, ${S.accentHover} 0%, #D5C697 100%)`,
+                              },
+                              '&:focus-visible': {
+                                outline: `2px solid ${S.accentFocusRing}`,
+                                outlineOffset: 3,
+                              },
+                              '&.Mui-disabled': {
+                                color: 'rgba(21, 19, 16, 0.38)',
+                                background: 'rgba(150, 144, 131, 0.35)',
+                              },
                             }}
                           >
-                            <Typography
-                              variant="caption"
-                              component="p"
-                              sx={{
-                                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-                                fontSize: '0.72rem',
-                                color: S.text.muted,
-                                letterSpacing: 0,
-                                textTransform: 'none',
-                                lineHeight: 1.5,
-                                mb: 1.5,
-                              }}
-                            >
-                              {tab === 0
-                                ? 'Run `npm run seed`, then use a seeded email below.'
-                                : 'Creates a local user (fails if email exists). No password in this path.'}
-                            </Typography>
-                            {tab === 1 && import.meta.env.DEV && (
-                              <Typography
-                                variant="caption"
-                                display="block"
-                                sx={{
-                                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-                                  fontSize: '0.68rem',
-                                  color: S.text.muted,
-                                  mb: 1.5,
-                                  opacity: 0.9,
-                                }}
-                              >
-                                Example validation (reference): “Password needs 8+ characters, a number, and a symbol.”
-                              </Typography>
-                            )}
-                            <Stack spacing={2}>
-                              {tab === 1 && (
-                                <TextField
-                                  label="Display name"
-                                  variant="outlined"
-                                  fullWidth
-                                  value={devName}
-                                  onChange={(e) => setDevName(e.target.value)}
-                                  sx={textFieldLightSx}
-                                />
-                              )}
-                              <TextField
-                                label="Email"
-                                variant="outlined"
-                                fullWidth
-                                required
-                                type="email"
-                                value={devEmail}
-                                error={emailInvalid}
-                                helperText={emailInvalid ? 'Enter a valid email address.' : undefined}
-                                onChange={(e) => setDevEmail(e.target.value)}
-                                onBlur={() => setEmailTouched(true)}
-                                sx={textFieldLightSx}
-                              />
-                              <Button
-                                variant="outlined"
-                                disabled={busy || !devEmail.trim() || !emailOk(devEmail)}
-                                onClick={() => void (tab === 0 ? devLogin() : devSignup())}
-                                sx={{
-                                  borderColor: S.input.border,
-                                  color: S.text.primary,
-                                  fontWeight: 600,
-                                  '&:hover': { borderColor: S.accent, bgcolor: S.accentSoftBg },
-                                  '&:focus-visible': {
-                                    outline: `2px solid ${S.accentFocusRing}`,
-                                    outlineOffset: 2,
-                                  },
-                                  '&.Mui-disabled': { borderColor: 'rgba(26,24,20,0.12)', color: 'rgba(26,24,20,0.38)' },
-                                }}
-                              >
-                                {tab === 0 ? 'Dev sign in' : 'Dev create account'}
-                              </Button>
-                            </Stack>
-                          </Box>
-                        )}
+                            {tab === 0 ? 'Sign in' : 'Create account'}
+                          </Button>
+                        </Stack>
 
-                        {!import.meta.env.DEV && (
-                          <Typography variant="body2" sx={{ color: S.text.muted }}>
-                            {tab === 0
-                              ? 'Google sign-in is the supported path for returning customers.'
-                              : 'Use Google above to create your production account.'}
-                          </Typography>
-                        )}
-
-                        {devErr && (
-                          <Alert severity="error" sx={{ borderRadius: 1, bgcolor: S.errorBg, color: S.error }}>
-                            {devErr}
+                        {formErr && (
+                          <Alert
+                            severity="error"
+                            sx={{
+                              borderRadius: 1.5,
+                              bgcolor: S.errorBg,
+                              color: S.error,
+                              fontFamily: S.font.body,
+                              border: '1px solid rgba(255, 180, 171, 0.25)',
+                            }}
+                          >
+                            {formErr}
                           </Alert>
                         )}
 
@@ -662,7 +672,7 @@ export function LoginPage() {
                           sx={{ pt: 1, gap: 1 }}
                         >
                           {tab === 0 ? (
-                            <Tooltip title="Accounts are tied to Google. Use the same Google account you checked out with.">
+                            <Tooltip title="Use the same email you signed up with, or the Google account linked to your orders.">
                               <Link
                                 component="button"
                                 type="button"
@@ -670,9 +680,12 @@ export function LoginPage() {
                                 underline="hover"
                                 sx={{
                                   color: S.text.muted,
+                                  fontFamily: S.font.body,
+                                  fontSize: '1rem',
                                   textAlign: 'left',
                                   cursor: 'help',
                                   fontWeight: 500,
+                                  '&:hover': { color: S.text.display },
                                   '&:focus-visible': { outline: `2px solid ${S.accentFocusRing}`, outlineOffset: 2, borderRadius: 0.5 },
                                 }}
                               >
@@ -680,7 +693,7 @@ export function LoginPage() {
                               </Link>
                             </Tooltip>
                           ) : (
-                            <Typography variant="body2" sx={{ color: S.text.muted }}>
+                            <Typography variant="body2" sx={{ color: S.text.muted, fontFamily: S.font.body }}>
                               By continuing you agree to our checkout and delivery terms.
                             </Typography>
                           )}
@@ -691,7 +704,10 @@ export function LoginPage() {
                             underline="hover"
                             sx={{
                               color: S.text.muted,
+                              fontFamily: S.font.body,
+                              fontSize: '1rem',
                               fontWeight: 500,
+                              '&:hover': { color: S.text.display },
                               '&:focus-visible': { outline: `2px solid ${S.accentFocusRing}`, outlineOffset: 2, borderRadius: 0.5 },
                             }}
                           >
@@ -714,21 +730,19 @@ export function LoginPage() {
               order: { xs: 2, md: 1 },
               minWidth: 0,
               bgcolor: 'transparent',
+              display: { xs: 'none', md: 'block' },
             }}
           >
               <Box
                 sx={{
-                  bgcolor: S.glass.heroBg,
-                  borderRadius: 2,
-                  p: { xs: 3, sm: 4, md: 5 },
+                  p: { md: 4, lg: 5 },
                   minHeight: { md: 'min(72vh, 560px)' },
                   display: 'flex',
                   flexDirection: 'column',
                   justifyContent: 'center',
-                  backgroundImage: 'none',
                   transform: 'translateZ(0)',
                   WebkitTransform: 'translateZ(0)',
-                  ...glassPanelSx,
+                  ...authCardSx,
                 }}
               >
                 <motion.div {...panelMotionInner}>
@@ -737,13 +751,14 @@ export function LoginPage() {
                   sx={{
                     mb: 2,
                     display: 'block',
-                    color: S.text.muted,
-                    letterSpacing: '0.12em',
+                    color: S.text.faint,
+                    fontFamily: S.font.body,
+                    letterSpacing: '0.2em',
                     fontWeight: 600,
-                    textShadow: '0 0 1px rgba(255,255,255,0.95), 0 1px 12px rgba(255,255,255,0.75)',
+                    textTransform: 'uppercase',
                   }}
                 >
-                  Paduchu Shop
+                  Paduchuandham
                 </Typography>
 
                 <Stack direction="row" alignItems="flex-start" spacing={1} sx={{ mb: 2 }}>
@@ -752,12 +767,13 @@ export function LoginPage() {
                     component="h1"
                     sx={{
                       flex: 1,
-                      color: S.text.primary,
-                      fontFamily: '"Cormorant Garamond", "Playfair Display", "Noto Serif", serif',
-                      fontWeight: 400,
+                      color: S.text.display,
+                      fontFamily: S.font.display,
+                      fontWeight: 700,
+                      fontSize: { md: '2.75rem', lg: '3.25rem' },
                       lineHeight: 1.15,
-                      textShadow:
-                        '0 0 1px rgba(255,255,255,1), 0 2px 20px rgba(255,255,255,0.75), 0 1px 3px rgba(255,255,255,0.95)',
+                      letterSpacing: '-0.02em',
+                      textShadow: S.accentGlow,
                     }}
                   >
                     {tab === 0 ? 'Welcome back' : 'Join the lookbook'}
@@ -771,7 +787,7 @@ export function LoginPage() {
                         color: S.text.muted,
                         border: `1px solid ${S.glass.borderDeep}`,
                         borderRadius: 1,
-                        '&:hover': { bgcolor: 'rgba(255,255,255,0.45)', color: S.text.primary },
+                        '&:hover': { bgcolor: S.accentSoftBg, color: S.text.display },
                         '&:focus-visible': {
                           outline: `2px solid ${S.accentFocusRing}`,
                           outlineOffset: 2,
@@ -787,9 +803,10 @@ export function LoginPage() {
                   variant="body1"
                   sx={{
                     color: S.text.muted,
+                    fontFamily: S.font.body,
+                    fontSize: '1.125rem',
                     maxWidth: 420,
                     lineHeight: 1.65,
-                    textShadow: '0 0 1px rgba(255,255,255,0.95), 0 1px 14px rgba(255,255,255,0.72), 0 1px 1px rgba(255,255,255,0.9)',
                   }}
                 >
                   {tab === 0
@@ -803,77 +820,6 @@ export function LoginPage() {
           </motion.div>
         )}
       </Box>
-
-      {authExitStage !== 'idle' && (
-        <Box
-          component="aside"
-          aria-live="polite"
-          aria-atomic="true"
-          sx={{
-            position: 'absolute',
-            inset: 0,
-            zIndex: 3,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            pointerEvents: 'none',
-            px: 2,
-            textAlign: 'center',
-          }}
-        >
-          <motion.div
-            key={authExitStage}
-            initial={reducedMotion ? false : { opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: reducedMotion ? 0 : 0.38, ease: [0.22, 1, 0.36, 1] }}
-            style={{ maxWidth: 440 }}
-          >
-            <Box
-              sx={{
-                px: { xs: 2.5, sm: 3.25 },
-                py: { xs: 2.25, sm: 2.75 },
-                borderRadius: 2,
-                bgcolor: 'rgba(18, 16, 14, 0.72)',
-                border: '1px solid rgba(214, 179, 106, 0.28)',
-                backdropFilter: 'blur(10px)',
-                WebkitBackdropFilter: 'blur(10px)',
-                boxShadow: '0 18px 48px rgba(0,0,0,0.45)',
-              }}
-            >
-              <Typography
-                variant="h4"
-                sx={{
-                  fontFamily: '"Cormorant Garamond", "Playfair Display", "Noto Serif", serif',
-                  fontWeight: 500,
-                  fontSize: { xs: '1.65rem', sm: '2rem' },
-                  lineHeight: 1.25,
-                  color: 'primary.main',
-                  letterSpacing: '0.03em',
-                  textShadow:
-                    '0 0 1px rgba(15,15,16,0.55), 0 1px 2px rgba(15,15,16,0.65), 0 0 18px rgba(214,179,106,0.22)',
-                  mb: 1.25,
-                }}
-              >
-                {authExitStage === 'collapsing' ? 'Signing you in…' : 'Entering Paduchu Shop…'}
-              </Typography>
-              <Typography
-                variant="body2"
-                sx={{
-                  color: 'rgba(196, 176, 138, 0.98)',
-                  letterSpacing: '0.12em',
-                  textTransform: 'uppercase',
-                  fontSize: '0.72rem',
-                  fontWeight: 600,
-                  textShadow: '0 1px 2px rgba(15,15,16,0.85)',
-                }}
-              >
-                {authExitStage === 'collapsing' ? 'Securing your session' : 'Opening your gallery'}
-              </Typography>
-            </Box>
-          </motion.div>
-        </Box>
-      )}
     </Box>
   );
 }

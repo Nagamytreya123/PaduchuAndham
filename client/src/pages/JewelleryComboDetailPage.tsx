@@ -10,6 +10,9 @@ import Paper from '@mui/material/Paper';
 import Link from '@mui/material/Link';
 import { apiFetch } from '../api/client';
 import { useCart } from '../context/CartContext';
+import { WishlistToggleButton } from '../components/WishlistToggleButton';
+import { comboToWishlistItem } from '../context/WishlistContext';
+import { StorefrontHeader } from '../components/StorefrontHeader';
 import type { JewelleryComboDetail } from '../types/jewelleryCombo';
 import { formatInrFromPaise } from '../utils/format';
 import { allocateListRatioBundle } from '../utils/bundlePricing';
@@ -57,13 +60,15 @@ export function JewelleryComboDetailPage() {
 
   return (
     <Stack spacing={2}>
+      <StorefrontHeader />
       <Box
         sx={{
+          position: 'relative',
           borderRadius: 2,
           overflow: 'hidden',
           bgcolor: 'grey.100',
-          aspectRatio: '4/3',
-          maxHeight: 420,
+          aspectRatio: '4/5',
+          maxHeight: 520,
         }}
       >
         {hero ? (
@@ -71,9 +76,17 @@ export function JewelleryComboDetailPage() {
         ) : (
           <Box sx={{ height: '100%', minHeight: 200 }} />
         )}
+        <WishlistToggleButton
+          item={comboToWishlistItem(combo)}
+          variant="overlay"
+          sx={{ position: 'absolute', top: 16, right: 16 }}
+        />
       </Box>
 
-      <Chip label="Jewellery combo set" color="secondary" size="small" sx={{ fontWeight: 700, alignSelf: 'flex-start' }} />
+      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" gap={1}>
+        <Chip label="Jewellery combo set" color="secondary" size="small" sx={{ fontWeight: 700 }} />
+        <WishlistToggleButton item={comboToWishlistItem(combo)} />
+      </Stack>
 
       <Typography variant="h5" sx={{ fontWeight: 800 }}>
         {combo.name}

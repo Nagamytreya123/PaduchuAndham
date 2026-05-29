@@ -12,16 +12,14 @@ import {
   ToggleButtonGroup,
   Card,
   CardActionArea,
-  CardContent,
-  CardMedia,
 } from '@mui/material';
 import { motion, useScroll, useTransform, useSpring, MotionValue } from 'framer-motion';
 import Lenis from 'lenis';
 import { apiFetch } from '../api/client';
 import { ProductCard } from '../components/ProductCard';
+import { JewelleryComboStorefrontCard } from '../components/JewelleryComboStorefrontCard';
 import type { ProductSummary } from '../types/product';
 import type { JewelleryComboSummary } from '../types/jewelleryCombo';
-import { formatInrFromPaise } from '../utils/format';
 import {
   STOREFRONT_COLLECTION_FILTERS,
   filterKeyToApiCategory,
@@ -40,7 +38,11 @@ import {
   JEWELLERY_CATEGORY_TILE_IMAGES,
   WATCH_CATEGORY_TILE_IMAGE,
 } from '../constants/categoryTileImages';
-import { handleProductImageError, PRODUCT_IMAGE_FALLBACK } from '../utils/productImage';
+import { PRODUCT_IMAGE_FALLBACK } from '../utils/productImage';
+import { shopSurface } from '../constants/shopSurface';
+import { StorefrontHeader } from '../components/StorefrontHeader';
+import { EditorialImageFrame } from '../components/EditorialImageFrame';
+import { editorialFrameSx } from '../constants/shopSurface';
 
 const TOTAL_FRAMES = 240;
 
@@ -53,9 +55,6 @@ const HOME_JEWELLERY_CATEGORY_ORDER: JewellerySubcategoryPreset[] = [
   'Chains',
 ];
 
-const SHOP_CREAM_BG = '#EFE8DC';
-const SHOP_INK = '#14221a';
-const SHOP_INK_MUTED = '#4a5c54';
 const FALLBACK_FRAME_STEP = 37;
 
 function categoryTileSrc(
@@ -113,7 +112,7 @@ function ShopByCategoriesSection({
       sx={{
         py: { xs: 6, md: 9 },
         px: { xs: 2, md: 4 },
-        bgcolor: SHOP_CREAM_BG,
+        bgcolor: shopSurface.creamDeep,
         position: 'relative',
         zIndex: 10,
       }}
@@ -123,8 +122,9 @@ function ShopByCategoriesSection({
           <Typography
             component="h2"
             sx={{
-              color: SHOP_INK,
-              fontWeight: 800,
+              color: shopSurface.ink,
+              fontFamily: shopSurface.font.display,
+              fontWeight: 500,
               letterSpacing: '0.14em',
               fontSize: { xs: '0.85rem', sm: '0.95rem' },
               textTransform: 'uppercase',
@@ -135,11 +135,11 @@ function ShopByCategoriesSection({
           </Typography>
           <Typography
             sx={{
-              color: SHOP_INK_MUTED,
-              fontFamily: 'Georgia, "Times New Roman", serif',
+              color: shopSurface.inkMuted,
+              fontFamily: shopSurface.font.display,
               fontStyle: 'italic',
               fontSize: { xs: '1.15rem', sm: '1.35rem' },
-              fontWeight: 500,
+              fontWeight: 400,
             }}
           >
             Find your perfect match
@@ -152,7 +152,7 @@ function ShopByCategoriesSection({
             const showSkeleton = tile.key === 'combos' && combosLoading;
 
             return (
-              <Grid item xs={6} sm={4} md={3} key={tile.key}>
+              <Grid item xs={12} sm={6} md={4} key={tile.key}>
                 <motion.div
                   initial={{ opacity: 0, y: 16 }}
                   whileInView={{ opacity: 1, y: 0 }}
@@ -162,11 +162,11 @@ function ShopByCategoriesSection({
                   <Card
                     elevation={0}
                     sx={{
-                      borderRadius: 2,
-                      overflow: 'hidden',
-                      bgcolor: 'rgba(255,255,255,0.55)',
-                      border: '1px solid rgba(20, 34, 26, 0.08)',
-                      boxShadow: '0 2px 12px rgba(20, 34, 26, 0.06)',
+                      borderRadius: 0,
+                      overflow: 'visible',
+                      bgcolor: 'transparent',
+                      border: 'none',
+                      boxShadow: 'none',
                     }}
                   >
                     <CardActionArea
@@ -174,25 +174,14 @@ function ShopByCategoriesSection({
                       to={{ pathname: '/', search: tile.search, hash: 'collection' }}
                       sx={{ display: 'block' }}
                     >
-                      <Box sx={{ position: 'relative', aspectRatio: '1', bgcolor: '#e8e2d8' }}>
-                        {showSkeleton ? (
-                          <Skeleton variant="rectangular" width="100%" height="100%" sx={{ position: 'absolute', inset: 0 }} />
-                        ) : (
-                          <Box
-                            component="img"
-                            src={src}
-                            alt=""
-                            loading="lazy"
-                            onError={handleProductImageError}
-                            sx={{
-                              width: '100%',
-                              height: '100%',
-                              objectFit: 'cover',
-                              display: 'block',
-                            }}
-                          />
-                        )}
-                      </Box>
+                      {showSkeleton ? (
+                        <Skeleton
+                          variant="rectangular"
+                          sx={{ ...editorialFrameSx.root, ...editorialFrameSx.inset }}
+                        />
+                      ) : (
+                        <EditorialImageFrame src={src} alt={tile.label} inset />
+                      )}
                       <Typography
                         sx={{
                           py: 1.5,
@@ -201,7 +190,7 @@ function ShopByCategoriesSection({
                           fontWeight: 700,
                           letterSpacing: '0.08em',
                           fontSize: { xs: '0.68rem', sm: '0.72rem' },
-                          color: SHOP_INK,
+                          color: shopSurface.ink,
                           textTransform: 'uppercase',
                           lineHeight: 1.3,
                         }}
@@ -217,65 +206,6 @@ function ShopByCategoriesSection({
         </Grid>
       </Container>
     </Box>
-  );
-}
-
-function JewelleryComboStorefrontCard({ combo, index }: { combo: JewelleryComboSummary; index: number }) {
-  const thumb = combo.images[0];
-  return (
-    <Grid item xs={12} sm={6} md={4} lg={3}>
-      <motion.div
-        initial={{ opacity: 0, y: 50 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, margin: '-50px' }}
-        transition={{ duration: 0.8, delay: index * 0.1 }}
-      >
-        <Box
-          sx={{
-            transition: 'transform 0.4s ease, box-shadow 0.4s ease',
-            '&:hover': {
-              transform: 'translateY(-10px)',
-              boxShadow: '0 15px 30px rgba(214, 179, 106, 0.1)',
-            },
-          }}
-        >
-          <Card
-            elevation={0}
-            sx={{
-              bgcolor: '#141415',
-              border: '1px solid rgba(214, 179, 106, 0.2)',
-              borderRadius: 2,
-              overflow: 'hidden',
-            }}
-          >
-            <CardActionArea component={RouterLink} to={`/jewellery-combos/${combo.id}`}>
-              <CardMedia
-                component={thumb ? 'img' : 'div'}
-                image={thumb || COMBO_CATEGORY_TILE_IMAGE}
-                onError={thumb ? handleProductImageError : undefined}
-                sx={{
-                  aspectRatio: '4/3',
-                  objectFit: 'cover',
-                  bgcolor: 'rgba(255,255,255,0.04)',
-                  minHeight: 200,
-                }}
-              />
-              <CardContent>
-                <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#F5F5F5', mb: 0.5 }} noWrap>
-                  {combo.name}
-                </Typography>
-                <Typography variant="body2" sx={{ color: '#D6B36A', fontWeight: 700 }}>
-                  {formatInrFromPaise(combo.price)}
-                </Typography>
-                <Typography variant="caption" sx={{ color: '#8A8175' }}>
-                  {combo.productIds.length} pieces · View set
-                </Typography>
-              </CardContent>
-            </CardActionArea>
-          </Card>
-        </Box>
-      </motion.div>
-    </Grid>
   );
 }
 
@@ -534,6 +464,7 @@ export function HomePage() {
 
   return (
     <Box sx={{ backgroundColor: '#0F0F10', minHeight: '100vh', color: '#F5F5F5' }}>
+      <StorefrontHeader />
       {/* Scroll Sequence Container */}
       <Box ref={containerRef} sx={{ height: '400vh', position: 'relative', isolation: 'isolate' }}>
         <FrameSequence scrollYProgress={scrollYProgress} />
@@ -560,10 +491,28 @@ export function HomePage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 1.5, ease: "easeOut" }}
           >
-            <Typography variant="h1" gutterBottom sx={{ color: '#D6B36A' }}>
+            <Typography
+              variant="h1"
+              gutterBottom
+              sx={{
+                fontFamily: shopSurface.font.display,
+                fontWeight: 400,
+                color: shopSurface.cream,
+                letterSpacing: '0.02em',
+              }}
+            >
               Timeless Elegance
             </Typography>
-            <Typography variant="h4" sx={{ mb: 4, fontWeight: 300, color: '#E8DCCB' }}>
+            <Typography
+              variant="h4"
+              sx={{
+                mb: 4,
+                fontFamily: shopSurface.font.display,
+                fontWeight: 400,
+                fontStyle: 'italic',
+                color: 'rgba(242, 238, 230, 0.88)',
+              }}
+            >
               Crafted for Every Moment
             </Typography>
             <Button 
@@ -599,10 +548,22 @@ export function HomePage() {
                 viewport={{ once: true, margin: "-100px" }}
                 transition={{ duration: 1.2, ease: "easeOut" }}
               >
-                <Typography variant="h2" sx={{ mb: 3, color: '#D6B36A' }}>
+                <Typography
+                  variant="h2"
+                  sx={{ mb: 3, fontFamily: shopSurface.font.display, fontWeight: 500, color: shopSurface.cream }}
+                >
                   Designed to elevate modern femininity.
                 </Typography>
-                <Typography variant="body1" sx={{ color: '#8A8175', fontSize: '1.1rem', mb: 4, maxWidth: 480 }}>
+                <Typography
+                  variant="body1"
+                  sx={{
+                    fontFamily: shopSurface.font.body,
+                    color: 'rgba(242, 238, 230, 0.65)',
+                    fontSize: '1.1rem',
+                    mb: 4,
+                    maxWidth: 480,
+                  }}
+                >
                   Each piece is meticulously crafted using only the finest materials. We blend classic techniques with contemporary design to create accessories that are not just worn, but experienced.
                 </Typography>
               </motion.div>
@@ -614,17 +575,14 @@ export function HomePage() {
                 viewport={{ once: true, margin: "-100px" }}
                 transition={{ duration: 1.2, ease: "easeOut" }}
               >
-                <Box 
-                  component="img" 
-                  src="/frames/frame_0150.webp" 
-                  sx={{ 
-                    width: '100%', 
-                    height: 'auto', 
-                    boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
-                    filter: 'grayscale(20%) contrast(110%)'
-                  }} 
-                  alt="Brand aesthetics" 
-                />
+                <Box
+                  sx={{
+                    filter: 'grayscale(20%) contrast(110%)',
+                    boxShadow: '0 20px 40px rgba(0,0,0,0.35)',
+                  }}
+                >
+                  <EditorialImageFrame src="/frames/frame_0150.webp" alt="Brand aesthetics" inset />
+                </Box>
               </motion.div>
             </Grid>
           </Grid>
@@ -764,8 +722,11 @@ export function HomePage() {
             combosLoading ? (
               <Grid container spacing={4}>
                 {[1, 2, 3, 4].map((k) => (
-                  <Grid item xs={12} sm={6} md={4} lg={3} key={k}>
-                    <Skeleton variant="rectangular" height={320} sx={{ bgcolor: 'rgba(255,255,255,0.05)' }} />
+                  <Grid item xs={12} sm={6} md={4} key={k}>
+                    <Skeleton
+                      variant="rectangular"
+                      sx={{ width: '92%', mx: 'auto', aspectRatio: '4 / 5', bgcolor: 'rgba(255,255,255,0.05)' }}
+                    />
                     <Skeleton width="60%" sx={{ mt: 2, bgcolor: 'rgba(255,255,255,0.05)' }} />
                     <Skeleton width="40%" sx={{ mt: 1, bgcolor: 'rgba(255,255,255,0.05)' }} />
                   </Grid>
@@ -778,15 +739,18 @@ export function HomePage() {
             ) : (
               <Grid container spacing={4}>
                 {combos.map((c, index) => (
-                  <JewelleryComboStorefrontCard key={c.id} combo={c} index={index} />
+                  <JewelleryComboStorefrontCard key={c.id} combo={c} index={index} imageFrame="editorial" />
                 ))}
               </Grid>
             )
           ) : loading ? (
             <Grid container spacing={4}>
               {[1, 2, 3, 4].map((k) => (
-                <Grid item xs={12} sm={6} md={4} lg={3} key={k}>
-                  <Skeleton variant="rectangular" height={400} sx={{ bgcolor: 'rgba(255,255,255,0.05)' }} />
+                <Grid item xs={12} sm={6} md={4} key={k}>
+                  <Skeleton
+                    variant="rectangular"
+                    sx={{ width: '92%', mx: 'auto', aspectRatio: '4 / 5', bgcolor: 'rgba(255,255,255,0.05)' }}
+                  />
                   <Skeleton width="60%" sx={{ mt: 2, bgcolor: 'rgba(255,255,255,0.05)' }} />
                   <Skeleton width="40%" sx={{ mt: 1, bgcolor: 'rgba(255,255,255,0.05)' }} />
                 </Grid>
@@ -799,7 +763,7 @@ export function HomePage() {
           ) : (
             <Grid container spacing={4}>
               {products.map((p, index) => (
-                <Grid item xs={12} sm={6} md={4} lg={3} key={p.id}>
+                <Grid item xs={12} sm={6} md={4} key={p.id}>
                   <motion.div
                     initial={{ opacity: 0, y: 50 }}
                     whileInView={{ opacity: 1, y: 0 }}
@@ -813,7 +777,7 @@ export function HomePage() {
                         boxShadow: '0 15px 30px rgba(214, 179, 106, 0.1)'
                       }
                     }}>
-                      <ProductCard product={p} />
+                      <ProductCard product={p} imageFrame="editorial" />
                     </Box>
                   </motion.div>
                 </Grid>
@@ -828,8 +792,15 @@ export function HomePage() {
         <Container maxWidth="lg">
           <Grid container spacing={4} justifyContent="space-between">
             <Grid item xs={12} md={4}>
-              <Typography variant="h5" sx={{ color: '#D6B36A', mb: 2 }}>
-                PADUCHUANDHAM
+              <Typography
+                sx={{
+                  ...shopSurface.logo,
+                  fontSize: { xs: '0.75rem', md: '0.85rem' },
+                  color: shopSurface.cream,
+                  mb: 2,
+                }}
+              >
+                Paduchuandham
               </Typography>
               <Typography variant="body2" sx={{ color: '#8A8175' }}>
                 Crafting timeless elegance for the modern woman. Discover our exclusive collection of luxury accessories.

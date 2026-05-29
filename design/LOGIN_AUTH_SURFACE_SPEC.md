@@ -81,9 +81,11 @@ Implementation lives in `client/src/pages/LoginPage.tsx` with tokens in `client/
 
 ## Wiring video
 
-- **Source file:** `client/src/assets/auth-ambient.mp4` (imported as `import ambientVideoUrl from '../assets/auth-ambient.mp4?url'`). Vite emits a hashed file in `dist/assets/` so the URL is always correct in dev and production (no reliance on `/auth-ambient.mp4` in `public/`).
-- **`Box[data-auth-ambient]`** wraps the clip (`object-fit: cover`, `muted`, `playsInline`). **`prefers-reduced-motion: reduce`**: no autoplay / no loop, video stays mounted for a still frame.
-- **No full-page scrim** — the video sits directly behind nearly **transparent** glass panels (`backdrop-filter` + ~2% white tint). Typography uses light **text-shadow** so copy stays readable over motion.
+- **Source file:** `client/src/assets/auth-ambient.mp4` (cinematic jewelry ambient; imported as `?url`).
+- **Loop:** plays `0 … (duration − 2s)` on the auth form, then seeks back to `0`.
+- **Outro:** after successful sign-in, plays the **last 2s** once, then navigates away.
+- **Scrim:** burgundy vignette (`scrim` + `scrimOverVideo`) over the clip; glass panels stay frosted ivory for contrast.
+- **`prefers-reduced-motion: reduce`**: no autoplay / loop; navigates without outro.
 
 ## Acceptance tests
 
