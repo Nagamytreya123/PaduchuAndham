@@ -9,7 +9,6 @@ import ListItem from '@mui/material/ListItem';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemText from '@mui/material/ListItemText';
 import Box from '@mui/material/Box';
-import Container from '@mui/material/Container';
 import Tooltip from '@mui/material/Tooltip';
 import { alpha } from '@mui/material/styles';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -31,6 +30,7 @@ import { useReducedMotion } from '../hooks/useReducedMotion';
 import { adminRouteMotion } from '../motion/adminMotion';
 import { PREMIUM_EASE } from '../motion/variants';
 import { AdminAmbientBackground } from '../components/admin/premium/AdminAmbientBackground';
+import { ADMIN_CONTENT_PX, ADMIN_MOBILE_APPBAR_PX } from '../constants/adminLayout';
 
 const DRAWER_EXPANDED = 276;
 const DRAWER_COLLAPSED = 88;
@@ -221,7 +221,17 @@ export function AdminShell() {
   );
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
+    <Box
+      sx={{
+        display: 'flex',
+        height: '100dvh',
+        maxHeight: '100dvh',
+        width: '100%',
+        maxWidth: '100%',
+        overflow: 'hidden',
+        bgcolor: 'background.default',
+      }}
+    >
       {!isMdUp && (
         <AppBar
           position="fixed"
@@ -235,7 +245,7 @@ export function AdminShell() {
             backdropFilter: reduced ? 'none' : 'blur(18px)',
           }}
         >
-          <Toolbar sx={{ minHeight: { xs: 56 } }}>
+          <Toolbar sx={{ minHeight: { xs: 56 }, px: ADMIN_CONTENT_PX }}>
             <IconButton
               edge="start"
               onClick={() => setMobileOpen(true)}
@@ -258,9 +268,13 @@ export function AdminShell() {
         ModalProps={{ keepMounted: true }}
         transitionDuration={reduced ? 0 : { enter: 280, exit: 220 }}
         sx={{
-          width: drawerWidth,
-          flexShrink: 0,
-          transition: theme.transitions.create('width', {
+          /* Mobile: drawer is overlay-only — flex slot must be 0px wide */
+          flex: { xs: '0 0 0px', md: `0 0 ${drawerWidth}px` },
+          width: { xs: 0, md: drawerWidth },
+          minWidth: { xs: 0, md: drawerWidth },
+          maxWidth: { xs: 0, md: drawerWidth },
+          overflow: { xs: 'hidden', md: 'visible' },
+          transition: theme.transitions.create(['width', 'flex-basis'], {
             duration: reduced ? 0 : 360,
             easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
           }),
@@ -275,6 +289,17 @@ export function AdminShell() {
               easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
             }),
             overflowX: 'hidden',
+            overflowY: 'auto',
+            /* Desktop: fixed sidebar; flex slot above reserves width for main */
+            ...(isMdUp
+              ? {
+                  position: 'fixed',
+                  top: 0,
+                  left: 0,
+                  height: '100%',
+                  maxHeight: '100dvh',
+                }
+              : {}),
           },
         }}
       >
@@ -321,25 +346,46 @@ export function AdminShell() {
       <Box
         component="main"
         sx={{
-          flexGrow: 1,
-          width: { xs: '100%', md: `calc(100% - ${drawerWidth}px)` },
-          transition: theme.transitions.create('width', {
-            duration: reduced ? 0 : 360,
-            easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
-          }),
+          flex: '1 1 0%',
+          minWidth: 0,
+          minHeight: 0,
+          height: '100%',
+          maxWidth: '100%',
+          overflowX: 'clip',
+          overflowY: 'auto',
+          WebkitOverflowScrolling: 'touch',
           position: 'relative',
           bgcolor: 'background.default',
+          boxSizing: 'border-box',
+          pt: {
+            xs: `calc(${ADMIN_MOBILE_APPBAR_PX}px + ${theme.spacing(2.5)})`,
+            md: 3.5,
+          },
+          pb: { xs: 2.5, sm: 3.5 },
         }}
       >
         <AdminAmbientBackground />
-        {!isMdUp && <Toolbar />}
-        <Container maxWidth="xl" sx={{ py: { xs: 2.5, sm: 3.5 }, px: { xs: 2, sm: 3 }, position: 'relative', zIndex: 1 }}>
+        <Box
+          sx={{
+            position: 'relative',
+            zIndex: 1,
+            boxSizing: 'border-box',
+            width: '100%',
+            maxWidth: theme.breakpoints.values.xl,
+            mx: 'auto',
+            px: ADMIN_CONTENT_PX,
+          }}
+        >
           <AnimatePresence mode="sync">
-            <motion.div key={location.pathname} {...routeMotion} style={{ width: '100%' }}>
+            <motion.div
+              key={location.pathname}
+              {...routeMotion}
+              style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}
+            >
               <Outlet />
             </motion.div>
           </AnimatePresence>
-        </Container>
+        </Box>
       </Box>
     </Box>
   );

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Typography from '@mui/material/Typography';
 import Stack from '@mui/material/Stack';
-import Grid from '@mui/material/Grid';
+import Box from '@mui/material/Box';
 import Rating from '@mui/material/Rating';
 import Button from '@mui/material/Button';
 import TextField from '@mui/material/TextField';
@@ -22,6 +22,7 @@ import {
   PageTransitionWrapper,
 } from '../../components/admin/premium';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
+import { adminMetricsGridSx } from '../../constants/adminLayout';
 import { staggerContainer, staggerItem } from '../../motion/variants';
 
 const PAGE = 25;
@@ -134,7 +135,7 @@ export function AdminReviewsPage() {
 
   return (
     <PageTransitionWrapper>
-      <Stack spacing={3}>
+      <Stack spacing={3} sx={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
         <AdminPageHeader
           title="Reviews & ratings"
           description="Monitor customer feedback, star distribution, and jump to products or filter by product id."
@@ -150,18 +151,17 @@ export function AdminReviewsPage() {
           <AdminLoadingPlaceholder variant="reviews" />
         ) : summary ? (
           <>
-            <Grid
-              container
-              spacing={2.5}
+            <Box
               component={motion.div}
               variants={staggerContainer(0.08)}
               initial={reduced ? false : 'hidden'}
               animate="show"
+              sx={adminMetricsGridSx}
             >
-              <Grid item xs={12} sm={4} component={motion.div} variants={staggerItem}>
+              <Box component={motion.div} variants={staggerItem} sx={{ minWidth: 0 }}>
                 <MetricCard label="Total reviews" value={summary.total} emphasize />
-              </Grid>
-              <Grid item xs={12} sm={4} component={motion.div} variants={staggerItem}>
+              </Box>
+              <Box component={motion.div} variants={staggerItem} sx={{ minWidth: 0 }}>
                 <DashboardCard float sx={{ p: 2.5, height: '100%' }}>
                   <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600 }}>
                     Average rating
@@ -173,8 +173,8 @@ export function AdminReviewsPage() {
                     </Typography>
                   </Stack>
                 </DashboardCard>
-              </Grid>
-              <Grid item xs={12} sm={4} component={motion.div} variants={staggerItem}>
+              </Box>
+              <Box component={motion.div} variants={staggerItem} sx={{ minWidth: 0 }}>
                 <DashboardCard float sx={{ p: 2.5, height: '100%' }}>
                   <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600 }} gutterBottom>
                     Star distribution
@@ -207,8 +207,8 @@ export function AdminReviewsPage() {
                     })}
                   </Stack>
                 </DashboardCard>
-              </Grid>
-            </Grid>
+              </Box>
+            </Box>
 
             <FloatingPanel>
               <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'center' }}>

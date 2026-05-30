@@ -1,6 +1,6 @@
 import Box from '@mui/material/Box';
-import Grid from '@mui/material/Grid';
 import Paper from '@mui/material/Paper';
+import { adminCardGridSx, adminMetricsGridSx } from '../../constants/adminLayout';
 import Skeleton from '@mui/material/Skeleton';
 import Stack from '@mui/material/Stack';
 import { motion } from 'framer-motion';
@@ -25,16 +25,14 @@ export function AdminLoadingPlaceholder({ variant }: Props) {
         return (
           <Stack spacing={2}>
             <Skeleton variant="text" width={160} height={36} sx={{ bgcolor: 'action.hover' }} />
-            <Grid container spacing={2}>
+            <Box sx={adminMetricsGridSx}>
               {[0, 1, 2].map((i) => (
-                <Grid item xs={12} sm={4} key={i}>
-                  <Paper sx={{ p: 2, border: 1, borderColor: 'divider' }}>
-                    <Skeleton width="40%" height={20} sx={{ bgcolor: 'action.hover' }} />
-                    <Skeleton width="55%" height={40} sx={{ mt: 1, bgcolor: 'action.hover' }} />
-                  </Paper>
-                </Grid>
+                <Paper key={i} sx={{ p: 2, border: 1, borderColor: 'divider', minWidth: 0 }}>
+                  <Skeleton width="40%" height={20} sx={{ bgcolor: 'action.hover' }} />
+                  <Skeleton width="55%" height={40} sx={{ mt: 1, bgcolor: 'action.hover' }} />
+                </Paper>
               ))}
-            </Grid>
+            </Box>
           </Stack>
         );
       case 'grid':
@@ -45,19 +43,17 @@ export function AdminLoadingPlaceholder({ variant }: Props) {
               <Skeleton variant="rectangular" width={120} height={36} sx={{ bgcolor: 'action.hover' }} />
             </Stack>
             <Skeleton variant="text" width="100%" height={20} sx={{ maxWidth: 520, bgcolor: 'action.hover' }} />
-            <Grid container spacing={2}>
+            <Box sx={adminCardGridSx}>
               {[0, 1, 2, 3, 4, 5].map((i) => (
-                <Grid item xs={12} sm={6} md={4} key={i}>
-                  <Paper sx={{ overflow: 'hidden', border: 1, borderColor: 'divider' }}>
-                    <Skeleton variant="rectangular" height={160} sx={{ bgcolor: 'action.hover' }} />
-                    <Box sx={{ p: 2 }}>
-                      <Skeleton width="70%" height={24} sx={{ bgcolor: 'action.hover' }} />
-                      <Skeleton width="40%" height={20} sx={{ mt: 1, bgcolor: 'action.hover' }} />
-                    </Box>
-                  </Paper>
-                </Grid>
+                <Paper key={i} sx={{ overflow: 'hidden', border: 1, borderColor: 'divider', minWidth: 0 }}>
+                  <Skeleton variant="rectangular" height={160} sx={{ bgcolor: 'action.hover' }} />
+                  <Box sx={{ p: 2 }}>
+                    <Skeleton width="70%" height={24} sx={{ bgcolor: 'action.hover' }} />
+                    <Skeleton width="40%" height={20} sx={{ mt: 1, bgcolor: 'action.hover' }} />
+                  </Box>
+                </Paper>
               ))}
-            </Grid>
+            </Box>
           </Stack>
         );
       case 'reviews':
@@ -67,16 +63,14 @@ export function AdminLoadingPlaceholder({ variant }: Props) {
               <Skeleton variant="text" width={280} height={32} sx={{ bgcolor: 'action.hover' }} />
               <Skeleton variant="text" width="90%" height={20} sx={{ maxWidth: 480, bgcolor: 'action.hover' }} />
             </Stack>
-            <Grid container spacing={2}>
+            <Box sx={adminMetricsGridSx}>
               {[0, 1, 2].map((i) => (
-                <Grid item xs={12} sm={4} key={i}>
-                  <Paper sx={{ p: 2, height: 140, border: 1, borderColor: 'divider' }}>
-                    <Skeleton width="50%" height={18} sx={{ bgcolor: 'action.hover' }} />
-                    <Skeleton width="35%" height={36} sx={{ mt: 2, bgcolor: 'action.hover' }} />
-                  </Paper>
-                </Grid>
+                <Paper key={i} sx={{ p: 2, height: 140, border: 1, borderColor: 'divider', minWidth: 0 }}>
+                  <Skeleton width="50%" height={18} sx={{ bgcolor: 'action.hover' }} />
+                  <Skeleton width="35%" height={36} sx={{ mt: 2, bgcolor: 'action.hover' }} />
+                </Paper>
               ))}
-            </Grid>
+            </Box>
             <Paper sx={{ p: 2, border: 1, borderColor: 'divider' }}>
               <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
                 <Skeleton variant="rectangular" height={40} sx={{ flex: 1, maxWidth: 400, bgcolor: 'action.hover' }} />

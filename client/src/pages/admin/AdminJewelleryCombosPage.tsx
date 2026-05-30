@@ -4,7 +4,6 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Button from '@mui/material/Button';
 import Alert from '@mui/material/Alert';
-import Grid from '@mui/material/Grid';
 import CardMedia from '@mui/material/CardMedia';
 import CardContent from '@mui/material/CardContent';
 import Box from '@mui/material/Box';
@@ -31,6 +30,7 @@ import {
 } from '../../components/admin/premium';
 import { motion } from 'framer-motion';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
+import { adminCardGridSx } from '../../constants/adminLayout';
 
 const OBJECT_ID_RE = /^[a-fA-F0-9]{24}$/;
 
@@ -220,7 +220,7 @@ export function AdminJewelleryCombosPage() {
 
   return (
     <PageTransitionWrapper>
-    <Stack spacing={2.5}>
+    <Stack spacing={2.5} sx={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
       <AdminPageHeader
         title="Jewellery combos"
         description="Combos are separate from individual products. Each has its own name and image, and links two or more jewellery SKUs at one set price. They are not part of the jewellery product form or jewellery subtype filters."
@@ -237,12 +237,13 @@ export function AdminJewelleryCombosPage() {
         </Alert>
       )}
 
-      <Grid container spacing={2}>
+      <Box sx={adminCardGridSx}>
         {combos.map((c) => {
           const thumb = c.images[0];
           return (
-            <Grid item xs={12} sm={6} md={4} key={c.id}>
               <motion.div
+                key={c.id}
+                style={{ minWidth: 0 }}
                 initial={reduced ? false : { opacity: 0, y: 16, filter: 'blur(6px)' }}
                 whileInView={reduced ? undefined : { opacity: 1, y: 0, filter: 'blur(0px)' }}
                 viewport={{ once: true, margin: '-10%' }}
@@ -285,10 +286,9 @@ export function AdminJewelleryCombosPage() {
                   </CardContent>
                 </DashboardCard>
               </motion.div>
-            </Grid>
           );
         })}
-      </Grid>
+      </Box>
 
       {combos.length === 0 && (
         <DashboardCard sx={{ p: 3 }}>

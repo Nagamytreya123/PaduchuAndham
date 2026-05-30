@@ -1,8 +1,9 @@
 import type { ReactElement } from 'react';
-import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { CircularProgress, Box } from '@mui/material';
 import { useAuth } from './context/AuthContext';
 import { CustomerShell } from './layouts/CustomerShell';
+import { AccountLayout } from './layouts/AccountLayout';
 import { AdminShell } from './layouts/AdminShell';
 import { HomePage } from './pages/HomePage';
 import { ShopPage } from './pages/ShopPage';
@@ -26,8 +27,8 @@ function ProtectedCustomer({ children }: { children: ReactElement }) {
   const location = useLocation();
   if (loading) {
     return (
-      <Box display="flex" justifyContent="center" py={8}>
-        <CircularProgress />
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="40vh">
+        <CircularProgress color="inherit" />
       </Box>
     );
   }
@@ -75,7 +76,7 @@ export function App() {
           path="account"
           element={
             <ProtectedCustomer>
-              <Outlet />
+              <AccountLayout />
             </ProtectedCustomer>
           }
         >

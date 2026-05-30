@@ -9,7 +9,6 @@ import IconButton from '@mui/material/IconButton';
 import Chip from '@mui/material/Chip';
 import Avatar from '@mui/material/Avatar';
 import MenuItem from '@mui/material/MenuItem';
-import Grid from '@mui/material/Grid';
 import Card from '@mui/material/Card';
 import CardMedia from '@mui/material/CardMedia';
 import CardContent from '@mui/material/CardContent';
@@ -28,6 +27,8 @@ import type { AdminProductRow, AdminSalesSummary } from '../../types/product';
 import { formatInrFromPaise } from '../../utils/format';
 import { AdminLoadingPlaceholder } from '../../components/admin/AdminLoadingPlaceholder';
 import { AdminPageHeader, DashboardCard, MotionButton, PageTransitionWrapper, PremiumModal } from '../../components/admin/premium';
+import { AdminMultiImageUpload, appendFilesToFormData } from '../../components/admin/AdminMultiImageUpload';
+import { adminCatalogGridSx } from '../../constants/adminLayout';
 import {
   COLLECTION_CATEGORY_FILTERS,
   filterKeyToApiCategory,
@@ -56,6 +57,24 @@ async function postMultipart(url: string, fd: FormData): Promise<{ ok?: boolean;
     throw new Error(msg || `HTTP ${res.status}`);
   }
   return data as { ok?: boolean };
+}
+
+async function patchMultipart(url: string, fd: FormData): Promise<void> {
+  const res = await fetch(url, { method: 'PATCH', body: fd, credentials: 'include' });
+  const text = await res.text();
+  let data: unknown = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+  if (!res.ok) {
+    const msg =
+      typeof data === 'object' && data !== null && 'error' in data
+        ? String((data as { error: unknown }).error)
+        : res.statusText;
+    throw new Error(msg || `HTTP ${res.status}`);
+  }
 }
 
 async function patchJson(url: string, body: Record<string, unknown>): Promise<void> {
@@ -258,10 +277,12 @@ function AdminProductCatalogCard({
       elevation={2}
       sx={{
         height: '100%',
+        maxWidth: '100%',
         display: 'flex',
         flexDirection: 'column',
         opacity: inactive ? 0.85 : 1,
         border: (t) => (inactive ? `1px dashed ${t.palette.divider}` : undefined),
+        boxSizing: 'border-box',
       }}
     >
       <Box sx={{ position: 'relative' }}>
@@ -392,7 +413,7 @@ export function AdminProductsPage() {
   const [compareAtRupee, setCompareAtRupee] = useState('');
   const [stock, setStock] = useState('');
   const [imageUrls, setImageUrls] = useState('');
-  const [file, setFile] = useState<File | null>(null);
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
 
   const [editOpen, setEditOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -426,6 +447,7 @@ export function AdminProductsPage() {
   const [editStock, setEditStock] = useState('');
   const [editImageUrls, setEditImageUrls] = useState('');
   const [editIsActive, setEditIsActive] = useState(true);
+  const [editImageFiles, setEditImageFiles] = useState<File[]>([]);
 
   async function reload() {
     const res = await fetch('/api/admin/products', { credentials: 'include' });
@@ -574,6 +596,7 @@ export function AdminProductsPage() {
     setEditCompareAtRupee(p.compareAtPrice != null ? (p.compareAtPrice / 100).toFixed(2) : '');
     setEditStock(String(p.stock));
     setEditImageUrls(p.images.join(', '));
+    setEditImageFiles([]);
     setEditIsActive(p.isActive !== false);
     setEditOpen(true);
   }
@@ -685,9 +708,17 @@ export function AdminProductsPage() {
       }
       if (slugTrim.length > 0) payload.slug = slugTrim;
 
-      await patchJson(`/api/admin/products/${editId}`, payload);
+      if (editImageFiles.length > 0) {
+        const fd = new FormData();
+        fd.append('data', JSON.stringify(payload));
+        appendFilesToFormData(fd, editImageFiles);
+        await patchMultipart(`/api/admin/products/${editId}`, fd);
+      } else {
+        await patchJson(`/api/admin/products/${editId}`, payload);
+      }
       setEditOpen(false);
       setEditId(null);
+      setEditImageFiles([]);
       await reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed');
@@ -811,7 +842,7 @@ export function AdminProductsPage() {
 
       const fd = new FormData();
       fd.append('data', JSON.stringify(payload));
-      if (file) fd.append('image', file);
+      appendFilesToFormData(fd, imageFiles);
 
       await postMultipart('/api/admin/products', fd);
       setName('');
@@ -842,7 +873,7 @@ export function AdminProductsPage() {
       setCompareAtRupee('');
       setStock('');
       setImageUrls('');
-      setFile(null);
+      setImageFiles([]);
       await reload();
       setAddDialogOpen(false);
     } catch (e) {
@@ -897,7 +928,7 @@ export function AdminProductsPage() {
 
   return (
     <PageTransitionWrapper>
-    <Stack spacing={2.5}>
+    <Stack spacing={2.5} sx={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
       <AdminPageHeader
         title="Products"
         description="Same layout customers see, plus units sold and stock controls. Sales totals include orders that are paid, processing, shipped, or delivered."
@@ -980,19 +1011,18 @@ export function AdminProductsPage() {
         Catalog ({filteredCatalog.length}
         {catalogFilterKey !== 'all' ? ` of ${products.length}` : ''})
       </Typography>
-      <Grid container spacing={2}>
+      <Box sx={adminCatalogGridSx}>
         {filteredCatalog.map((p) => (
-          <Grid item xs={12} sm={6} md={4} lg={3} key={p.id}>
-            <AdminProductCatalogCard
-              product={p}
-              onDelete={deleteProduct}
-              onAdjustStock={(id, n) => void adjustStock(id, n)}
-              onEdit={openEdit}
-              stockSaving={stockSavingId === p.id}
-            />
-          </Grid>
+          <AdminProductCatalogCard
+            key={p.id}
+            product={p}
+            onDelete={deleteProduct}
+            onAdjustStock={(id, n) => void adjustStock(id, n)}
+            onEdit={openEdit}
+            stockSaving={stockSavingId === p.id}
+          />
         ))}
-      </Grid>
+      </Box>
       {filteredCatalog.length === 0 && (
         <Typography color="text.secondary">
           {products.length === 0 ? 'No products yet — use Add product above.' : 'No products in this category.'}
@@ -1234,12 +1264,13 @@ export function AdminProductsPage() {
                 value={imageUrls}
                 onChange={(e) => setImageUrls(e.target.value)}
                 fullWidth
+                helperText="External image links, separated by commas"
               />
-              <Button variant="outlined" component="label">
-                Upload image file
-                <input type="file" hidden accept="image/*" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-              </Button>
-              {file && <Typography variant="caption">Selected: {file.name}</Typography>}
+              <AdminMultiImageUpload
+                files={imageFiles}
+                onChange={setImageFiles}
+                disabled={addSaving}
+              />
             </Stack>
         </DialogContent>
         <DialogActions sx={{ px: 3, py: 2 }}>
@@ -1426,6 +1457,14 @@ export function AdminProductsPage() {
               value={editImageUrls}
               onChange={(e) => setEditImageUrls(e.target.value)}
               fullWidth
+              helperText="Replaces saved URL images; uploads below are added after these"
+            />
+            <AdminMultiImageUpload
+              files={editImageFiles}
+              onChange={setEditImageFiles}
+              disabled={editSaving}
+              label="Upload additional image files"
+              helperText="New uploads are appended to the images above (max 15 total)"
             />
           </Stack>
         </DialogContent>

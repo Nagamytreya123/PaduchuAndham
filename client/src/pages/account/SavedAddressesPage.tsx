@@ -19,6 +19,7 @@ import { apiFetch } from '../../api/client';
 import { ShippingAddressFields } from '../../components/ShippingAddressFields';
 import type { SavedAddressRow, ShippingAddressForm } from '../../types/address';
 import { emptyShippingForm } from '../../types/address';
+import { shopSurface } from '../../constants/shopSurface';
 
 const MAX_ADDRESSES = 10;
 
@@ -163,7 +164,7 @@ export function SavedAddressesPage() {
 
   if (loading) {
     return (
-      <Stack spacing={2} maxWidth={520} sx={{ mx: 'auto' }}>
+      <Stack spacing={2} sx={{ width: '100%' }}>
         <Skeleton height={40} width={200} />
         <Skeleton variant="rounded" height={120} />
         <Skeleton variant="rounded" height={120} />
@@ -172,19 +173,31 @@ export function SavedAddressesPage() {
   }
 
   return (
-    <Stack spacing={2} maxWidth={520} sx={{ mx: 'auto', width: '100%', pb: 2 }}>
-      <Button component={RouterLink} to="/account" variant="text" size="small" sx={{ alignSelf: 'flex-start', fontWeight: 600 }}>
+    <Stack spacing={2} sx={{ width: '100%', pb: 2 }}>
+      <Button
+        component={RouterLink}
+        to="/account"
+        variant="text"
+        size="small"
+        sx={{ alignSelf: 'flex-start', fontWeight: 600, color: shopSurface.inkMuted }}
+      >
         ← Account
       </Button>
       <Stack direction="row" justifyContent="space-between" alignItems="flex-start" gap={2}>
-        <Typography variant="h5" fontWeight={800} letterSpacing={-0.5}>
+        <Typography component="h1" sx={shopSurface.pageTitle}>
           Saved addresses
         </Typography>
-        <Button variant="contained" size="small" disabled={rows.length >= MAX_ADDRESSES} onClick={openAdd}>
+        <Button
+          variant="contained"
+          size="small"
+          disabled={rows.length >= MAX_ADDRESSES}
+          onClick={openAdd}
+          sx={{ ...shopSurface.cta, py: 0.75, px: 2 }}
+        >
           Add
         </Button>
       </Stack>
-      <Typography variant="body2" color="text.secondary">
+      <Typography variant="body2" sx={{ color: shopSurface.inkMuted }}>
         Choose a default for checkout. You can save up to {MAX_ADDRESSES} addresses.
       </Typography>
 
@@ -195,8 +208,8 @@ export function SavedAddressesPage() {
       )}
 
       {rows.length === 0 ? (
-        <Paper variant="outlined" sx={{ p: 3, borderRadius: 2 }}>
-          <Typography color="text.secondary" gutterBottom>
+        <Paper elevation={0} sx={{ ...shopSurface.card, p: 3 }}>
+          <Typography sx={{ color: shopSurface.inkMuted }} gutterBottom>
             No saved addresses yet.
           </Typography>
           <Button variant="outlined" onClick={openAdd}>
@@ -209,16 +222,7 @@ export function SavedAddressesPage() {
             const displayName = row.recipientName?.trim() || row.label;
             const mobile = row.recipientMobile?.trim();
             return (
-              <Paper
-                key={row.id}
-                variant="outlined"
-                sx={{
-                  p: 2,
-                  borderRadius: 2,
-                  borderColor: 'divider',
-                  bgcolor: 'background.paper',
-                }}
-              >
+              <Paper key={row.id} elevation={0} sx={shopSurface.card}>
                 <Stack direction="row" spacing={1.5} alignItems="flex-start">
                   <Box sx={{ pt: 0.25, flexShrink: 0 }}>
                     <LocationPinIcon />

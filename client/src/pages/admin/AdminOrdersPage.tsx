@@ -105,7 +105,7 @@ export function AdminOrdersPage() {
 
   return (
     <PageTransitionWrapper>
-      <Stack spacing={2.5}>
+      <Stack spacing={2.5} sx={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
         <AdminPageHeader
           title="Orders"
           description="Track payment and fulfilment states. Updates persist through the admin orders API."

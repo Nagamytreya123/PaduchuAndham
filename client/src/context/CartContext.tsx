@@ -211,7 +211,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
         return [...prev, { ...line, qty }];
       }
       const copy = [...prev];
-      copy[idx] = { ...copy[idx], qty: copy[idx]!.qty + qty };
+      copy[idx] = {
+        ...copy[idx],
+        qty: copy[idx]!.qty + qty,
+        image: line.image ?? copy[idx]!.image,
+        name: line.name || copy[idx]!.name,
+      };
       return copy;
     });
   }, []);

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import Grid from '@mui/material/Grid';
+import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
@@ -9,6 +9,7 @@ import { apiFetch } from '../../api/client';
 import { AdminLoadingPlaceholder } from '../../components/admin/AdminLoadingPlaceholder';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { AdminPageHeader, DashboardCard, MetricCard, PageTransitionWrapper } from '../../components/admin/premium';
+import { adminMetricsGridSx } from '../../constants/adminLayout';
 import { staggerContainer, staggerItem } from '../../motion/variants';
 
 export function DashboardPage() {
@@ -49,32 +50,31 @@ export function DashboardPage() {
 
   return (
     <PageTransitionWrapper>
-      <Stack spacing={3}>
+      <Stack spacing={3} sx={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
         <AdminPageHeader
           title="Overview"
           description="At-a-glance metrics across your catalogue, fulfilment pipeline, and customer sentiment. Figures refresh from the same APIs used across admin tools."
         />
 
-        <Grid
-          container
-          spacing={2.5}
+        <Box
           component={motion.div}
           variants={staggerContainer(0.09)}
           initial={reduced ? false : 'hidden'}
           animate="show"
+          sx={adminMetricsGridSx}
         >
-          <Grid item xs={12} sm={4} component={motion.div} variants={staggerItem}>
+          <Box component={motion.div} variants={staggerItem} sx={{ minWidth: 0 }}>
             <MetricCard label="Products" value={counts.products} emphasize to="/admin/products" />
-          </Grid>
-          <Grid item xs={12} sm={4} component={motion.div} variants={staggerItem}>
+          </Box>
+          <Box component={motion.div} variants={staggerItem} sx={{ minWidth: 0 }}>
             <MetricCard
               label="Orders"
               value={counts.orders}
               footnote="Recent fetch from admin orders"
               to="/admin/orders"
             />
-          </Grid>
-          <Grid item xs={12} sm={4} component={motion.div} variants={staggerItem}>
+          </Box>
+          <Box component={motion.div} variants={staggerItem} sx={{ minWidth: 0 }}>
             <DashboardCard float sx={{ p: 2.5, height: '100%', display: 'flex', flexDirection: 'column', gap: 1.25 }}>
               <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600 }}>
                 Reviews
@@ -103,8 +103,8 @@ export function DashboardPage() {
                 View all
               </Button>
             </DashboardCard>
-          </Grid>
-        </Grid>
+          </Box>
+        </Box>
       </Stack>
     </PageTransitionWrapper>
   );

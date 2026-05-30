@@ -8,6 +8,7 @@ import Alert from '@mui/material/Alert';
 import CircularProgress from '@mui/material/CircularProgress';
 import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
+import Paper from '@mui/material/Paper';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import { useCart } from '../context/CartContext';
@@ -15,6 +16,8 @@ import { useAuth } from '../context/AuthContext';
 import { formatInrFromPaise } from '../utils/format';
 import { ShippingAddressFields } from '../components/ShippingAddressFields';
 import { emptyShippingForm, type SavedAddressRow, type ShippingAddressForm } from '../types/address';
+import { StorefrontPageShell } from '../components/StorefrontPageShell';
+import { shopSurface } from '../constants/shopSurface';
 
 function loadRazorpay(): Promise<boolean> {
   return new Promise((resolve) => {
@@ -30,6 +33,18 @@ function loadRazorpay(): Promise<boolean> {
     document.body.appendChild(s);
   });
 }
+
+const fieldSx = {
+  '& .MuiInputLabel-root': { color: shopSurface.inkMuted },
+  '& .MuiOutlinedInput-root': {
+    color: shopSurface.ink,
+    bgcolor: 'rgba(255,255,255,0.85)',
+    '& fieldset': { borderColor: 'rgba(5, 11, 24, 0.15)' },
+    '&:hover fieldset': { borderColor: 'rgba(5, 11, 24, 0.28)' },
+    '&.Mui-focused fieldset': { borderColor: shopSurface.ink },
+  },
+  '& .MuiFormHelperText-root': { color: shopSurface.inkMuted },
+};
 
 export function CheckoutPage() {
   const { user } = useAuth();
@@ -64,12 +79,10 @@ export function CheckoutPage() {
             postalCode: def.postalCode,
             country: def.country || 'IN',
           });
-          if (def.recipientMobile?.trim()) {
-            setPhone(def.recipientMobile.trim());
-          }
+          if (def.recipientMobile?.trim()) setPhone(def.recipientMobile.trim());
         }
       } catch {
-        /* ignore — checkout still works with a typed address */
+        /* optional */
       }
     })();
     return () => {
@@ -150,7 +163,6 @@ export function CheckoutPage() {
         order_id: orderRes.razorpayOrderId,
         name: 'Paduchu Shop',
         description: 'Order payment',
-        /** Let Razorpay render default method tabs; dashboard toggles what appears (UPI works in test mode when enabled there). */
         method: {
           card: true,
           upi: true,
@@ -166,7 +178,7 @@ export function CheckoutPage() {
         notes: {
           orderRef: orderRes.orderId.slice(-8),
         },
-        theme: { color: '#000000' },
+        theme: { color: '#050B18' },
         handler: async (response: {
           razorpay_order_id: string;
           razorpay_payment_id: string;
@@ -205,114 +217,137 @@ export function CheckoutPage() {
 
   if (lines.length === 0) {
     return (
-      <Stack spacing={2}>
-        <Typography variant="h6">Nothing to checkout</Typography>
-        <Button variant="contained" onClick={() => navigate('/cart')}>
+      <StorefrontPageShell maxWidth={520}>
+        <Typography component="h1" sx={{ ...shopSurface.pageTitle, mb: 2 }}>
+          Checkout
+        </Typography>
+        <Typography sx={{ color: shopSurface.inkMuted, mb: 3 }}>Nothing to checkout.</Typography>
+        <Button variant="contained" onClick={() => navigate('/cart')} sx={shopSurface.cta}>
           Go to cart
         </Button>
-      </Stack>
+      </StorefrontPageShell>
     );
   }
 
   return (
-    <Stack spacing={2} component="form" onSubmit={(e) => e.preventDefault()} maxWidth={520} mx="auto">
-      <Typography variant="h5" fontWeight={700}>
-        Checkout
-      </Typography>
-      <Typography variant="body2" color="text.secondary">
-        Total {formatInrFromPaise(totalPaise)}
-      </Typography>
-
-      <Box>
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-          Accepted on checkout
+    <StorefrontPageShell maxWidth={520}>
+      <Stack spacing={2.5} component="form" onSubmit={(e) => e.preventDefault()}>
+        <Typography component="h1" sx={shopSurface.pageTitle}>
+          Checkout
         </Typography>
-        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-          <Chip size="small" variant="outlined" label="UPI" />
-          <Chip size="small" variant="outlined" label="Cards" />
-          <Chip size="small" variant="outlined" label="EMI" />
-          <Chip size="small" variant="outlined" label="Wallets" />
-          <Chip size="small" variant="outlined" label="Net banking" />
-          <Chip size="small" variant="outlined" label="Pay later" />
-        </Stack>
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-          You will complete payment securely in Razorpay. Exact methods depend on your Razorpay dashboard (same range as typical fashion apps).
-        </Typography>
-      </Box>
 
-      {error && (
-        <Alert severity="error" onClose={() => setError(null)}>
-          {error}
-        </Alert>
-      )}
+        <Paper elevation={0} sx={shopSurface.insetPanel}>
+          <Typography sx={{ fontFamily: shopSurface.font.display, fontSize: '1.15rem', fontWeight: 600 }}>
+            {formatInrFromPaise(totalPaise)}
+          </Typography>
+          <Typography variant="body2" sx={{ color: shopSurface.inkMuted, mt: 0.5 }}>
+            Order total · {lines.length} line(s) in your bag
+          </Typography>
+        </Paper>
 
-      <TextField
-        label="Mobile (for UPI / SMS)"
-        fullWidth
-        placeholder="10-digit mobile"
-        value={phone}
-        onChange={(e) => setPhone(e.target.value)}
-        inputProps={{ inputMode: 'numeric', maxLength: 15 }}
-        helperText="Optional; pre-fills Razorpay for faster UPI and card flows"
-      />
+        <Box>
+          <Typography
+            sx={{
+              fontSize: '0.6875rem',
+              fontWeight: 600,
+              letterSpacing: '0.14em',
+              textTransform: 'uppercase',
+              color: shopSurface.inkMuted,
+              mb: 1,
+            }}
+          >
+            Payment methods
+          </Typography>
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+            <Chip size="small" variant="outlined" label="UPI" sx={{ borderColor: 'rgba(5,11,24,0.2)', color: shopSurface.ink }} />
+            <Chip size="small" variant="outlined" label="Cards" sx={{ borderColor: 'rgba(5,11,24,0.2)', color: shopSurface.ink }} />
+            <Chip size="small" variant="outlined" label="EMI" sx={{ borderColor: 'rgba(5,11,24,0.2)', color: shopSurface.ink }} />
+            <Chip size="small" variant="outlined" label="Wallets" sx={{ borderColor: 'rgba(5,11,24,0.2)', color: shopSurface.ink }} />
+            <Chip size="small" variant="outlined" label="Net banking" sx={{ borderColor: 'rgba(5,11,24,0.2)', color: shopSurface.ink }} />
+          </Stack>
+          <Typography variant="body2" sx={{ color: shopSurface.inkMuted, mt: 1 }}>
+            You will complete payment securely in Razorpay.
+          </Typography>
+        </Box>
 
-      {savedRows.length > 0 && (
-        <TextField
-          select
-          label="Ship to"
-          fullWidth
-          value={selectedSavedId}
-          onChange={(e) => {
-            const v = e.target.value;
-            setSelectedSavedId(v);
-            if (!v) {
-              setAddress(emptyShippingForm());
-              return;
-            }
-            const row = savedRows.find((r) => r.id === v);
-            if (row) {
-              setAddress({
-                label: '',
-                recipientName: row.recipientName ?? '',
-                recipientMobile: row.recipientMobile ?? '',
-                line1: row.line1,
-                line2: row.line2 ?? '',
-                city: row.city,
-                state: row.state,
-                postalCode: row.postalCode,
-                country: row.country || 'IN',
-              });
-              if (row.recipientMobile?.trim()) {
-                setPhone(row.recipientMobile.trim());
-              }
-            }
-          }}
-        >
-          <MenuItem value="">
-            <em>Enter a new address</em>
-          </MenuItem>
-          {savedRows.map((r) => (
-            <MenuItem key={r.id} value={r.id}>
-              {r.label}
-              {r.recipientName ? ` — ${r.recipientName}` : ''}
-              {r.isDefault ? ' (default)' : ''}
-            </MenuItem>
-          ))}
-        </TextField>
-      )}
+        {error && (
+          <Alert severity="error" onClose={() => setError(null)}>
+            {error}
+          </Alert>
+        )}
 
-      <ShippingAddressFields
-        value={address}
-        showLabel={false}
-        onChange={(next) => {
-          setAddress(next);
-          setSelectedSavedId('');
-        }}
-      />
+        <Paper elevation={0} sx={{ ...shopSurface.card, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <TextField
+            label="Mobile (for UPI / SMS)"
+            fullWidth
+            placeholder="10-digit mobile"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            inputProps={{ inputMode: 'numeric', maxLength: 15 }}
+            helperText="Optional; pre-fills Razorpay for faster UPI and card flows"
+            sx={fieldSx}
+          />
 
-      <Button variant="contained" size="large" disabled={!valid || busy} onClick={() => void pay()}>
-        {busy ? <CircularProgress size={24} color="inherit" /> : 'Pay securely'}
-      </Button>
-    </Stack>
+          {savedRows.length > 0 && (
+            <TextField
+              select
+              label="Ship to"
+              fullWidth
+              value={selectedSavedId}
+              onChange={(e) => {
+                const v = e.target.value;
+                setSelectedSavedId(v);
+                if (!v) {
+                  setAddress(emptyShippingForm());
+                  return;
+                }
+                const row = savedRows.find((r) => r.id === v);
+                if (row) {
+                  setAddress({
+                    label: '',
+                    recipientName: row.recipientName ?? '',
+                    recipientMobile: row.recipientMobile ?? '',
+                    line1: row.line1,
+                    line2: row.line2 ?? '',
+                    city: row.city,
+                    state: row.state,
+                    postalCode: row.postalCode,
+                    country: row.country || 'IN',
+                  });
+                  if (row.recipientMobile?.trim()) {
+                    setPhone(row.recipientMobile.trim());
+                  }
+                }
+              }}
+              sx={fieldSx}
+            >
+              <MenuItem value="">
+                <em>Enter a new address</em>
+              </MenuItem>
+              {savedRows.map((r) => (
+                <MenuItem key={r.id} value={r.id}>
+                  {r.label}
+                  {r.recipientName ? ` — ${r.recipientName}` : ''}
+                  {r.isDefault ? ' (default)' : ''}
+                </MenuItem>
+              ))}
+            </TextField>
+          )}
+
+          <ShippingAddressFields
+            value={address}
+            showLabel={false}
+            onChange={(next) => {
+              setAddress(next);
+              setSelectedSavedId('');
+            }}
+          />
+        </Paper>
+
+        <Button variant="contained" size="large" disabled={!valid || busy} onClick={() => void pay()} sx={shopSurface.cta}>
+          {busy ? <CircularProgress size={24} color="inherit" /> : 'Pay securely'}
+        </Button>
+      </Stack>
+    </StorefrontPageShell>
   );
 }

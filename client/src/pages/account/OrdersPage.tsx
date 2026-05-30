@@ -15,10 +15,12 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import TextField from '@mui/material/TextField';
 import Alert from '@mui/material/Alert';
-import { alpha, useTheme } from '@mui/material/styles';
+import { alpha } from '@mui/material/styles';
 import { apiFetch } from '../../api/client';
 import { formatInrFromPaise } from '../../utils/format';
 import { useAuth } from '../../context/AuthContext';
+import { shopSurface } from '../../constants/shopSurface';
+import { handleProductImageError, PRODUCT_IMAGE_FALLBACK } from '../../utils/productImage';
 
 type LineReview = {
   canSubmit: boolean;
@@ -63,21 +65,21 @@ function lineProductId(line: OrderLine): string {
   return String(raw);
 }
 
-function statusHeadlineColor(status: string): string {
+/** Status headline on white inset panel — dark tones for contrast on cream pages. */
+function statusLabelColor(status: string): string {
   switch (status) {
     case 'delivered':
     case 'shipped':
-      return 'success.main';
+      return '#1e5631';
     case 'paid':
-      return 'primary.main';
     case 'processing':
-      return 'info.main';
+      return '#5c4a1f';
     case 'pending':
-      return 'warning.main';
+      return '#8a5a12';
     case 'cancelled':
-      return 'error.main';
+      return '#8b2e2e';
     default:
-      return 'text.primary';
+      return shopSurface.ink;
   }
 }
 
@@ -97,38 +99,35 @@ function OrderLineThumb({ src, alt }: { src: string | null | undefined; alt: str
         src={src}
         alt={alt}
         loading="lazy"
+        onError={handleProductImageError}
         sx={{
           width: 72,
           height: 72,
-          borderRadius: 1.5,
+          borderRadius: 1,
           objectFit: 'cover',
           flexShrink: 0,
-          bgcolor: 'action.hover',
+          bgcolor: '#E8E8E8',
+          border: '1px solid rgba(5, 11, 24, 0.08)',
         }}
       />
     );
   }
   return (
     <Box
+      component="img"
+      src={PRODUCT_IMAGE_FALLBACK}
+      alt=""
       aria-hidden
       sx={{
         width: 72,
         height: 72,
-        borderRadius: 1.5,
+        borderRadius: 1,
+        objectFit: 'cover',
         flexShrink: 0,
-        bgcolor: 'action.selected',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: 'text.disabled',
-        fontSize: 11,
-        fontWeight: 600,
-        textAlign: 'center',
-        px: 0.5,
+        bgcolor: '#E8E8E8',
+        border: '1px solid rgba(5, 11, 24, 0.08)',
       }}
-    >
-      No photo
-    </Box>
+    />
   );
 }
 
@@ -238,7 +237,6 @@ function OrderQuickReviewDialog({
 }
 
 export function OrdersPage() {
-  const theme = useTheme();
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [orders, setOrders] = useState<OrderRow[]>([]);
@@ -267,7 +265,7 @@ export function OrdersPage() {
 
   if (loading) {
     return (
-      <Stack spacing={2} maxWidth={480} sx={{ mx: 'auto' }}>
+      <Stack spacing={2} sx={{ width: '100%' }}>
         <Skeleton variant="text" width={200} height={40} />
         <Skeleton variant="text" width={280} />
         <Skeleton variant="rounded" height={160} sx={{ borderRadius: 2 }} />
@@ -278,7 +276,7 @@ export function OrdersPage() {
 
   return (
     <>
-      <Stack spacing={3} maxWidth={480} sx={{ mx: 'auto', width: '100%', pb: 2 }}>
+      <Stack spacing={3} sx={{ width: '100%', pb: 2 }}>
         <Stack
           direction={{ xs: 'column', sm: 'row' }}
           justifyContent="space-between"
@@ -291,18 +289,25 @@ export function OrdersPage() {
               to="/account"
               variant="text"
               size="small"
-              sx={{ alignSelf: 'flex-start', px: 0, minWidth: 0, fontWeight: 600, mb: -0.5 }}
+              sx={{
+                alignSelf: 'flex-start',
+                px: 0,
+                minWidth: 0,
+                fontWeight: 600,
+                mb: -0.5,
+                color: shopSurface.inkMuted,
+              }}
             >
               ← Account
             </Button>
-            <Typography variant="h5" fontWeight={800} letterSpacing={-0.5}>
+            <Typography component="h1" sx={shopSurface.pageTitle}>
               My orders
             </Typography>
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{ color: shopSurface.inkMuted }}>
               Track shipments and rate products after your order is marked <strong>delivered</strong>.
             </Typography>
             {user && (
-              <Typography variant="caption" color="text.secondary">
+              <Typography variant="caption" sx={{ color: shopSurface.inkMuted }}>
                 {user.email}
               </Typography>
             )}
@@ -310,9 +315,13 @@ export function OrdersPage() {
           {user && (
             <Button
               variant="outlined"
-              color="inherit"
               onClick={() => void handleLogout()}
-              sx={{ alignSelf: { xs: 'stretch', sm: 'center' }, flexShrink: 0 }}
+              sx={{
+                alignSelf: { xs: 'stretch', sm: 'center' },
+                flexShrink: 0,
+                borderColor: 'rgba(5, 11, 24, 0.2)',
+                color: shopSurface.ink,
+              }}
             >
               Log out
             </Button>
@@ -320,7 +329,7 @@ export function OrdersPage() {
         </Stack>
 
         {orders.length === 0 ? (
-          <Typography color="text.secondary">No orders yet.</Typography>
+          <Typography sx={{ color: shopSurface.inkMuted }}>No orders yet.</Typography>
         ) : (
           orders.map((o) => {
             const meta = ORDER_STATUS[o.status] ?? {
@@ -328,38 +337,17 @@ export function OrdersPage() {
               sub: '',
               icon: '•',
             };
-            const stripTint =
-              o.status === 'delivered' || o.status === 'shipped'
-                ? alpha(theme.palette.success.main, 0.1)
-                : o.status === 'paid' || o.status === 'processing'
-                  ? alpha(theme.palette.primary.main, 0.06)
-                  : o.status === 'pending'
-                    ? alpha(theme.palette.warning.main, 0.08)
-                    : o.status === 'cancelled'
-                      ? alpha(theme.palette.error.main, 0.08)
-                      : theme.palette.action.hover;
-
             return (
               <Paper
                 key={o.id}
                 elevation={0}
                 sx={{
-                  borderRadius: 2,
-                  border: '1px solid',
-                  borderColor: 'divider',
+                  ...shopSurface.card,
+                  p: 2,
                   overflow: 'hidden',
-                  bgcolor: 'background.paper',
                 }}
               >
-                <Box
-                  sx={{
-                    px: 2,
-                    py: 1.75,
-                    bgcolor: stripTint,
-                    borderBottom: '1px solid',
-                    borderColor: 'divider',
-                  }}
-                >
+                <Box sx={shopSurface.insetPanel}>
                   <Stack direction="row" justifyContent="space-between" alignItems="flex-start" gap={2}>
                     <Stack direction="row" gap={1.25} alignItems="flex-start" sx={{ minWidth: 0 }}>
                       <Typography
@@ -371,43 +359,64 @@ export function OrdersPage() {
                       </Typography>
                       <Box sx={{ minWidth: 0 }}>
                         <Typography
-                          fontWeight={800}
-                          variant="subtitle1"
-                          sx={{ color: statusHeadlineColor(o.status), lineHeight: 1.3 }}
+                          sx={{
+                            fontFamily: shopSurface.font.display,
+                            fontWeight: 600,
+                            fontSize: '1.1rem',
+                            color: statusLabelColor(o.status),
+                            lineHeight: 1.3,
+                          }}
                         >
                           {meta.label}
                         </Typography>
-                        <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.25 }}>
+                        <Typography variant="body2" sx={{ color: shopSurface.inkMuted, mt: 0.35, lineHeight: 1.45 }}>
                           {meta.sub}
                         </Typography>
-                        <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+                        <Typography variant="caption" sx={{ color: shopSurface.inkMuted, display: 'block', mt: 0.75 }}>
                           {formatOrderWhen(o.createdAt)}
                         </Typography>
                       </Box>
                     </Stack>
-                    <Typography fontWeight={800} variant="subtitle1" sx={{ flexShrink: 0 }}>
+                    <Typography
+                      sx={{
+                        flexShrink: 0,
+                        fontFamily: shopSurface.font.display,
+                        fontWeight: 600,
+                        fontSize: '1.1rem',
+                        color: shopSurface.ink,
+                      }}
+                    >
                       {formatInrFromPaise(o.amount)}
                     </Typography>
                   </Stack>
                   <Typography
                     variant="caption"
-                    color="text.secondary"
-                    sx={{ fontFamily: 'ui-monospace, monospace', wordBreak: 'break-all', display: 'block', mt: 1 }}
+                    sx={{
+                      fontFamily: 'ui-monospace, monospace',
+                      wordBreak: 'break-all',
+                      display: 'block',
+                      mt: 1.25,
+                      color: shopSurface.inkMuted,
+                    }}
                   >
-                    #{o.id}
+                    Order #{o.id.slice(-8).toUpperCase()}
                   </Typography>
                 </Box>
 
                 {(o.items?.length ?? 0) > 0 && (
-                  <Stack spacing={1.5} sx={{ p: 2, pt: 2 }}>
+                  <Stack spacing={1.5} sx={{ pt: 2 }}>
                     {o.items!.map((line, idx) => {
                       const pid = lineProductId(line);
                       const showReview = o.status === 'delivered' && line.review;
                       return (
                         <Paper
                           key={`${o.id}-${pid}-${idx}`}
-                          variant="outlined"
-                          sx={{ borderRadius: 2, overflow: 'hidden', borderColor: 'divider' }}
+                          elevation={0}
+                          sx={{
+                            ...shopSurface.insetPanel,
+                            p: 0,
+                            overflow: 'hidden',
+                          }}
                         >
                           <ListItemButton
                             component={RouterLink}
@@ -417,7 +426,8 @@ export function OrdersPage() {
                               py: 1.5,
                               px: 1.5,
                               gap: 2,
-                              '&:hover': { bgcolor: 'action.hover' },
+                              color: shopSurface.ink,
+                              '&:hover': { bgcolor: 'rgba(5, 11, 24, 0.04)' },
                             }}
                           >
                             <OrderLineThumb src={line.image} alt={line.name} />
@@ -425,13 +435,16 @@ export function OrdersPage() {
                               primary={line.name}
                               secondary={`Qty ${line.qty} · ${formatInrFromPaise(line.price)} each`}
                               primaryTypographyProps={{
-                                fontWeight: 700,
+                                fontWeight: 600,
                                 variant: 'body2',
-                                sx: { lineHeight: 1.35 },
+                                sx: { lineHeight: 1.35, color: shopSurface.ink, fontFamily: shopSurface.font.body },
                               }}
-                              secondaryTypographyProps={{ variant: 'caption' }}
+                              secondaryTypographyProps={{
+                                variant: 'caption',
+                                sx: { color: shopSurface.inkMuted },
+                              }}
                             />
-                            <Typography color="text.secondary" sx={{ fontSize: '1.25rem', fontWeight: 300 }} aria-hidden>
+                            <Typography sx={{ fontSize: '1.25rem', fontWeight: 300, color: shopSurface.inkMuted }} aria-hidden>
                               ›
                             </Typography>
                           </ListItemButton>
@@ -497,7 +510,12 @@ export function OrdersPage() {
           })
         )}
 
-        <Button component={RouterLink} variant="text" to="/" sx={{ alignSelf: 'flex-start' }}>
+        <Button
+          component={RouterLink}
+          variant="text"
+          to="/shop"
+          sx={{ alignSelf: 'flex-start', color: shopSurface.ink, fontWeight: 600 }}
+        >
           Continue shopping
         </Button>
       </Stack>

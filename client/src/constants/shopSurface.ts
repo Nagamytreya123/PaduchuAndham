@@ -56,6 +56,42 @@ export const shopSurface = {
     textTransform: 'uppercase' as const,
     lineHeight: 1,
   },
+  /** Cart, account, and other in-shell pages */
+  pageTitle: {
+    fontFamily: '"Playfair Display", "Cormorant Garamond", Georgia, serif',
+    fontWeight: 500,
+    fontSize: { xs: '2rem', sm: '2.35rem' },
+    letterSpacing: '-0.02em',
+    lineHeight: 1.15,
+    color: '#050B18',
+  },
+  card: {
+    p: 2,
+    borderRadius: 2,
+    bgcolor: 'rgba(255, 255, 255, 0.72)',
+    border: '1px solid rgba(5, 11, 24, 0.08)',
+    boxShadow: 'none',
+  },
+  cta: {
+    py: 1.5,
+    borderRadius: 0,
+    bgcolor: '#050B18',
+    color: '#ffffff',
+    fontFamily: '"Inter", "Helvetica Neue", Arial, sans-serif',
+    fontSize: '0.75rem',
+    fontWeight: 600,
+    letterSpacing: '0.12em',
+    textTransform: 'uppercase' as const,
+    '&:hover': { bgcolor: '#1a2233' },
+  },
+  /** High-contrast inset for order status, summaries, etc. on cream pages */
+  insetPanel: {
+    p: 2,
+    borderRadius: 1.5,
+    bgcolor: '#ffffff',
+    border: '1px solid rgba(5, 11, 24, 0.12)',
+    boxShadow: '0 1px 4px rgba(5, 11, 24, 0.06)',
+  },
 } as const;
 
 /** 4:5 luxury product frame (shopping-bag / editorial mockup) */

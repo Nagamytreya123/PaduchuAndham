@@ -25,12 +25,32 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } });
 
+const MAX_PRODUCT_IMAGES = 15;
+
+/** Multiple files as `images`; legacy single file field `image` still accepted. */
+const productImageUpload = upload.fields([
+  { name: 'images', maxCount: MAX_PRODUCT_IMAGES },
+  { name: 'image', maxCount: 1 },
+]);
+
 const router = Router();
 router.use(requireAuth, requireAdmin);
 
 function publicUrl(req: Request, filename: string): string {
   const base = env.SERVER_PUBLIC_URL ?? `${req.protocol}://${req.get('host')}`;
   return `${base.replace(/\/$/, '')}/uploads/${filename}`;
+}
+
+function collectUploadedImageUrls(req: Request): string[] {
+  const out: string[] = [];
+  const grouped = req.files as { images?: Express.Multer.File[]; image?: Express.Multer.File[] } | undefined;
+  for (const f of grouped?.images ?? []) {
+    out.push(publicUrl(req, f.filename));
+  }
+  for (const f of grouped?.image ?? []) {
+    out.push(publicUrl(req, f.filename));
+  }
+  return out;
 }
 
 const dimensionsSchema = z
@@ -87,7 +107,7 @@ const createSchema = z.object({
   watchBraceletBundlePrice: z.union([z.number().int().min(0), z.null()]).optional(),
 });
 
-router.post('/', upload.single('image'), async (req, res) => {
+router.post('/', productImageUpload, async (req, res) => {
   let body: z.infer<typeof createSchema>;
   try {
     const raw = typeof req.body.data === 'string' ? JSON.parse(req.body.data) : req.body;
@@ -96,9 +116,11 @@ router.post('/', upload.single('image'), async (req, res) => {
     res.status(400).json({ error: 'Invalid body' });
     return;
   }
-  const images = [...(body.images ?? [])];
-  if (req.file) {
-    images.unshift(publicUrl(req, req.file.filename));
+  const uploaded = collectUploadedImageUrls(req);
+  const images = [...uploaded, ...(body.images ?? [])];
+  if (images.length > MAX_PRODUCT_IMAGES) {
+    res.status(400).json({ error: `Maximum ${MAX_PRODUCT_IMAGES} images per product` });
+    return;
   }
   const product = await ProductModel.create({
     name: body.name,
@@ -199,7 +221,7 @@ router.get('/', async (_req, res) => {
   });
 });
 
-router.patch('/:id', upload.single('image'), async (req, res) => {
+router.patch('/:id', productImageUpload, async (req, res) => {
   let patch: z.infer<typeof updateSchema>;
   try {
     const raw = typeof req.body.data === 'string' ? JSON.parse(req.body.data) : req.body;
@@ -244,8 +266,13 @@ router.patch('/:id', upload.single('image'), async (req, res) => {
       doc.watchBraceletBundlePrice = patch.watchBraceletBundlePrice;
     }
   }
-  if (req.file) {
-    doc.images = [...(doc.images ?? []), publicUrl(req, req.file.filename)];
+  const uploaded = collectUploadedImageUrls(req);
+  if (uploaded.length > 0) {
+    doc.images = [...(doc.images ?? []), ...uploaded];
+  }
+  if ((doc.images?.length ?? 0) > MAX_PRODUCT_IMAGES) {
+    res.status(400).json({ error: `Maximum ${MAX_PRODUCT_IMAGES} images per product` });
+    return;
   }
   await doc.save();
   res.json({ product: productToJson(doc.toObject()) });

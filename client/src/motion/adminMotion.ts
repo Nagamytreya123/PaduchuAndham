@@ -18,19 +18,17 @@ export function adminRouteMotion(reduced: boolean) {
     } as const;
   }
   return {
-    initial: { opacity: 0, y: 18, scale: 1.02, filter: 'blur(10px)' },
+    initial: { opacity: 0, y: 12, filter: 'blur(8px)' },
     animate: {
       opacity: 1,
       y: 0,
-      scale: 1,
       filter: 'blur(0px)',
       transition: { duration: 0.55, ease: PREMIUM_EASE },
     },
     exit: {
       opacity: 0,
-      y: -12,
-      scale: 0.99,
-      filter: 'blur(6px)',
+      y: -8,
+      filter: 'blur(4px)',
       transition: { duration: 0.35, ease: PREMIUM_EASE },
     },
   } as const;
