@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Typography from '@mui/material/Typography';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
@@ -18,6 +18,7 @@ import { ShippingAddressFields } from '../components/ShippingAddressFields';
 import { emptyShippingForm, type SavedAddressRow, type ShippingAddressForm } from '../types/address';
 import { StorefrontPageShell } from '../components/StorefrontPageShell';
 import { shopSurface } from '../constants/shopSurface';
+import { trackBeginCheckout, trackPurchase } from '../analytics';
 
 function loadRazorpay(): Promise<boolean> {
   return new Promise((resolve) => {
@@ -57,6 +58,13 @@ export function CheckoutPage() {
   const [address, setAddress] = useState<ShippingAddressForm>(() => emptyShippingForm());
   const [savedRows, setSavedRows] = useState<SavedAddressRow[]>([]);
   const [selectedSavedId, setSelectedSavedId] = useState('');
+  const checkoutTracked = useRef(false);
+
+  useEffect(() => {
+    if (lines.length === 0 || checkoutTracked.current) return;
+    checkoutTracked.current = true;
+    trackBeginCheckout(lines);
+  }, [lines]);
 
   useEffect(() => {
     let cancelled = false;
@@ -194,6 +202,7 @@ export function CheckoutPage() {
                 razorpay_signature: response.razorpay_signature,
               }),
             });
+            trackPurchase(orderRes.orderId, lines, totalPaise);
             clear();
             navigate('/account', { replace: true });
           } catch (e) {

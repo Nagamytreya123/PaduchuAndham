@@ -1,6 +1,7 @@
 import type { HydratedDocument } from 'mongoose';
 import { ProductModel } from '../models/Product.js';
 import type { OrderDoc } from '../models/Order.js';
+import { invalidateCatalogForProductIds } from '../cache/catalog.js';
 import { notifyOrderPaidEmails } from './orderPaidEmails.js';
 
 export async function completePaidOrder(
@@ -16,6 +17,7 @@ export async function completePaidOrder(
   }
 
   const productIds = [...new Set(order.items.map((i) => String(i.productId)))];
+  await invalidateCatalogForProductIds(productIds);
   const prods = await ProductModel.find({ _id: { $in: productIds } }).select('images').lean();
   const imageMap = new Map<string, string | null>();
   for (const p of prods) {

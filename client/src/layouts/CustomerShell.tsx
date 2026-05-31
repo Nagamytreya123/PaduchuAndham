@@ -34,7 +34,7 @@ export function CustomerShell() {
 
   const cartCount = cartBadgeCount(lines);
 
-  /** Pages that render `StorefrontHeader` themselves — hide the shell AppBar to avoid double headers. */
+  /** Full-bleed storefront pages with in-page chrome (home editorial landing or `StorefrontHeader`). */
   const hasInPageStorefrontHeader =
     location.pathname === '/' ||
     location.pathname === '/shop' ||

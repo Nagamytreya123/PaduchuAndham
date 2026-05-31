@@ -11,6 +11,7 @@ import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import type { Request } from 'express';
 import { env } from '../config/env.js';
 import { jewelleryComboToJson } from '../utils/jewelleryComboJson.js';
+import { invalidateCatalogCache } from '../cache/catalog.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadDir = path.join(__dirname, '../../uploads');
@@ -107,6 +108,7 @@ router.post('/', upload.single('image'), async (req, res) => {
     isActive: body.isActive ?? true,
     createdBy: req.user!.id,
   });
+  await invalidateCatalogCache();
   res.status(201).json({ combo: jewelleryComboToJson(doc.toObject()) });
 });
 
@@ -159,6 +161,7 @@ router.patch('/:id', upload.single('image'), async (req, res) => {
     return;
   }
   await doc.save();
+  await invalidateCatalogCache();
   res.json({ combo: jewelleryComboToJson(doc.toObject()) });
 });
 
@@ -168,6 +171,7 @@ router.delete('/:id', async (req, res) => {
     res.status(404).json({ error: 'Not found' });
     return;
   }
+  await invalidateCatalogCache();
   res.json({ ok: true });
 });
 

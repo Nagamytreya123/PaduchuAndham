@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import { apiFetch } from '../api/client';
+import { trackAddToCart } from '../analytics';
 import { useAuth } from './AuthContext';
 
 export type CartLine = {
@@ -204,8 +205,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, [lines, hydrated, loading, user?.id, user]);
 
   const add = useCallback((line: Omit<CartLine, 'qty'> & { qty?: number }) => {
+    const qty = line.qty ?? 1;
     setLines((prev) => {
-      const qty = line.qty ?? 1;
       const idx = prev.findIndex((l) => l.productId === line.productId && !l.bundleGroupId);
       if (idx === -1) {
         return [...prev, { ...line, qty }];
@@ -219,9 +220,22 @@ export function CartProvider({ children }: { children: ReactNode }) {
       };
       return copy;
     });
+    trackAddToCart([{ ...line, qty }], line.price * qty);
   }, []);
 
   const addBundle = useCallback((input: AddBundleInput) => {
+    const addedValuePaise = input.unitTotalPaise * input.qty;
+    const trackLines: CartLine[] = input.components.map((c) => ({
+      productId: c.productId,
+      name: c.name,
+      price: c.unitPricePaise,
+      qty: input.qty,
+      image: c.image,
+      bundleGroupId: input.groupId,
+      bundleDisplayName: input.displayName,
+      bundleUnitTotalPaise: input.unitTotalPaise,
+      bundleImage: input.image,
+    }));
     const ids = new Set(input.components.map((c) => c.productId));
     setLines((prev) => {
       const existingForGroup = prev.filter((l) => l.bundleGroupId === input.groupId);
@@ -245,6 +259,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       }));
       return [...filtered, ...newLines];
     });
+    trackAddToCart(trackLines, addedValuePaise);
   }, []);
 
   const setBundleQty = useCallback((bundleGroupId: string, qty: number) => {

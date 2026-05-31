@@ -30,6 +30,7 @@ import { ProductDetailGallery } from '../components/product/ProductDetailGallery
 import { CompleteTheLook } from '../components/product/CompleteTheLook';
 import { StorefrontHeader } from '../components/StorefrontHeader';
 import { shopSurface } from '../constants/shopSurface';
+import { trackViewItem } from '../analytics';
 
 const pdpTypography = shopSurface.pdpTypography;
 
@@ -57,6 +58,22 @@ export function ProductDetailPage() {
   const catalogRef = useRef<ProductSummary[]>([]);
   catalogRef.current = catalog;
   const fetchAbortRef = useRef<AbortController | null>(null);
+  const viewItemTracked = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!product?.id || viewItemTracked.current === product.id) return;
+    viewItemTracked.current = product.id;
+    trackViewItem({
+      id: product.id,
+      name: product.name,
+      pricePaise: product.price,
+      category: product.category,
+    });
+  }, [product]);
+
+  useEffect(() => {
+    viewItemTracked.current = null;
+  }, [id]);
 
   useEffect(() => {
     void (async () => {

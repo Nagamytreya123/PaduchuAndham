@@ -9,6 +9,9 @@ import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import { WishlistProvider } from './context/WishlistContext';
 import { App } from './App';
+import { initAnalytics } from './analytics';
+
+initAnalytics();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

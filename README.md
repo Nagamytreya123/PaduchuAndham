@@ -27,9 +27,13 @@ E-commerce web app: React (Vite) frontend and Express + MongoDB backend.
    - `JWT_SECRET` — at least 16 characters  
    - `CLIENT_URL` — e.g. `http://localhost:5173` for local dev  
 
-   Optional: Google OAuth, **Razorpay** (needed for checkout — set `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` from the Razorpay dashboard; see `.env.example`), Cloudinary — see comments in `.env.example`.
+   Optional: Google OAuth, **Razorpay** (needed for checkout — set `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` from the Razorpay dashboard; see `.env.example`), Cloudinary, **Redis** (`REDIS_URL` — recommended on Render for faster catalog and auth; see `.env.example`).
+
+   Without `REDIS_URL`, the API runs normally but skips caching (MongoDB only).
 
    The client uses a **Vite dev proxy** to `/api` and `/uploads` on port **4000**, so you usually do **not** need `client/.env` unless you change ports or call the API directly via `VITE_API_URL`.
+
+   Optional **Google Analytics 4**: set `VITE_GA_MEASUREMENT_ID` in `client/.env` (see `client/.env.example`). This tracks page views, signed-in users (by internal user id, not email), Core Web Vitals (LCP, INP, CLS, FCP, TTFB), and e-commerce events (add to cart, checkout, purchase).
 
 ## Run in development
 
@@ -65,3 +69,13 @@ npm run start
 ```
 
 `npm run start` runs the compiled server from `server/dist`. Serve the client build (`client/dist`) with your host or CDN as needed, and point `CLIENT_URL` / API URLs to your deployed URLs.
+
+## Redis (performance)
+
+Set `REDIS_URL` in `.env` (e.g. [Upstash](https://upstash.com/) or Render Redis). The API then:
+
+- Caches product/combo catalog reads (invalidated when admins edit catalog or orders are paid)
+- Caches user session lookups after JWT verification (fewer MongoDB reads per request)
+- Rate limits stay in-memory (Upstash read-only tokens cannot use INCR; catalog cache needs a **read-write** TCP URL)
+
+Check `GET /api/health` — you want `redis.writeEnabled: true` and `redis.cacheEnabled: true`. If `writeEnabled` is false, replace `REDIS_URL` with the **read-write** TCP URL from the Upstash database **TCP** tab (not a read replica or REST token). In development, cached responses may include `X-Cache: HIT`.

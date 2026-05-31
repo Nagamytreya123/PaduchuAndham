@@ -1,18 +1,14 @@
 import { Router, type Request, type Response } from 'express';
 import passport from 'passport';
-import rateLimit from 'express-rate-limit';
 import { env, getAdminEmailSet } from '../config/env.js';
 import { ensureGoogleStrategy, issueAuthCookie } from '../auth/google.js';
 import { UserModel } from '../models/User.js';
 import { authCookieOptions, clearAuthCookieOptions } from '../utils/authCookie.js';
-const router = Router();
+import { authLimiter } from '../middleware/rateLimit.js';
+import { loadUserById } from '../cache/userLoader.js';
+import { invalidateCachedUser, setCachedUser } from '../cache/session.js';
 
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  standardHeaders: true,
-  legacyHeaders: false,
-});
+const router = Router();
 
 router.use(authLimiter);
 
@@ -55,7 +51,10 @@ router.get(
   },
 );
 
-router.post('/logout', (_req, res) => {
+router.post('/logout', async (req, res) => {
+  if (req.user?.id) {
+    await invalidateCachedUser(req.user.id);
+  }
   res.clearCookie(env.JWT_COOKIE_NAME, clearAuthCookieOptions());
   res.json({ ok: true });
 });
@@ -65,11 +64,11 @@ router.get('/me', async (req, res) => {
     res.json({ user: null });
     return;
   }
-  const full = await UserModel.findById(req.user.id).lean();
+  const full = await loadUserById(req.user.id);
   res.json({
     user: full
       ? {
-          id: full._id.toString(),
+          id: full.id,
           email: full.email,
           name: full.name,
           role: full.role,
@@ -99,14 +98,23 @@ async function emailLogin(req: Request, res: Response) {
     res.status(404).json({ error: 'No account found with this email. Sign up to create one.' });
     return;
   }
-  setSessionCookie(res, user._id.toString(), user.role as 'admin' | 'customer');
+  const id = user._id.toString();
+  const role = user.role as 'admin' | 'customer';
+  setSessionCookie(res, id, role);
+  await setCachedUser({
+    id,
+    email: user.email,
+    name: user.name,
+    role,
+    ...(user.avatarUrl ? { avatarUrl: user.avatarUrl } : {}),
+  });
   res.json({
     ok: true,
     user: {
-      id: user._id.toString(),
+      id,
       email: user.email,
       name: user.name,
-      role: user.role,
+      role,
     },
   });
 }
@@ -132,14 +140,21 @@ async function emailSignup(req: Request, res: Response) {
     name: displayName,
     role,
   });
-  setSessionCookie(res, created._id.toString(), role);
+  const id = created._id.toString();
+  setSessionCookie(res, id, role);
+  await setCachedUser({
+    id,
+    email: created.email,
+    name: created.name,
+    role,
+  });
   res.json({
     ok: true,
     user: {
-      id: created._id.toString(),
+      id,
       email: created.email,
       name: created.name,
-      role: created.role,
+      role,
     },
   });
 }

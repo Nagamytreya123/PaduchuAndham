@@ -21,6 +21,7 @@ import { AdminJewelleryCombosPage } from './pages/admin/AdminJewelleryCombosPage
 import { AdminOrdersPage } from './pages/admin/AdminOrdersPage';
 import { AdminReviewsPage } from './pages/admin/AdminReviewsPage';
 import { JewelleryComboDetailPage } from './pages/JewelleryComboDetailPage';
+import { AnalyticsListener } from './components/AnalyticsListener';
 
 function ProtectedCustomer({ children }: { children: ReactElement }) {
   const { user, loading } = useAuth();
@@ -55,7 +56,9 @@ function ProtectedAdmin({ children }: { children: ReactElement }) {
 
 export function App() {
   return (
-    <Routes>
+    <>
+      <AnalyticsListener />
+      <Routes>
       <Route element={<CustomerShell />}>
         <Route index element={<HomePage />} />
         <Route path="shop" element={<ShopPage />} />
@@ -103,5 +106,6 @@ export function App() {
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </>
   );
 }

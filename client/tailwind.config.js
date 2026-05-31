@@ -6,8 +6,22 @@ export default {
   },
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['"Inter"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        display: ['"Playfair Display"', '"Cormorant Garamond"', 'Georgia', 'serif'],
+        mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+      },
+      colors: {
+        brand: {
+          cream: '#F2EEE6',
+          ink: '#050B18',
+          gold: '#D6B36A',
+          dark: '#0a0a0a',
+        },
+      },
       transitionTimingFunction: {
         premium: 'cubic-bezier(0.22, 1, 0.36, 1)',
+        editorial: 'cubic-bezier(0.16, 1, 0.3, 1)',
       },
       keyframes: {
         'admin-blob': {

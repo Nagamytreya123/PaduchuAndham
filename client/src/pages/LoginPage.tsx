@@ -20,6 +20,7 @@ import { apiFetch } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { authSurface as S } from '../constants/authSurface';
 import { useReducedMotion } from '../hooks/useReducedMotion';
+import { trackLogin, trackSignUp } from '../analytics';
 import ambientVideoUrl from '../assets/auth-ambient.mp4?url';
 
 function useTabFromMode(searchParams: URLSearchParams) {
@@ -94,6 +95,7 @@ export function LoginPage() {
   authExitStageRef.current = authExitStage;
   const videoPhaseRef = useRef<'intro' | 'outro'>('intro');
   const outroNavOnceRef = useRef(false);
+  const googleLoginTracked = useRef(false);
 
   useEffect(() => {
     setTab(useTabFromMode(searchParams));
@@ -205,9 +207,17 @@ export function LoginPage() {
   useEffect(() => {
     if (!celebrate || !user || loading || reducedMotion) return;
     if (outroNavOnceRef.current) return;
+    if (!googleLoginTracked.current) {
+      googleLoginTracked.current = true;
+      trackLogin('google');
+    }
     setAuthExitStage('outro');
     requestAnimationFrame(() => beginOutroThenNavigate());
   }, [celebrate, user, loading, reducedMotion, beginOutroThenNavigate]);
+
+  useEffect(() => {
+    if (!celebrate) googleLoginTracked.current = false;
+  }, [celebrate]);
 
   const emailInvalid = emailTouched && email.trim().length > 0 && !emailOk(email);
 
@@ -282,7 +292,9 @@ export function LoginPage() {
 
   const showAuthChrome = !user || authExitStage === 'collapsing';
 
-  async function finishAuthSuccess() {
+  async function finishAuthSuccess(mode: 'login' | 'signup') {
+    if (mode === 'signup') trackSignUp('email');
+    else trackLogin('email');
     await refresh();
     await new Promise((r) => setTimeout(r, AUTH_COLLAPSE_MS));
     setAuthExitStage('outro');
@@ -299,7 +311,7 @@ export function LoginPage() {
         method: 'POST',
         body: JSON.stringify({ email: email.trim().toLowerCase() }),
       });
-      await finishAuthSuccess();
+      await finishAuthSuccess('login');
     } catch (e) {
       setAuthExitStage('idle');
       setFormErr(e instanceof Error ? e.message : 'Sign in failed');
@@ -320,7 +332,7 @@ export function LoginPage() {
           name: displayName.trim() || undefined,
         }),
       });
-      await finishAuthSuccess();
+      await finishAuthSuccess('signup');
     } catch (e) {
       setAuthExitStage('idle');
       setFormErr(e instanceof Error ? e.message : 'Could not create account');

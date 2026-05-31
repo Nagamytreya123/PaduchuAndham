@@ -5,10 +5,19 @@ import helmet from 'helmet';
 import passport from 'passport';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import rateLimit from 'express-rate-limit';
 import { connectDb } from './db/connect.js';
 import { env } from './config/env.js';
 import { optionalAuth } from './middleware/auth.js';
+import { apiLimiter, initRateLimiters } from './middleware/rateLimit.js';
+import {
+  connectRedis,
+  disconnectRedis,
+  isRedisCacheEnabled,
+  isRedisConnected,
+  isRedisEnabled,
+  isRedisWriteEnabled,
+} from './redis/client.js';
+import { readCatalogVersion } from './cache/catalog.js';
 import authRoutes from './routes/auth.js';
 import productsRoutes from './routes/products.js';
 import adminProductsRoutes from './routes/adminProducts.js';
@@ -49,17 +58,21 @@ app.use(cookieParser());
 app.use(express.json({ limit: '2mb' }));
 app.use(passport.initialize());
 
-const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 400,
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
 app.use('/api', apiLimiter);
 
-app.get('/api/health', (_req, res) => {
-  res.json({ ok: true });
+app.get('/api/health', async (_req, res) => {
+  res.json({
+    ok: true,
+    redis: isRedisEnabled()
+      ? {
+          enabled: true,
+          connected: isRedisConnected(),
+          writeEnabled: isRedisWriteEnabled(),
+          cacheEnabled: isRedisCacheEnabled(),
+          catalogVersion: await readCatalogVersion(),
+        }
+      : { enabled: false },
+  });
 });
 
 app.use('/api/auth', optionalAuth, authRoutes);
@@ -81,10 +94,20 @@ const port = env.PORT;
 
 async function main() {
   await connectDb();
+  await connectRedis();
+  initRateLimiters();
   app.listen(port, () => {
     console.log(`API listening on http://localhost:${port}`);
   });
 }
+
+async function shutdown() {
+  await disconnectRedis();
+  process.exit(0);
+}
+
+process.on('SIGINT', () => void shutdown());
+process.on('SIGTERM', () => void shutdown());
 
 main().catch((err) => {
   console.error(err);

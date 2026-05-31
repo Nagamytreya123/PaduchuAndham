@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { Router } from 'express';
-import rateLimit from 'express-rate-limit';
+import { checkoutLimiter } from '../middleware/rateLimit.js';
 import { z } from 'zod';
 import Razorpay from 'razorpay';
 import { Types } from 'mongoose';
@@ -96,11 +96,6 @@ function serializeOrderItems(
     return row;
   });
 }
-
-const checkoutLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 60,
-});
 
 const addressSchema = z.object({
   label: z.string().max(80).optional(),

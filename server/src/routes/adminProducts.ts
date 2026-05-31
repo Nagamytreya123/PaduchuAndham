@@ -11,6 +11,7 @@ import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import type { Request } from 'express';
 import { env } from '../config/env.js';
 import { productToJson } from '../utils/productJson.js';
+import { invalidateCatalogCache } from '../cache/catalog.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadDir = path.join(__dirname, '../../uploads');
@@ -145,6 +146,7 @@ router.post('/', productImageUpload, async (req, res) => {
     watchBraceletBundlePrice: body.watchBraceletBundlePrice ?? undefined,
     createdBy: req.user!.id,
   });
+  await invalidateCatalogCache();
   res.status(201).json({ product: productToJson(product.toObject()) });
 });
 
@@ -275,6 +277,7 @@ router.patch('/:id', productImageUpload, async (req, res) => {
     return;
   }
   await doc.save();
+  await invalidateCatalogCache();
   res.json({ product: productToJson(doc.toObject()) });
 });
 
@@ -284,6 +287,7 @@ router.delete('/:id', async (req, res) => {
     res.status(404).json({ error: 'Not found' });
     return;
   }
+  await invalidateCatalogCache();
   res.json({ ok: true });
 });
 
