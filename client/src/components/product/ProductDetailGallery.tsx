@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Box from '@mui/material/Box';
+import Stack from '@mui/material/Stack';
 import IconButton from '@mui/material/IconButton';
 import { EditorialImageFrame } from '../EditorialImageFrame';
 import { IconChevronLeft, IconChevronRight } from '../../icons';
@@ -36,16 +37,79 @@ const galleryNavButtonSx = {
 export function ProductDetailGallery({ images, productName }: ProductDetailGalleryProps) {
   const slides = images.length > 0 ? images : [PRODUCT_IMAGE_FALLBACK];
   const [index, setIndex] = useState(0);
-  const src = slides[index] ?? PRODUCT_IMAGE_FALLBACK;
+  const scrollRef = useRef<HTMLDivElement>(null);
   const hasMultiple = slides.length > 1;
+
+  const syncIndexFromScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el || el.clientWidth <= 0) return;
+    const next = Math.round(el.scrollLeft / el.clientWidth);
+    setIndex(Math.max(0, Math.min(slides.length - 1, next)));
+  }, [slides.length]);
+
+  const goTo = useCallback(
+    (target: number, behavior: ScrollBehavior = 'smooth') => {
+      const el = scrollRef.current;
+      if (!el) return;
+      const wrapped = ((target % slides.length) + slides.length) % slides.length;
+      el.scrollTo({ left: wrapped * el.clientWidth, behavior });
+      setIndex(wrapped);
+    },
+    [slides.length],
+  );
+
+  useEffect(() => {
+    setIndex(0);
+    scrollRef.current?.scrollTo({ left: 0, behavior: 'auto' });
+  }, [images]);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !hasMultiple) return;
+
+    el.addEventListener('scroll', syncIndexFromScroll, { passive: true });
+    return () => el.removeEventListener('scroll', syncIndexFromScroll);
+  }, [hasMultiple, syncIndexFromScroll]);
 
   return (
     <Box sx={{ position: 'relative', px: 1 }}>
-      <EditorialImageFrame src={src} alt={productName} inset />
+      <Box
+        ref={scrollRef}
+        aria-label={`${productName} image gallery`}
+        sx={{
+          display: 'flex',
+          overflowX: hasMultiple ? 'auto' : 'hidden',
+          scrollSnapType: hasMultiple ? 'x mandatory' : 'none',
+          scrollBehavior: 'smooth',
+          WebkitOverflowScrolling: 'touch',
+          scrollbarWidth: 'none',
+          touchAction: 'pan-x pan-y pinch-zoom',
+          '&::-webkit-scrollbar': { display: 'none' },
+        }}
+      >
+        {slides.map((src, i) => (
+          <Box
+            key={`${src}-${i}`}
+            sx={{
+              flex: '0 0 100%',
+              minWidth: 0,
+              scrollSnapAlign: 'start',
+              scrollSnapStop: 'always',
+            }}
+          >
+            <EditorialImageFrame
+              src={src}
+              alt={slides.length > 1 ? `${productName} — image ${i + 1}` : productName}
+              inset
+            />
+          </Box>
+        ))}
+      </Box>
+
       <IconButton
         aria-label="Previous image"
         disabled={!hasMultiple}
-        onClick={() => setIndex((i) => (i - 1 + slides.length) % slides.length)}
+        onClick={() => goTo(index - 1)}
         sx={{
           ...galleryNavButtonSx,
           left: 'calc(4% + 10px)',
@@ -57,7 +121,7 @@ export function ProductDetailGallery({ images, productName }: ProductDetailGalle
       <IconButton
         aria-label="Next image"
         disabled={!hasMultiple}
-        onClick={() => setIndex((i) => (i + 1) % slides.length)}
+        onClick={() => goTo(index + 1)}
         sx={{
           ...galleryNavButtonSx,
           right: 'calc(4% + 10px)',
@@ -66,6 +130,54 @@ export function ProductDetailGallery({ images, productName }: ProductDetailGalle
       >
         <IconChevronRight />
       </IconButton>
+
+      {hasMultiple ? (
+        <Stack
+          direction="row"
+          spacing={0.75}
+          role="tablist"
+          aria-label="Product images"
+          sx={{
+            position: 'absolute',
+            bottom: { xs: 14, sm: 18 },
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 3,
+            px: 1.25,
+            py: 0.75,
+            borderRadius: 999,
+            bgcolor: 'rgba(255, 255, 255, 0.82)',
+            backdropFilter: 'blur(6px)',
+            pointerEvents: 'auto',
+          }}
+        >
+          {slides.map((_, i) => {
+            const active = i === index;
+            return (
+              <Box
+                key={i}
+                component="button"
+                type="button"
+                role="tab"
+                aria-selected={active}
+                aria-label={`Image ${i + 1} of ${slides.length}`}
+                onClick={() => goTo(i)}
+                sx={{
+                  width: active ? 8 : 6,
+                  height: active ? 8 : 6,
+                  p: 0,
+                  border: 'none',
+                  borderRadius: '50%',
+                  bgcolor: active ? '#1b1b1b' : 'rgba(0, 0, 0, 0.28)',
+                  cursor: 'pointer',
+                  transition: 'transform 0.2s ease, background-color 0.2s ease',
+                  transform: active ? 'scale(1.15)' : 'scale(1)',
+                }}
+              />
+            );
+          })}
+        </Stack>
+      ) : null}
     </Box>
   );
 }

@@ -27,7 +27,7 @@ import { formatInrFromPaise } from '../utils/format';
 import { allocateWatchBraceletBundle } from '../utils/bundlePricing';
 import { ProductReviewsSection } from '../components/ProductReviewsSection';
 import { ProductDetailGallery } from '../components/product/ProductDetailGallery';
-import { CompleteTheLook } from '../components/product/CompleteTheLook';
+import { ExploreCategoryRows } from '../components/product/ExploreCategoryRows';
 import { StorefrontHeader } from '../components/StorefrontHeader';
 import { shopSurface } from '../constants/shopSurface';
 import { trackViewItem } from '../analytics';
@@ -502,7 +502,7 @@ export function ProductDetailPage() {
         )}
       </Box>
 
-      <CompleteTheLook product={product} catalog={catalog} />
+      <ExploreCategoryRows catalog={catalog} excludeProductId={product.id} />
 
       <Box sx={{ px: 2, maxWidth: 720, mx: 'auto' }}>
         <ProductReviewsSection productId={product.id} />
