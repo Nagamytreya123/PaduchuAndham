@@ -4,7 +4,6 @@ import {
   Box,
   Typography,
   Grid,
-  Skeleton,
   Button,
   Stack,
   IconButton,
@@ -23,6 +22,8 @@ import {
   type StorefrontCollectionFilterKey,
 } from '../constants/collectionCategoryFilters';
 import { shopSurface, SHOP_HERO_IMAGE } from '../constants/shopSurface';
+import { LuxuryShowcaseLoader } from '../components/loading';
+import { seedCatalog } from '../utils/catalogCache';
 import { JewelleryComboStorefrontCard } from '../components/JewelleryComboStorefrontCard';
 import { StorefrontHeader } from '../components/StorefrontHeader';
 
@@ -77,6 +78,7 @@ export function ShopPage() {
       try {
         const data = await apiFetch<{ products: ProductSummary[] }>(`/api/products${q}`);
         setProducts(data.products);
+        seedCatalog(data.products);
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to load');
         setProducts([]);
@@ -219,13 +221,7 @@ export function ShopPage() {
 
         {showComboFilterView ? (
           combosLoading ? (
-            <Grid container spacing={2}>
-              {[1, 2, 3, 4].map((k) => (
-                <Grid item xs={6} sm={4} md={3} key={k}>
-                  <Skeleton variant="rectangular" height={280} />
-                </Grid>
-              ))}
-            </Grid>
+            <LuxuryShowcaseLoader variant="inline" tone="light" aria-label="Loading collections" />
           ) : combos.length === 0 ? (
             <Typography sx={{ color: shopSurface.inkMuted }} align="center">
               No jewellery sets available yet.
@@ -238,13 +234,7 @@ export function ShopPage() {
             </Grid>
           )
         ) : loading ? (
-          <Grid container spacing={2}>
-            {[1, 2, 3, 4].map((k) => (
-              <Grid item xs={6} sm={4} md={3} key={k}>
-                <Skeleton variant="rectangular" height={260} />
-              </Grid>
-            ))}
-          </Grid>
+          <LuxuryShowcaseLoader variant="inline" tone="light" aria-label="Loading products" />
         ) : error ? (
           <Typography color="error" align="center">
             {error}

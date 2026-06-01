@@ -5,7 +5,6 @@ import TextField from '@mui/material/TextField';
 import MenuItem from '@mui/material/MenuItem';
 import Button from '@mui/material/Button';
 import Alert from '@mui/material/Alert';
-import CircularProgress from '@mui/material/CircularProgress';
 import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
 import Paper from '@mui/material/Paper';
@@ -336,7 +335,7 @@ export function CheckoutPage() {
         </Paper>
 
         <Button variant="contained" size="large" disabled={!valid || busy} onClick={() => void pay()} sx={shopSurface.cta}>
-          {busy ? <CircularProgress size={24} color="inherit" /> : 'Pay securely'}
+          {busy ? 'Processing payment…' : 'Pay securely'}
         </Button>
       </Stack>
     </StorefrontPageShell>

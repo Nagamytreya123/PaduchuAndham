@@ -10,7 +10,7 @@ import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import { IconGoogle, IconInfoOutlined } from '../icons';
 import Alert from '@mui/material/Alert';
-import CircularProgress from '@mui/material/CircularProgress';
+import { LuxuryShowcaseLoader } from '../components/loading';
 import Link from '@mui/material/Link';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
@@ -280,7 +280,7 @@ export function LoginPage() {
           justifyContent="center"
           sx={{ position: 'relative', zIndex: 2, minHeight: 'calc(100dvh - 56px)' }}
         >
-          <CircularProgress sx={{ color: S.accent }} aria-label="Loading" />
+          <LuxuryShowcaseLoader variant="overlay" tone="dark" message="Preparing your experience…" />
         </Stack>
       </Box>
     );

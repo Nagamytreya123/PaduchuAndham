@@ -7,7 +7,7 @@ import Button from '@mui/material/Button';
 import Box from '@mui/material/Box';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemText from '@mui/material/ListItemText';
-import Skeleton from '@mui/material/Skeleton';
+import { LuxuryShowcaseLoader } from '../../components/loading';
 import Rating from '@mui/material/Rating';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
@@ -268,14 +268,7 @@ export function OrdersPage() {
   }, [reloadOrders]);
 
   if (loading) {
-    return (
-      <Stack spacing={2} sx={{ width: '100%' }}>
-        <Skeleton variant="text" width={200} height={40} />
-        <Skeleton variant="text" width={280} />
-        <Skeleton variant="rounded" height={160} sx={{ borderRadius: 2 }} />
-        <Skeleton variant="rounded" height={220} sx={{ borderRadius: 2 }} />
-      </Stack>
-    );
+    return <LuxuryShowcaseLoader variant="inline" tone="light" aria-label="Loading orders" />;
   }
 
   return (

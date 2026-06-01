@@ -14,7 +14,7 @@ import DialogActions from '@mui/material/DialogActions';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Checkbox from '@mui/material/Checkbox';
 import Alert from '@mui/material/Alert';
-import Skeleton from '@mui/material/Skeleton';
+import { LuxuryShowcaseLoader } from '../../components/loading';
 import { apiFetch } from '../../api/client';
 import { ShippingAddressFields } from '../../components/ShippingAddressFields';
 import type { SavedAddressRow, ShippingAddressForm } from '../../types/address';
@@ -163,13 +163,7 @@ export function SavedAddressesPage() {
   }
 
   if (loading) {
-    return (
-      <Stack spacing={2} sx={{ width: '100%' }}>
-        <Skeleton height={40} width={200} />
-        <Skeleton variant="rounded" height={120} />
-        <Skeleton variant="rounded" height={120} />
-      </Stack>
-    );
+    return <LuxuryShowcaseLoader variant="inline" tone="light" aria-label="Loading addresses" />;
   }
 
   return (

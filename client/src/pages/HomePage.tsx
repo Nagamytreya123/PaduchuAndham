@@ -39,6 +39,8 @@ import {
   WATCH_CATEGORY_TILE_IMAGE,
 } from '../constants/categoryTileImages';
 import { PRODUCT_IMAGE_FALLBACK } from '../utils/productImage';
+import { LuxuryShowcaseLoader } from '../components/loading';
+import { seedCatalog } from '../utils/catalogCache';
 import { shopSurface } from '../constants/shopSurface';
 import { StorefrontHeader } from '../components/StorefrontHeader';
 import { EditorialImageFrame } from '../components/EditorialImageFrame';
@@ -450,6 +452,7 @@ export function HomePage() {
       try {
         const data = await apiFetch<{ products: ProductSummary[] }>(`/api/products${q}`);
         setProducts(data.products);
+        seedCatalog(data.products);
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to load');
         setProducts([]);
@@ -720,18 +723,7 @@ export function HomePage() {
 
           {showComboFilterView ? (
             combosLoading ? (
-              <Grid container spacing={4}>
-                {[1, 2, 3, 4].map((k) => (
-                  <Grid item xs={12} sm={6} md={4} key={k}>
-                    <Skeleton
-                      variant="rectangular"
-                      sx={{ width: '92%', mx: 'auto', aspectRatio: '4 / 5', bgcolor: 'rgba(255,255,255,0.05)' }}
-                    />
-                    <Skeleton width="60%" sx={{ mt: 2, bgcolor: 'rgba(255,255,255,0.05)' }} />
-                    <Skeleton width="40%" sx={{ mt: 1, bgcolor: 'rgba(255,255,255,0.05)' }} />
-                  </Grid>
-                ))}
-              </Grid>
+              <LuxuryShowcaseLoader variant="inline" tone="dark" aria-label="Loading jewellery sets" />
             ) : combos.length === 0 ? (
               <Typography color="text.secondary" align="center">
                 No jewellery sets available yet.
@@ -744,18 +736,7 @@ export function HomePage() {
               </Grid>
             )
           ) : loading ? (
-            <Grid container spacing={4}>
-              {[1, 2, 3, 4].map((k) => (
-                <Grid item xs={12} sm={6} md={4} key={k}>
-                  <Skeleton
-                    variant="rectangular"
-                    sx={{ width: '92%', mx: 'auto', aspectRatio: '4 / 5', bgcolor: 'rgba(255,255,255,0.05)' }}
-                  />
-                  <Skeleton width="60%" sx={{ mt: 2, bgcolor: 'rgba(255,255,255,0.05)' }} />
-                  <Skeleton width="40%" sx={{ mt: 1, bgcolor: 'rgba(255,255,255,0.05)' }} />
-                </Grid>
-              ))}
-            </Grid>
+            <LuxuryShowcaseLoader variant="inline" tone="dark" aria-label="Loading collection" />
           ) : error ? (
             <Typography color="error" align="center">{error}</Typography>
           ) : products.length === 0 ? (

@@ -4,7 +4,7 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import Stack from '@mui/material/Stack';
-import Skeleton from '@mui/material/Skeleton';
+import { PdpLoadingState } from '../components/loading';
 import IconButton from '@mui/material/IconButton';
 import Chip from '@mui/material/Chip';
 import Divider from '@mui/material/Divider';
@@ -31,6 +31,7 @@ import { CompleteTheLook } from '../components/product/CompleteTheLook';
 import { StorefrontHeader } from '../components/StorefrontHeader';
 import { shopSurface } from '../constants/shopSurface';
 import { trackViewItem } from '../analytics';
+import { cacheProduct, getCachedProduct, seedCatalog } from '../utils/catalogCache';
 
 const pdpTypography = shopSurface.pdpTypography;
 
@@ -52,11 +53,9 @@ export function ProductDetailPage() {
   const [catalog, setCatalog] = useState<ProductSummary[]>([]);
   const [qty, setQty] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [bundleBraceletId, setBundleBraceletId] = useState<string | null>(null);
-  const skipFullPageSkeletonRef = useRef(false);
-  const catalogRef = useRef<ProductSummary[]>([]);
-  catalogRef.current = catalog;
   const fetchAbortRef = useRef<AbortController | null>(null);
   const viewItemTracked = useRef<string | null>(null);
 
@@ -79,7 +78,9 @@ export function ProductDetailPage() {
     void (async () => {
       try {
         const data = await apiFetch<{ products: ProductSummary[] }>('/api/products');
-        setCatalog(data.products.filter((p) => p.isActive !== false));
+        const active = data.products.filter((p) => p.isActive !== false);
+        seedCatalog(active);
+        setCatalog(active);
       } catch {
         setCatalog([]);
       }
@@ -92,33 +93,36 @@ export function ProductDetailPage() {
     const ac = new AbortController();
     fetchAbortRef.current = ac;
 
-    const fromList = catalogRef.current.find((p) => p.id === id);
-    if (fromList) {
-      setProduct(fromList);
-    }
-
-    const showFullSkeleton = !skipFullPageSkeletonRef.current;
-    if (showFullSkeleton) {
-      setLoading(true);
-    }
+    setLoading(true);
+    setNotFound(false);
     setFetchError(null);
+    setProduct(null);
 
     void (async () => {
       try {
         const data = await apiFetch<{ product: ProductSummary }>(`/api/products/${id}`, { signal: ac.signal });
         if (ac.signal.aborted) return;
+        cacheProduct(data.product);
         setProduct(data.product);
-        skipFullPageSkeletonRef.current = true;
       } catch (e) {
         if (ac.signal.aborted) return;
-        setFetchError(e instanceof Error ? e.message : 'Failed to load product');
-        if (!fromList) {
+        const msg = e instanceof Error ? e.message : 'Failed to load product';
+        setFetchError(msg);
+        const cached = getCachedProduct(id);
+        if (cached) {
+          setProduct(cached);
+          setNotFound(false);
+        } else if (/not found/i.test(msg)) {
           setProduct(null);
+          setNotFound(true);
         } else {
-          skipFullPageSkeletonRef.current = true;
+          setProduct(null);
+          setNotFound(false);
         }
       } finally {
-        setLoading(false);
+        if (!ac.signal.aborted) {
+          setLoading(false);
+        }
       }
     })();
 
@@ -129,12 +133,7 @@ export function ProductDetailPage() {
 
   useEffect(() => {
     if (!id || catalog.length === 0) return;
-    setProduct((prev) => {
-      const row = catalog.find((p) => p.id === id);
-      if (!row) return prev;
-      if (prev?.id === id) return prev;
-      return row;
-    });
+    seedCatalog(catalog);
   }, [catalog, id]);
 
   useEffect(() => {
@@ -154,12 +153,20 @@ export function ProductDetailPage() {
     }
   }, [product]);
 
-  if (loading && !product) {
+  if (loading) {
+    return <PdpLoadingState aria-label="Loading product" />;
+  }
+
+  if (notFound) {
     return (
       <Box>
         <StorefrontHeader />
-        <Skeleton variant="rectangular" sx={{ width: '92%', mx: 'auto', aspectRatio: '4 / 5', mt: 2 }} />
-        <Skeleton sx={{ width: '70%', mx: 2, mt: 3, height: 36 }} />
+        <Stack spacing={1} sx={{ px: 2, py: 3 }}>
+          <Typography color="text.secondary" sx={pdpTypography.body}>
+            Product not found.{' '}
+            <Button onClick={() => navigate('/')}>Back home</Button>
+          </Typography>
+        </Stack>
       </Box>
     );
   }
@@ -170,14 +177,9 @@ export function ProductDetailPage() {
         <StorefrontHeader />
         <Stack spacing={1} sx={{ px: 2, py: 3 }}>
           <Typography color="text.secondary" sx={pdpTypography.body}>
-            Product not found.{' '}
-            <Button onClick={() => navigate('/')}>Back home</Button>
+            {fetchError ?? 'Failed to load product.'}
           </Typography>
-          {fetchError ? (
-            <Typography variant="caption" color="error">
-              {fetchError}
-            </Typography>
-          ) : null}
+          <Button onClick={() => navigate(-1)}>Go back</Button>
         </Stack>
       </Box>
     );

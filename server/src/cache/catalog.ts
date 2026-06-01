@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { CATALOG_TTL_SEC, CATALOG_VERSION_KEY, KEY_PREFIX } from './constants.js';
-import { getOrSet } from './store.js';
+import { bumpMemoryCatalogVersion, getMemoryCatalogVersion, getOrSet } from './store.js';
 import {
   getRedis,
   isRedisCacheEnabled,
@@ -27,6 +27,7 @@ function hashQuery(parts: string[]): string {
 
 /** Bump version so all catalog:* keys become stale without SCAN or INCR. */
 export async function invalidateCatalogCache(): Promise<void> {
+  bumpMemoryCatalogVersion();
   if (!isRedisCacheEnabled()) return;
   try {
     await getRedis().set(CATALOG_VERSION_KEY, newCatalogVersionToken());
@@ -44,11 +45,7 @@ export async function cachedCatalog<T>(
   queryParts: string[],
   loader: () => Promise<T>,
 ): Promise<{ value: T; hit: boolean }> {
-  if (!isRedisCacheEnabled()) {
-    const value = await loader();
-    return { value, hit: false };
-  }
-  const version = await getCatalogVersion();
+  const version = isRedisCacheEnabled() ? await getCatalogVersion() : getMemoryCatalogVersion();
   const key = catalogKey(`${suffix}:${hashQuery(queryParts)}`, version);
   return getOrSet(key, CATALOG_TTL_SEC, loader);
 }

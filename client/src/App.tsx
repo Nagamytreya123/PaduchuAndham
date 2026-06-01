@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
-import { CircularProgress, Box } from '@mui/material';
 import { useAuth } from './context/AuthContext';
+import { LuxuryShowcaseLoader } from './components/loading';
 import { CustomerShell } from './layouts/CustomerShell';
 import { AccountLayout } from './layouts/AccountLayout';
 import { AdminShell } from './layouts/AdminShell';
@@ -29,11 +29,7 @@ function ProtectedCustomer({ children }: { children: ReactElement }) {
   const { user, loading } = useAuth();
   const location = useLocation();
   if (loading) {
-    return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="40vh">
-        <CircularProgress color="inherit" />
-      </Box>
-    );
+    return <LuxuryShowcaseLoader variant="fullscreen" tone="light" aria-label="Loading account" />;
   }
   if (!user) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
@@ -44,11 +40,7 @@ function ProtectedCustomer({ children }: { children: ReactElement }) {
 function ProtectedAdmin({ children }: { children: ReactElement }) {
   const { user, loading } = useAuth();
   if (loading) {
-    return (
-      <Box display="flex" justifyContent="center" py={8}>
-        <CircularProgress />
-      </Box>
-    );
+    return <LuxuryShowcaseLoader variant="fullscreen" tone="dark" aria-label="Loading admin" />;
   }
   if (!user || user.role !== 'admin') {
     return <Navigate to="/" replace />;

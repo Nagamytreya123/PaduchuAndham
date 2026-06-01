@@ -4,7 +4,7 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import Stack from '@mui/material/Stack';
-import Skeleton from '@mui/material/Skeleton';
+import { PdpLoadingState } from '../components/loading';
 import Chip from '@mui/material/Chip';
 import Paper from '@mui/material/Paper';
 import Link from '@mui/material/Link';
@@ -39,7 +39,7 @@ export function JewelleryComboDetailPage() {
   }, [id]);
 
   if (loading) {
-    return <Skeleton variant="rounded" height={320} />;
+    return <PdpLoadingState aria-label="Loading combo" />;
   }
 
   if (!combo || combo.products.length < 2) {
