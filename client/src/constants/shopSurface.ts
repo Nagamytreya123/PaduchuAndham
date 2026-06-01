@@ -65,12 +65,58 @@ export const shopSurface = {
     lineHeight: 1.15,
     color: '#050B18',
   },
+  /** INR amounts on light surfaces — lining + tabular figures (avoid serif old-style digits) */
+  amount: {
+    fontFamily: '"Inter", "Helvetica Neue", Arial, sans-serif',
+    fontWeight: 600,
+    fontVariantNumeric: 'tabular-nums lining-nums',
+    letterSpacing: '0.01em',
+  },
+  amountLg: {
+    fontFamily: '"Inter", "Helvetica Neue", Arial, sans-serif',
+    fontWeight: 600,
+    fontSize: '1.125rem',
+    fontVariantNumeric: 'tabular-nums lining-nums',
+    letterSpacing: '0.01em',
+  },
+  /** Text fields on cream / white storefront pages (dark theme defaults make labels invisible). */
+  lightField: {
+    '& .MuiInputLabel-root': {
+      color: '#5c5c5c',
+      fontFamily: '"Inter", "Helvetica Neue", Arial, sans-serif',
+      fontSize: '0.9375rem',
+      letterSpacing: 'normal',
+      textTransform: 'none',
+      '&.Mui-focused': { color: '#050B18' },
+    },
+    '& .MuiOutlinedInput-root': {
+      color: '#050B18',
+      fontFamily: '"Inter", "Helvetica Neue", Arial, sans-serif',
+      bgcolor: '#ffffff',
+      '& fieldset': { borderColor: 'rgba(5, 11, 24, 0.15)' },
+      '&:hover fieldset': { borderColor: 'rgba(5, 11, 24, 0.28)' },
+      '&.Mui-focused fieldset': { borderColor: '#050B18' },
+    },
+    '& .MuiInputBase-input::placeholder': {
+      color: '#5c5c5c',
+      opacity: 0.72,
+    },
+    '& .MuiSelect-icon': { color: '#5c5c5c' },
+    '& .MuiFormHelperText-root': {
+      color: '#5c5c5c',
+      fontFamily: '"Inter", "Helvetica Neue", Arial, sans-serif',
+      textTransform: 'none',
+      letterSpacing: 'normal',
+      fontSize: '0.75rem',
+    },
+  },
   card: {
     p: 2,
     borderRadius: 2,
     bgcolor: 'rgba(255, 255, 255, 0.72)',
     border: '1px solid rgba(5, 11, 24, 0.08)',
     boxShadow: 'none',
+    color: '#050B18',
   },
   cta: {
     py: 1.5,
@@ -91,6 +137,7 @@ export const shopSurface = {
     bgcolor: '#ffffff',
     border: '1px solid rgba(5, 11, 24, 0.12)',
     boxShadow: '0 1px 4px rgba(5, 11, 24, 0.06)',
+    color: '#050B18',
   },
 } as const;
 

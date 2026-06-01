@@ -1,3 +1,6 @@
+/** Stable fallback when a product image fails to load (picsum id 1 — always reachable). */
+export const PRODUCT_IMAGE_FALLBACK_URL = 'https://picsum.photos/id/1/800/800';
+
 /** Unsplash photo IDs verified to return HTTP 200 (others in the old seed often 404). */
 export const VERIFIED_UNSPLASH_IDS = [
   '1523275335684-37898b6baf30',

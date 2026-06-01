@@ -1,3 +1,4 @@
+import type { SxProps, Theme } from '@mui/material/styles';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import MenuItem from '@mui/material/MenuItem';
@@ -11,9 +12,11 @@ type Props = {
   showLabel?: boolean;
   /** When true, show recipient name and mobile (saved addresses). */
   showRecipient?: boolean;
+  /** MUI sx for fields on cream/white pages — use `shopSurface.lightField`. */
+  fieldSx?: SxProps<Theme>;
 };
 
-export function ShippingAddressFields({ value, onChange, showLabel, showRecipient }: Props) {
+export function ShippingAddressFields({ value, onChange, showLabel, showRecipient, fieldSx }: Props) {
   const countryIsIndia =
     value.country.trim().toUpperCase() === 'IN' || value.country.trim().length === 0;
 
@@ -32,6 +35,7 @@ export function ShippingAddressFields({ value, onChange, showLabel, showRecipien
           value={value.label}
           onChange={(e) => patch({ label: e.target.value })}
           inputProps={{ maxLength: 80 }}
+          sx={fieldSx}
         />
       )}
       {showRecipient && (
@@ -43,6 +47,7 @@ export function ShippingAddressFields({ value, onChange, showLabel, showRecipien
             value={value.recipientName}
             onChange={(e) => patch({ recipientName: e.target.value })}
             inputProps={{ maxLength: 120 }}
+            sx={fieldSx}
           />
           <TextField
             label="Recipient mobile"
@@ -53,6 +58,7 @@ export function ShippingAddressFields({ value, onChange, showLabel, showRecipien
             onChange={(e) => patch({ recipientMobile: e.target.value })}
             inputProps={{ inputMode: 'tel', maxLength: 20 }}
             helperText="For delivery contact"
+            sx={fieldSx}
           />
         </Stack>
       )}
@@ -62,12 +68,14 @@ export function ShippingAddressFields({ value, onChange, showLabel, showRecipien
         fullWidth
         value={value.line1}
         onChange={(e) => patch({ line1: e.target.value })}
+        sx={fieldSx}
       />
       <TextField
         label="Address line 2"
         fullWidth
         value={value.line2}
         onChange={(e) => patch({ line2: e.target.value })}
+        sx={fieldSx}
       />
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
         <TextField
@@ -76,6 +84,7 @@ export function ShippingAddressFields({ value, onChange, showLabel, showRecipien
           fullWidth
           value={value.city}
           onChange={(e) => patch({ city: e.target.value })}
+          sx={fieldSx}
         />
         {countryIsIndia ? (
           <TextField
@@ -86,6 +95,7 @@ export function ShippingAddressFields({ value, onChange, showLabel, showRecipien
             value={value.state}
             onChange={(e) => patch({ state: e.target.value })}
             SelectProps={{ displayEmpty: true }}
+            sx={fieldSx}
           >
             <MenuItem value="">
               <em>Select state</em>
@@ -103,6 +113,7 @@ export function ShippingAddressFields({ value, onChange, showLabel, showRecipien
             fullWidth
             value={value.state}
             onChange={(e) => patch({ state: e.target.value })}
+            sx={fieldSx}
           />
         )}
       </Stack>
@@ -113,6 +124,7 @@ export function ShippingAddressFields({ value, onChange, showLabel, showRecipien
           fullWidth
           value={value.postalCode}
           onChange={(e) => patch({ postalCode: e.target.value })}
+          sx={fieldSx}
         />
         <TextField
           label="Country"
@@ -120,6 +132,7 @@ export function ShippingAddressFields({ value, onChange, showLabel, showRecipien
           value={value.country}
           onChange={(e) => patch({ country: e.target.value })}
           inputProps={{ maxLength: 4 }}
+          sx={fieldSx}
         />
       </Stack>
     </Stack>

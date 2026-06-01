@@ -11,6 +11,9 @@ import { useCart, type CartLine } from '../context/CartContext';
 import { formatInrFromPaise } from '../utils/format';
 import { handleProductImageError, PRODUCT_IMAGE_FALLBACK } from '../utils/productImage';
 import { StorefrontPageShell } from '../components/StorefrontPageShell';
+import { EmptyCartState } from '../components/cart/EmptyCartState';
+import { StorefrontHeader } from '../components/StorefrontHeader';
+import { editorialSurface } from '../constants/editorialSurface';
 import { shopSurface } from '../constants/shopSurface';
 
 function CartLineImage({ src, alt }: { src?: string; alt: string }) {
@@ -65,17 +68,30 @@ export function CartPage() {
 
   if (lines.length === 0) {
     return (
-      <StorefrontPageShell>
-        <Typography component="h1" sx={{ ...shopSurface.pageTitle, mb: 2 }}>
-          Cart
-        </Typography>
-        <Typography sx={{ fontFamily: shopSurface.font.body, color: shopSurface.inkMuted, mb: 3 }}>
-          Your cart is empty.
-        </Typography>
-        <Button component={RouterLink} variant="contained" to="/shop" sx={shopSurface.cta}>
-          Continue shopping
-        </Button>
-      </StorefrontPageShell>
+      <Box
+        sx={{
+          minHeight: '100vh',
+          bgcolor: editorialSurface.background,
+          color: editorialSurface.onSurface,
+          pb: { xs: 10, sm: 4 },
+        }}
+      >
+        <StorefrontHeader />
+        <Box
+          component="main"
+          sx={{
+            width: '100%',
+            maxWidth: 1280,
+            mx: 'auto',
+            px: { xs: 2, sm: 3 },
+            pt: { xs: 2.5, sm: 3 },
+            pb: 4,
+            boxSizing: 'border-box',
+          }}
+        >
+          <EmptyCartState />
+        </Box>
+      </Box>
     );
   }
 
@@ -97,11 +113,17 @@ export function CartPage() {
                 <Stack direction="row" spacing={2} sx={{ flex: 1, minWidth: 0 }} alignItems="center">
                   <CartLineImage src={row.image} alt={row.title} />
                   <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography sx={{ fontFamily: shopSurface.font.display, fontWeight: 600, fontSize: '1.05rem' }}>
+                    <Typography sx={{ fontFamily: shopSurface.font.display, fontWeight: 600, fontSize: '1.05rem', color: shopSurface.ink }}>
                       {row.title}
                     </Typography>
                     <Typography variant="body2" sx={{ color: shopSurface.inkMuted, mt: 0.5 }}>
-                      {formatInrFromPaise(row.unitTotalPaise)} per set · {formatInrFromPaise(row.unitTotalPaise * row.qty)}{' '}
+                      <Box component="span" sx={shopSurface.amount}>
+                        {formatInrFromPaise(row.unitTotalPaise)}
+                      </Box>{' '}
+                      per set ·{' '}
+                      <Box component="span" sx={shopSurface.amount}>
+                        {formatInrFromPaise(row.unitTotalPaise * row.qty)}
+                      </Box>{' '}
                       total
                     </Typography>
                     <Typography variant="caption" sx={{ color: shopSurface.inkMuted, display: 'block', mt: 0.5 }}>
@@ -144,11 +166,14 @@ export function CartPage() {
                 <Stack direction="row" spacing={2} sx={{ flex: 1, minWidth: 0 }} alignItems="center">
                   <CartLineImage src={row.line.image} alt={row.line.name} />
                   <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography sx={{ fontFamily: shopSurface.font.display, fontWeight: 600, fontSize: '1.05rem' }}>
+                    <Typography sx={{ fontFamily: shopSurface.font.display, fontWeight: 600, fontSize: '1.05rem', color: shopSurface.ink }}>
                       {row.line.name}
                     </Typography>
                     <Typography variant="body2" sx={{ color: shopSurface.inkMuted, mt: 0.5 }}>
-                      {formatInrFromPaise(row.line.price)} each
+                      <Box component="span" sx={shopSurface.amount}>
+                        {formatInrFromPaise(row.line.price)}
+                      </Box>{' '}
+                      each
                     </Typography>
                   </Box>
                 </Stack>
@@ -181,10 +206,10 @@ export function CartPage() {
 
         <Paper elevation={0} sx={shopSurface.card}>
           <Stack direction="row" justifyContent="space-between" alignItems="center">
-            <Typography sx={{ fontFamily: shopSurface.font.display, fontSize: '1.15rem', fontWeight: 600 }}>
+            <Typography sx={{ fontFamily: shopSurface.font.display, fontSize: '1.15rem', fontWeight: 600, color: shopSurface.ink }}>
               Total
             </Typography>
-            <Typography sx={{ fontFamily: shopSurface.font.display, fontSize: '1.35rem', fontWeight: 600 }}>
+            <Typography sx={{ ...shopSurface.amountLg, fontSize: '1.35rem', color: shopSurface.ink }}>
               {formatInrFromPaise(totalPaise)}
             </Typography>
           </Stack>

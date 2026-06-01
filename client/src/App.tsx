@@ -11,6 +11,7 @@ import { WishlistPage } from './pages/WishlistPage';
 import { ProductDetailPage } from './pages/ProductDetailPage';
 import { CartPage } from './pages/CartPage';
 import { CheckoutPage } from './pages/CheckoutPage';
+import { OrderCompletionPage } from './pages/OrderCompletionPage';
 import { LoginPage } from './pages/LoginPage';
 import { AccountPage } from './pages/account/AccountPage';
 import { OrdersPage } from './pages/account/OrdersPage';
@@ -22,6 +23,7 @@ import { AdminOrdersPage } from './pages/admin/AdminOrdersPage';
 import { AdminReviewsPage } from './pages/admin/AdminReviewsPage';
 import { JewelleryComboDetailPage } from './pages/JewelleryComboDetailPage';
 import { AnalyticsListener } from './components/AnalyticsListener';
+import { ScrollToTop } from './components/ScrollToTop';
 
 function ProtectedCustomer({ children }: { children: ReactElement }) {
   const { user, loading } = useAuth();
@@ -58,6 +60,7 @@ export function App() {
   return (
     <>
       <AnalyticsListener />
+      <ScrollToTop />
       <Routes>
       <Route element={<CustomerShell />}>
         <Route index element={<HomePage />} />
@@ -71,6 +74,14 @@ export function App() {
           element={
             <ProtectedCustomer>
               <CheckoutPage />
+            </ProtectedCustomer>
+          }
+        />
+        <Route
+          path="checkout/complete"
+          element={
+            <ProtectedCustomer>
+              <OrderCompletionPage />
             </ProtectedCustomer>
           }
         />

@@ -45,8 +45,10 @@ export function CustomerShell() {
     location.pathname.startsWith('/account/') ||
     location.pathname.startsWith('/products/') ||
     location.pathname.startsWith('/jewellery-combos/');
-  const isFullBleedRoute = hasInPageStorefrontHeader || location.pathname === '/login';
+  const isOrderComplete = location.pathname === '/checkout/complete';
+  const isFullBleedRoute = hasInPageStorefrontHeader || location.pathname === '/login' || isOrderComplete;
   const isLogin = location.pathname === '/login';
+  const isImmersiveDark = isLogin || isOrderComplete;
 
   const bottomValue = location.pathname === '/shop'
     ? 'shop'
@@ -65,7 +67,7 @@ export function CustomerShell() {
         color="inherit"
         sx={{
           borderBottom: '1px solid',
-          ...(isLogin
+          ...(isImmersiveDark
             ? {
                 borderColor: 'rgba(232, 216, 168, 0.22)',
                 backgroundColor: 'rgba(15, 13, 11, 0.9)',
@@ -89,7 +91,7 @@ export function CustomerShell() {
             sx={{
               flexGrow: 1,
               textDecoration: 'none',
-              ...(isLogin
+              ...(isImmersiveDark
                 ? {
                     fontFamily: authS.font.display,
                     fontWeight: 700,
@@ -162,7 +164,7 @@ export function CustomerShell() {
             aria-label="cart"
             sx={{
               display: isXs ? 'flex' : 'none',
-              ...(isLogin && { color: authS.text.display }),
+              ...(isImmersiveDark && { color: authS.text.display }),
             }}
           >
             <Badge badgeContent={cartCount} color="secondary">
@@ -181,13 +183,13 @@ export function CustomerShell() {
           width: '100%',
           maxWidth: isFullBleedRoute ? '100%' : undefined,
           py: isFullBleedRoute ? 0 : { xs: 2, sm: 3 },
-          bgcolor: location.pathname === '/login' ? 'transparent' : undefined,
+          bgcolor: isImmersiveDark ? 'transparent' : undefined,
         }}
       >
         <Outlet />
       </Container>
 
-      {isXs && (
+      {isXs && !isOrderComplete && (
         <BottomNavigation
           showLabels
           value={bottomValue}
@@ -205,7 +207,7 @@ export function CustomerShell() {
             borderTop: 1,
             zIndex: theme.zIndex.appBar,
             background: `linear-gradient(to top, ${shopSurface.cream} 0%, rgba(255, 255, 255, 0.96) 100%)`,
-            ...(isLogin
+            ...(isImmersiveDark
               ? {
                   bgcolor: 'rgba(15, 13, 11, 0.96)',
                   borderColor: 'rgba(232, 216, 168, 0.18)',

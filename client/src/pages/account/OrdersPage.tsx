@@ -14,8 +14,8 @@ import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import TextField from '@mui/material/TextField';
+import Divider from '@mui/material/Divider';
 import Alert from '@mui/material/Alert';
-import { alpha } from '@mui/material/styles';
 import { apiFetch } from '../../api/client';
 import { formatInrFromPaise } from '../../utils/format';
 import { useAuth } from '../../context/AuthContext';
@@ -85,7 +85,11 @@ function statusLabelColor(status: string): string {
 
 function formatOrderWhen(iso: string) {
   try {
-    return new Date(iso).toLocaleString(undefined, { weekday: 'short', dateStyle: 'medium', timeStyle: 'short' });
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    const date = d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+    const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    return `${date} · ${time}`;
   } catch {
     return iso;
   }
@@ -343,106 +347,95 @@ export function OrdersPage() {
                 elevation={0}
                 sx={{
                   ...shopSurface.card,
-                  p: 2,
+                  p: 0,
                   overflow: 'hidden',
                 }}
               >
-                <Box sx={shopSurface.insetPanel}>
+                <Box sx={{ px: 2, pt: 2, pb: 1.5 }}>
                   <Stack direction="row" justifyContent="space-between" alignItems="flex-start" gap={2}>
-                    <Stack direction="row" gap={1.25} alignItems="flex-start" sx={{ minWidth: 0 }}>
-                      <Typography
-                        component="span"
-                        sx={{ fontSize: '1.35rem', lineHeight: 1.2, flexShrink: 0 }}
-                        aria-hidden
-                      >
-                        {meta.icon}
-                      </Typography>
-                      <Box sx={{ minWidth: 0 }}>
+                    <Box sx={{ minWidth: 0 }}>
+                      <Stack direction="row" alignItems="center" gap={1}>
+                        <Typography component="span" sx={{ fontSize: '1.1rem', lineHeight: 1 }} aria-hidden>
+                          {meta.icon}
+                        </Typography>
                         <Typography
                           sx={{
                             fontFamily: shopSurface.font.display,
                             fontWeight: 600,
-                            fontSize: '1.1rem',
+                            fontSize: '1.05rem',
                             color: statusLabelColor(o.status),
                             lineHeight: 1.3,
                           }}
                         >
                           {meta.label}
                         </Typography>
-                        <Typography variant="body2" sx={{ color: shopSurface.inkMuted, mt: 0.35, lineHeight: 1.45 }}>
+                      </Stack>
+                      {meta.sub ? (
+                        <Typography variant="body2" sx={{ color: shopSurface.inkMuted, mt: 0.5, lineHeight: 1.45 }}>
                           {meta.sub}
                         </Typography>
-                        <Typography variant="caption" sx={{ color: shopSurface.inkMuted, display: 'block', mt: 0.75 }}>
-                          {formatOrderWhen(o.createdAt)}
-                        </Typography>
-                      </Box>
-                    </Stack>
-                    <Typography
-                      sx={{
-                        flexShrink: 0,
-                        fontFamily: shopSurface.font.display,
-                        fontWeight: 600,
-                        fontSize: '1.1rem',
-                        color: shopSurface.ink,
-                      }}
-                    >
+                      ) : null}
+                      <Typography variant="caption" sx={{ color: shopSurface.inkMuted, display: 'block', mt: 0.75 }}>
+                        {formatOrderWhen(o.createdAt)} · Order #{o.id.slice(-8).toUpperCase()}
+                      </Typography>
+                    </Box>
+                    <Typography sx={{ ...shopSurface.amountLg, flexShrink: 0, color: shopSurface.ink }}>
                       {formatInrFromPaise(o.amount)}
                     </Typography>
                   </Stack>
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      fontFamily: 'ui-monospace, monospace',
-                      wordBreak: 'break-all',
-                      display: 'block',
-                      mt: 1.25,
-                      color: shopSurface.inkMuted,
-                    }}
-                  >
-                    Order #{o.id.slice(-8).toUpperCase()}
-                  </Typography>
                 </Box>
 
                 {(o.items?.length ?? 0) > 0 && (
-                  <Stack spacing={1.5} sx={{ pt: 2 }}>
+                  <Stack
+                    divider={<Divider sx={{ borderColor: 'rgba(5, 11, 24, 0.08)' }} />}
+                    sx={{ borderTop: '1px solid rgba(5, 11, 24, 0.08)' }}
+                  >
                     {o.items!.map((line, idx) => {
                       const pid = lineProductId(line);
                       const showReview = o.status === 'delivered' && line.review;
                       return (
-                        <Paper
-                          key={`${o.id}-${pid}-${idx}`}
-                          elevation={0}
-                          sx={{
-                            ...shopSurface.insetPanel,
-                            p: 0,
-                            overflow: 'hidden',
-                          }}
-                        >
+                        <Box key={`${o.id}-${pid}-${idx}`}>
                           <ListItemButton
                             component={RouterLink}
                             to={`/products/${pid}`}
                             alignItems="center"
                             sx={{
                               py: 1.5,
-                              px: 1.5,
-                              gap: 2,
+                              px: 2,
+                              gap: 1.5,
                               color: shopSurface.ink,
                               '&:hover': { bgcolor: 'rgba(5, 11, 24, 0.04)' },
                             }}
                           >
                             <OrderLineThumb src={line.image} alt={line.name} />
                             <ListItemText
-                              primary={line.name}
-                              secondary={`Qty ${line.qty} · ${formatInrFromPaise(line.price)} each`}
-                              primaryTypographyProps={{
-                                fontWeight: 600,
-                                variant: 'body2',
-                                sx: { lineHeight: 1.35, color: shopSurface.ink, fontFamily: shopSurface.font.body },
-                              }}
-                              secondaryTypographyProps={{
-                                variant: 'caption',
-                                sx: { color: shopSurface.inkMuted },
-                              }}
+                              disableTypography
+                              primary={
+                                <Typography
+                                  variant="body2"
+                                  sx={{
+                                    fontWeight: 600,
+                                    lineHeight: 1.35,
+                                    color: shopSurface.ink,
+                                    fontFamily: shopSurface.font.body,
+                                  }}
+                                >
+                                  {line.name}
+                                </Typography>
+                              }
+                              secondary={
+                                <Stack direction="row" alignItems="baseline" spacing={0.75} sx={{ mt: 0.35 }}>
+                                  <Typography variant="caption" sx={{ color: shopSurface.inkMuted }}>
+                                    Qty {line.qty}
+                                  </Typography>
+                                  <Typography variant="caption" sx={{ color: shopSurface.inkMuted }} aria-hidden>
+                                    ·
+                                  </Typography>
+                                  <Typography variant="caption" sx={{ ...shopSurface.amount, color: shopSurface.ink }}>
+                                    {formatInrFromPaise(line.price)} each
+                                  </Typography>
+                                </Stack>
+                              }
                             />
                             <Typography sx={{ fontSize: '1.25rem', fontWeight: 300, color: shopSurface.inkMuted }} aria-hidden>
                               ›
@@ -454,19 +447,26 @@ export function OrdersPage() {
                               sx={{
                                 px: 2,
                                 py: 1.75,
-                                borderTop: '1px solid',
-                                borderColor: 'divider',
-                                bgcolor: (t) => alpha(t.palette.secondary.main, 0.12),
+                                borderTop: '1px solid rgba(5, 11, 24, 0.08)',
+                                bgcolor: shopSurface.creamDeep,
                               }}
                             >
                               <Stack alignItems="center" spacing={1.25}>
-                                <Typography variant="caption" fontWeight={800} color="secondary.dark" letterSpacing={0.5}>
-                                  RATE & REVIEW
+                                <Typography
+                                  variant="caption"
+                                  sx={{
+                                    fontWeight: 700,
+                                    letterSpacing: '0.12em',
+                                    textTransform: 'uppercase',
+                                    color: shopSurface.inkMuted,
+                                  }}
+                                >
+                                  Rate & review
                                 </Typography>
                                 {line.review.alreadyReviewed && line.review.myRating != null ? (
                                   <>
                                     <Rating value={line.review.myRating} readOnly size="large" />
-                                    <Typography variant="caption" color="text.secondary">
+                                    <Typography variant="caption" sx={{ color: shopSurface.inkMuted }}>
                                       Thanks for your feedback
                                     </Typography>
                                   </>
@@ -482,16 +482,27 @@ export function OrdersPage() {
                                         }
                                       }}
                                     />
-                                    <Typography variant="caption" color="text.secondary" textAlign="center" sx={{ px: 1 }}>
+                                    <Typography
+                                      variant="caption"
+                                      textAlign="center"
+                                      sx={{ px: 1, color: shopSurface.inkMuted, lineHeight: 1.45 }}
+                                    >
                                       Share your experience — it helps other shoppers
                                     </Typography>
                                     <Button
                                       size="small"
                                       variant="outlined"
-                                      color="secondary"
                                       onClick={() =>
                                         setQuickReview({ productId: pid, productName: line.name, rating: 5 })
                                       }
+                                      sx={{
+                                        borderColor: 'rgba(5, 11, 24, 0.2)',
+                                        color: shopSurface.ink,
+                                        fontWeight: 600,
+                                        fontSize: '0.75rem',
+                                        letterSpacing: '0.06em',
+                                        textTransform: 'uppercase',
+                                      }}
                                     >
                                       Write review
                                     </Button>
@@ -500,7 +511,7 @@ export function OrdersPage() {
                               </Stack>
                             </Box>
                           )}
-                        </Paper>
+                        </Box>
                       );
                     })}
                   </Stack>

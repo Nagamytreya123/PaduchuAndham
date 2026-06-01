@@ -18,7 +18,7 @@ import { ShippingAddressFields } from '../components/ShippingAddressFields';
 import { emptyShippingForm, type SavedAddressRow, type ShippingAddressForm } from '../types/address';
 import { StorefrontPageShell } from '../components/StorefrontPageShell';
 import { shopSurface } from '../constants/shopSurface';
-import { trackBeginCheckout, trackPurchase } from '../analytics';
+import { trackBeginCheckout } from '../analytics';
 
 function loadRazorpay(): Promise<boolean> {
   return new Promise((resolve) => {
@@ -35,21 +35,12 @@ function loadRazorpay(): Promise<boolean> {
   });
 }
 
-const fieldSx = {
-  '& .MuiInputLabel-root': { color: shopSurface.inkMuted },
-  '& .MuiOutlinedInput-root': {
-    color: shopSurface.ink,
-    bgcolor: 'rgba(255,255,255,0.85)',
-    '& fieldset': { borderColor: 'rgba(5, 11, 24, 0.15)' },
-    '&:hover fieldset': { borderColor: 'rgba(5, 11, 24, 0.28)' },
-    '&.Mui-focused fieldset': { borderColor: shopSurface.ink },
-  },
-  '& .MuiFormHelperText-root': { color: shopSurface.inkMuted },
-};
+const fieldSx = shopSurface.lightField;
+const sectionLabelSx = { ...shopSurface.pdpTypography.label, color: shopSurface.inkMuted, mb: 1 };
 
 export function CheckoutPage() {
   const { user } = useAuth();
-  const { lines, totalPaise, clear } = useCart();
+  const { lines, totalPaise } = useCart();
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -187,29 +178,22 @@ export function CheckoutPage() {
           orderRef: orderRes.orderId.slice(-8),
         },
         theme: { color: '#050B18' },
-        handler: async (response: {
+        handler: (response: {
           razorpay_order_id: string;
           razorpay_payment_id: string;
           razorpay_signature: string;
         }) => {
-          try {
-            await apiFetch('/api/orders/verify-payment', {
-              method: 'POST',
-              body: JSON.stringify({
-                orderId: orderRes.orderId,
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature,
-              }),
-            });
-            trackPurchase(orderRes.orderId, lines, totalPaise);
-            clear();
-            navigate('/account', { replace: true });
-          } catch (e) {
-            setError(e instanceof Error ? e.message : 'Verification failed');
-          } finally {
-            setBusy(false);
-          }
+          setBusy(false);
+          navigate('/checkout/complete', {
+            replace: true,
+            state: {
+              orderId: orderRes.orderId,
+              amount: orderRes.amount,
+              totalPaise,
+              lines: [...lines],
+              razorpay: response,
+            },
+          });
         },
         modal: {
           ondismiss: () => setBusy(false),
@@ -246,25 +230,19 @@ export function CheckoutPage() {
         </Typography>
 
         <Paper elevation={0} sx={shopSurface.insetPanel}>
-          <Typography sx={{ fontFamily: shopSurface.font.display, fontSize: '1.15rem', fontWeight: 600 }}>
+          <Typography sx={{ ...shopSurface.amountLg, fontSize: '1.35rem', color: shopSurface.ink }}>
             {formatInrFromPaise(totalPaise)}
           </Typography>
-          <Typography variant="body2" sx={{ color: shopSurface.inkMuted, mt: 0.5 }}>
+          <Typography
+            variant="body2"
+            sx={{ fontFamily: shopSurface.font.body, color: shopSurface.inkMuted, mt: 0.5 }}
+          >
             Order total · {lines.length} line(s) in your bag
           </Typography>
         </Paper>
 
         <Box>
-          <Typography
-            sx={{
-              fontSize: '0.6875rem',
-              fontWeight: 600,
-              letterSpacing: '0.14em',
-              textTransform: 'uppercase',
-              color: shopSurface.inkMuted,
-              mb: 1,
-            }}
-          >
+          <Typography sx={sectionLabelSx}>
             Payment methods
           </Typography>
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
@@ -274,7 +252,10 @@ export function CheckoutPage() {
             <Chip size="small" variant="outlined" label="Wallets" sx={{ borderColor: 'rgba(5,11,24,0.2)', color: shopSurface.ink }} />
             <Chip size="small" variant="outlined" label="Net banking" sx={{ borderColor: 'rgba(5,11,24,0.2)', color: shopSurface.ink }} />
           </Stack>
-          <Typography variant="body2" sx={{ color: shopSurface.inkMuted, mt: 1 }}>
+          <Typography
+            variant="body2"
+            sx={{ fontFamily: shopSurface.font.body, color: shopSurface.inkMuted, mt: 1 }}
+          >
             You will complete payment securely in Razorpay.
           </Typography>
         </Box>
@@ -346,6 +327,7 @@ export function CheckoutPage() {
           <ShippingAddressFields
             value={address}
             showLabel={false}
+            fieldSx={fieldSx}
             onChange={(next) => {
               setAddress(next);
               setSelectedSavedId('');
