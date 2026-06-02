@@ -15,6 +15,8 @@ import { OrderCompletionPage } from './pages/OrderCompletionPage';
 import { LoginPage } from './pages/LoginPage';
 import { AccountPage } from './pages/account/AccountPage';
 import { OrdersPage } from './pages/account/OrdersPage';
+import { OrderDetailPage } from './pages/account/OrderDetailPage';
+import { OrderItemDetailPage } from './pages/account/OrderItemDetailPage';
 import { SavedAddressesPage } from './pages/account/SavedAddressesPage';
 import { DashboardPage } from './pages/admin/DashboardPage';
 import { AdminProductsPage } from './pages/admin/AdminProductsPage';
@@ -79,7 +81,7 @@ export function App() {
         />
         <Route path="login" element={<LoginPage />} />
         <Route
-          path="account"
+          path="account/*"
           element={
             <ProtectedCustomer>
               <AccountLayout />
@@ -88,6 +90,8 @@ export function App() {
         >
           <Route index element={<AccountPage />} />
           <Route path="orders" element={<OrdersPage />} />
+          <Route path="orders/:orderId/items/:productId" element={<OrderItemDetailPage />} />
+          <Route path="orders/:orderId" element={<OrderDetailPage />} />
           <Route path="addresses" element={<SavedAddressesPage />} />
         </Route>
       </Route>
