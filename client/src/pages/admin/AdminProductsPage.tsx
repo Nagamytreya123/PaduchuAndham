@@ -78,6 +78,29 @@ async function patchMultipart(url: string, fd: FormData): Promise<void> {
   }
 }
 
+async function postJson(url: string, body: Record<string, unknown>): Promise<void> {
+  const res = await fetch(url, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const text = await res.text();
+  let data: unknown = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+  if (!res.ok) {
+    const msg =
+      typeof data === 'object' && data !== null && 'error' in data
+        ? String((data as { error: unknown }).error)
+        : res.statusText;
+    throw new Error(msg || `HTTP ${res.status}`);
+  }
+}
+
 async function patchJson(url: string, body: Record<string, unknown>): Promise<void> {
   const res = await fetch(url, {
     method: 'PATCH',
@@ -103,9 +126,13 @@ async function patchJson(url: string, body: Record<string, unknown>): Promise<vo
 
 function splitList(s: string): string[] {
   return s
-    .split(',')
+    .split(/[,\n]+/)
     .map((x) => x.trim())
     .filter(Boolean);
+}
+
+function isEmbeddedProductImage(url: string): boolean {
+  return url.startsWith('data:image/');
 }
 
 const OBJECT_ID_RE = /^[a-fA-F0-9]{24}$/;
@@ -448,6 +475,7 @@ export function AdminProductsPage() {
   const [editCompareAtRupee, setEditCompareAtRupee] = useState('');
   const [editStock, setEditStock] = useState('');
   const [editImageUrls, setEditImageUrls] = useState('');
+  const [editEmbeddedImages, setEditEmbeddedImages] = useState<string[]>([]);
   const [editIsActive, setEditIsActive] = useState(true);
   const [editImageFiles, setEditImageFiles] = useState<File[]>([]);
 
@@ -597,7 +625,8 @@ export function AdminProductsPage() {
     setEditPriceRupee((p.price / 100).toFixed(2));
     setEditCompareAtRupee(p.compareAtPrice != null ? (p.compareAtPrice / 100).toFixed(2) : '');
     setEditStock(String(p.stock));
-    setEditImageUrls(p.images.join(', '));
+    setEditImageUrls(p.images.filter((img) => !isEmbeddedProductImage(img)).join(', '));
+    setEditEmbeddedImages(p.images.filter(isEmbeddedProductImage));
     setEditImageFiles([]);
     setEditIsActive(p.isActive !== false);
     setEditOpen(true);
@@ -635,6 +664,7 @@ export function AdminProductsPage() {
       }
 
       const urls = splitList(editImageUrls);
+      const combinedImages = [...urls, ...editEmbeddedImages];
 
       const editCat = resolvedEditCategory();
 
@@ -680,8 +710,8 @@ export function AdminProductsPage() {
         isActive: editIsActive,
       };
 
-      if (urls.length > 0) {
-        payload.images = urls;
+      if (combinedImages.length > 0) {
+        payload.images = combinedImages;
       } else if (editImageFiles.length > 0) {
         payload.images = [];
       }
@@ -726,6 +756,7 @@ export function AdminProductsPage() {
       setEditOpen(false);
       setEditId(null);
       setEditImageFiles([]);
+      setEditEmbeddedImages([]);
       await reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed');
@@ -834,7 +865,7 @@ export function AdminProductsPage() {
         weightGrams: wG,
         careInstructions: careInstructions.trim() || undefined,
         compareAtPrice: comparePaise,
-        images: urls.length ? urls : undefined,
+        images: urls,
       };
 
       if (cat === 'Watches') {
@@ -850,11 +881,14 @@ export function AdminProductsPage() {
       }
       if (slugTrim.length > 0) payload.slug = slugTrim;
 
-      const fd = new FormData();
-      fd.append('data', JSON.stringify(payload));
-      appendFilesToFormData(fd, imageFiles);
-
-      await postMultipart('/api/admin/products', fd);
+      if (imageFiles.length > 0) {
+        const fd = new FormData();
+        fd.append('data', JSON.stringify(payload));
+        appendFilesToFormData(fd, imageFiles);
+        await postMultipart('/api/admin/products', fd);
+      } else {
+        await postJson('/api/admin/products', payload);
+      }
       setName('');
       setDescription('');
       setCategory('Watches');
@@ -1287,12 +1321,13 @@ export function AdminProductsPage() {
                 value={imageUrls}
                 onChange={(e) => setImageUrls(e.target.value)}
                 fullWidth
-                helperText="Direct image links only (https://…jpg). Google Drive share links do not work — use Upload image files instead."
-              />
-              <AdminMultiImageUpload
-                files={imageFiles}
-                onChange={setImageFiles}
-                disabled={addSaving}
+              helperText="Direct https:// links or Google Drive share links (file must be shared as Anyone with the link). Uploads are stored as compressed base64."
+            />
+            <AdminMultiImageUpload
+              files={imageFiles}
+              onChange={setImageFiles}
+              disabled={addSaving}
+              helperText="Or upload image files — large photos are compressed automatically (up to 10 MB each)."
               />
             </Stack>
         </DialogContent>
@@ -1480,15 +1515,15 @@ export function AdminProductsPage() {
               value={editImageUrls}
               onChange={(e) => setEditImageUrls(e.target.value)}
               fullWidth
-              helperText="Direct image links only. Google Drive links are ignored — use Upload image files."
+              helperText="https:// or Google Drive share links (Anyone with the link). Uploads stored as base64."
             />
             <AdminMultiImageUpload
               files={editImageFiles}
               onChange={setEditImageFiles}
               disabled={editSaving}
               label="Upload additional image files"
-              helperText="New uploads are appended to the images above (max 15 total)"
-              existingUrls={splitList(editImageUrls)}
+              helperText="New uploads are appended (max 15 total)"
+              existingUrls={[...splitList(editImageUrls), ...editEmbeddedImages]}
             />
           </Stack>
         </DialogContent>

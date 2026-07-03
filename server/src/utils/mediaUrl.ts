@@ -10,7 +10,13 @@ export function normalizeStoredImageUrl(url: string): string {
   if (t.startsWith('data:')) return t;
   if (t.startsWith('/uploads/')) return t;
   try {
-    const parsed = new URL(t);
+    const parsed = new URL(t.startsWith('http') ? t : `https://${t}`);
+    if (parsed.hostname.includes('drive.google.com')) {
+      const fileMatch = parsed.pathname.match(/\/file\/d\/([^/]+)/);
+      if (fileMatch?.[1]) {
+        return `https://drive.google.com/uc?export=view&id=${fileMatch[1]}`;
+      }
+    }
     if (parsed.pathname.startsWith('/uploads/')) return parsed.pathname;
   } catch {
     /* not an absolute URL */

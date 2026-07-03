@@ -22,13 +22,58 @@ export function imageListByteSize(images: string[]): number {
 }
 
 export function assertProductImagesFitDocument(images: string[]): void {
-  const total = imageListByteSize(images);
+  const embedded = images.filter((s) => s.startsWith('data:image/'));
+  const total = imageListByteSize(embedded);
   if (total > MAX_PRODUCT_IMAGES_BYTES) {
     const mb = (MAX_PRODUCT_IMAGES_BYTES / (1024 * 1024)).toFixed(0);
     throw new Error(
-      `Total image data exceeds ${mb} MB for one product (MongoDB limit). Use fewer images.`,
+      `Total uploaded image data exceeds ${mb} MB for one product (MongoDB limit). Use fewer images.`,
     );
   }
+}
+
+/** Extract Google Drive file id from share / open / uc links. */
+export function extractGoogleDriveFileId(url: string): string | null {
+  try {
+    const u = new URL(url.trim());
+    if (!u.hostname.includes('drive.google.com')) return null;
+
+    const fileMatch = u.pathname.match(/\/file\/d\/([^/]+)/);
+    if (fileMatch?.[1]) return fileMatch[1];
+
+    const id = u.searchParams.get('id');
+    if (id) return id;
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** Direct embed URL for publicly shared Drive images. */
+export function googleDriveEmbedUrl(fileId: string): string {
+  return `https://drive.google.com/uc?export=view&id=${fileId}`;
+}
+
+/** Add https:// for common pasted links; convert Google Drive share links to embed URLs. */
+export function normalizeExternalImageUrl(url: string): string {
+  const t = url.trim();
+  if (!t) return t;
+  if (t.startsWith('data:') || t.startsWith('/uploads/')) return t;
+
+  let withProtocol = t;
+  if (withProtocol.startsWith('http://') || withProtocol.startsWith('https://')) {
+    /* keep */
+  } else if (withProtocol.startsWith('//')) {
+    withProtocol = `https:${withProtocol}`;
+  } else if (/^[\w.-]+\.[a-z]{2,}/i.test(withProtocol) || withProtocol.startsWith('www.')) {
+    withProtocol = `https://${withProtocol}`;
+  }
+
+  const driveId = extractGoogleDriveFileId(withProtocol);
+  if (driveId) return googleDriveEmbedUrl(driveId);
+
+  return withProtocol;
 }
 
 function resizedPipeline(buffer: Buffer, meta: sharp.Metadata) {
@@ -99,7 +144,9 @@ export function isDirectImageUrl(url: string): boolean {
   if (!t.startsWith('http://') && !t.startsWith('https://')) return false;
   try {
     const u = new URL(t);
-    if (u.hostname.includes('drive.google.com')) return false;
+    if (u.hostname.includes('drive.google.com')) {
+      return u.pathname === '/uc' && Boolean(u.searchParams.get('id'));
+    }
     if (u.hostname.includes('dropbox.com') && u.pathname.includes('/s/')) return false;
     return true;
   } catch {
@@ -108,7 +155,17 @@ export function isDirectImageUrl(url: string): boolean {
 }
 
 export function filterValidImageUrls(urls: string[]): string[] {
-  return urls.map((u) => u.trim()).filter((u) => u && isDirectImageUrl(u));
+  return urls
+    .map((u) => normalizeExternalImageUrl(u.trim()))
+    .filter((u) => u && isDirectImageUrl(u));
+}
+
+export function imageUrlValidationError(rawUrls: string[]): string | null {
+  const trimmed = rawUrls.map((u) => u.trim()).filter(Boolean);
+  if (trimmed.length === 0) return null;
+  const valid = filterValidImageUrls(trimmed);
+  if (valid.length > 0) return null;
+  return 'No valid image URLs — use direct https:// image links or a public Google Drive share link';
 }
 
 export function mongoErrorMessage(err: unknown): string | null {

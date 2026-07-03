@@ -8,6 +8,7 @@ import { productToJson } from '../utils/productJson.js';
 import {
   assertProductImagesFitDocument,
   filterValidImageUrls,
+  imageUrlValidationError,
   mongoErrorMessage,
   persistUploadedMulterFiles,
 } from '../utils/productImageStorage.js';
@@ -98,8 +99,18 @@ router.post('/', productImageUpload, async (req, res) => {
       return;
     }
     const uploaded = await collectUploadedImageUrls(req);
-    const urlImages = filterValidImageUrls(body.images ?? []);
+    const rawUrlImages = body.images ?? [];
+    const urlErr = imageUrlValidationError(rawUrlImages);
+    if (urlErr && uploaded.length === 0) {
+      res.status(400).json({ error: urlErr });
+      return;
+    }
+    const urlImages = filterValidImageUrls(rawUrlImages);
     const images = [...uploaded, ...urlImages];
+    if (images.length === 0) {
+      res.status(400).json({ error: 'Add at least one product image (upload a file or paste an image URL)' });
+      return;
+    }
     if (images.length > MAX_PRODUCT_IMAGES) {
       res.status(400).json({ error: `Maximum ${MAX_PRODUCT_IMAGES} images per product` });
       return;
@@ -237,7 +248,14 @@ router.patch('/:id', productImageUpload, async (req, res) => {
     if (patch.price !== undefined) doc.price = patch.price;
     if (patch.stock !== undefined) doc.stock = patch.stock;
     if (patch.isActive !== undefined) doc.isActive = patch.isActive;
-    if (patch.images !== undefined) doc.images = filterValidImageUrls(patch.images);
+    if (patch.images !== undefined) {
+      const urlErr = imageUrlValidationError(patch.images);
+      if (urlErr) {
+        res.status(400).json({ error: urlErr });
+        return;
+      }
+      doc.images = filterValidImageUrls(patch.images);
+    }
     if (patch.category !== undefined) doc.category = patch.category;
     if (patch.subcategory !== undefined) doc.subcategory = patch.subcategory;
     if (patch.sku !== undefined) doc.sku = patch.sku;

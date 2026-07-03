@@ -48,6 +48,12 @@ export function resolveMediaUrl(url: string | undefined | null): string {
   if (t.startsWith('http://') || t.startsWith('https://')) {
     try {
       const parsed = new URL(t);
+      if (parsed.hostname.includes('drive.google.com')) {
+        const fileMatch = parsed.pathname.match(/\/file\/d\/([^/]+)/);
+        if (fileMatch?.[1]) {
+          return `https://drive.google.com/uc?export=view&id=${fileMatch[1]}`;
+        }
+      }
       if (parsed.pathname.startsWith('/uploads/')) {
         return resolveMediaUrl(parsed.pathname);
       }
