@@ -20,6 +20,7 @@ import {
   IconLogout,
   IconMenu,
   IconReviews,
+  IconSettings,
   IconShipping,
 } from '../icons';
 import useMediaQuery from '@mui/material/useMediaQuery';
@@ -41,6 +42,7 @@ const links = [
   { to: '/admin/jewellery-combos', label: 'Jewellery combos', icon: <IconInventory fontSize="small" /> },
   { to: '/admin/orders', label: 'Orders', icon: <IconShipping fontSize="small" /> },
   { to: '/admin/reviews', label: 'Reviews', icon: <IconReviews fontSize="small" /> },
+  { to: '/admin/settings', label: 'Storefront', icon: <IconSettings fontSize="small" /> },
 ];
 
 export function AdminShell() {

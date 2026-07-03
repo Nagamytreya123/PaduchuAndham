@@ -10,6 +10,7 @@
     "seed": "tsx src/scripts/seed.ts",
     "seed:products": "tsx src/scripts/seedProducts.ts",
     "clear:products": "tsx src/scripts/clearProducts.ts",
+    "clear:orders": "tsx src/scripts/clearOrders.ts",
     "seed:starter": "tsx src/scripts/seedStarterProducts.ts",
     "fix:product-images": "tsx src/scripts/fixProductImages.ts"
   },

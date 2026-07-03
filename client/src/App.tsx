@@ -24,6 +24,7 @@ import { AdminProductsPage } from './pages/admin/AdminProductsPage';
 import { AdminJewelleryCombosPage } from './pages/admin/AdminJewelleryCombosPage';
 import { AdminOrdersPage } from './pages/admin/AdminOrdersPage';
 import { AdminReviewsPage } from './pages/admin/AdminReviewsPage';
+import { AdminSettingsPage } from './pages/admin/AdminSettingsPage';
 import { JewelleryComboDetailPage } from './pages/JewelleryComboDetailPage';
 import { AnalyticsListener } from './components/AnalyticsListener';
 import { ScrollToTop } from './components/ScrollToTop';
@@ -111,6 +112,7 @@ export function App() {
         <Route path="jewellery-combos" element={<AdminJewelleryCombosPage />} />
         <Route path="orders" element={<AdminOrdersPage />} />
         <Route path="reviews" element={<AdminReviewsPage />} />
+        <Route path="settings" element={<AdminSettingsPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

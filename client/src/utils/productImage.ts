@@ -16,12 +16,15 @@ export const PRODUCT_IMAGE_FALLBACK =
   `data:image/svg+xml,${encodeURIComponent(GRAY_PLACEHOLDER_SVG)}`;
 
 function mediaBaseOrigin(): string {
+  const mediaOrigin = (import.meta.env.VITE_MEDIA_ORIGIN ?? '').replace(/\/$/, '');
+  if (mediaOrigin) return mediaOrigin;
+
   const raw = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
   if (!raw || typeof window === 'undefined') return raw;
 
   try {
     const api = new URL(raw);
-    // Dev: load /uploads through the Vite origin (proxied) instead of a cross-port API URL.
+    // Dev: load /uploads through the Vite origin (proxied) when API and files are both local.
     if (
       import.meta.env.DEV &&
       api.hostname === window.location.hostname &&

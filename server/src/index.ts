@@ -29,6 +29,8 @@ import jewelleryCombosRoutes from './routes/jewelleryCombos.js';
 import cartRoutes from './routes/cart.js';
 import webhookRoutes from './routes/webhooks.js';
 import meRoutes from './routes/me.js';
+import siteSettingsRoutes from './routes/siteSettings.js';
+import adminSiteSettingsRoutes from './routes/adminSiteSettings.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -84,6 +86,8 @@ app.use('/api/admin/products', optionalAuth, adminProductsRoutes);
 app.use('/api/admin/jewellery-combos', optionalAuth, adminJewelleryCombosRoutes);
 app.use('/api/orders', optionalAuth, ordersRoutes);
 app.use('/api/admin/orders', optionalAuth, adminOrdersRoutes);
+app.use('/api/site-settings', siteSettingsRoutes);
+app.use('/api/admin/site-settings', optionalAuth, adminSiteSettingsRoutes);
 app.use('/api/admin/reviews', optionalAuth, adminReviewsRoutes);
 
 app.use((_req, res) => {

@@ -345,12 +345,14 @@ export function HomePage() {
 
   const [combos, setCombos] = useState<JewelleryComboSummary[]>([]);
   const [combosLoading, setCombosLoading] = useState(true);
+  const [homeScrollAnimationEnabled, setHomeScrollAnimationEnabled] = useState(false);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const collectionNavRef = useRef({ hash: '', search: '' });
   const { scrollYProgress } = useScroll({
-    target: containerRef,
-    offset: ["start start", "end end"]
+    target: homeScrollAnimationEnabled ? containerRef : undefined,
+    offset: ['start start', 'end end'],
   });
 
   /** After category tiles set `?…#collection`, scroll there and move keyboard focus (RR does not do this reliably). */
@@ -377,8 +379,10 @@ export function HomePage() {
     });
   }, [location.hash, location.pathname, searchParams]);
 
-  // Lenis smooth scrolling setup
+  // Lenis smooth scrolling — only when the scroll animation hero is enabled
   useEffect(() => {
+    if (!homeScrollAnimationEnabled) return;
+
     const lenis = new Lenis({
       duration: 1.2,
       easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
@@ -399,6 +403,21 @@ export function HomePage() {
     return () => {
       lenis.destroy();
     };
+  }, [homeScrollAnimationEnabled]);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const data = await apiFetch<{ settings: { homeScrollAnimationEnabled: boolean } }>(
+          '/api/site-settings',
+        );
+        setHomeScrollAnimationEnabled(data.settings.homeScrollAnimationEnabled);
+      } catch {
+        setHomeScrollAnimationEnabled(false);
+      } finally {
+        setSettingsLoaded(true);
+      }
+    })();
   }, []);
 
   useEffect(() => {
@@ -465,132 +484,147 @@ export function HomePage() {
   const textY = useTransform(scrollYProgress, [0, 0.5], [0, -100]);
   const textOpacity = useTransform(scrollYProgress, [0, 0.3], [1, 0]);
 
+  if (!settingsLoaded) {
+    return <LuxuryShowcaseLoader variant="fullscreen" tone="dark" aria-label="Loading home page" />;
+  }
+
   return (
-    <Box sx={{ backgroundColor: '#0F0F10', minHeight: '100vh', color: '#F5F5F5' }}>
+    <Box
+      sx={{
+        backgroundColor: homeScrollAnimationEnabled ? '#0F0F10' : shopSurface.creamDeep,
+        minHeight: '100vh',
+        color: homeScrollAnimationEnabled ? '#F5F5F5' : shopSurface.ink,
+      }}
+    >
       <StorefrontHeader />
-      {/* Scroll Sequence Container */}
-      <Box ref={containerRef} sx={{ height: '400vh', position: 'relative', isolation: 'isolate' }}>
-        <FrameSequence scrollYProgress={scrollYProgress} />
+      {homeScrollAnimationEnabled ? (
+        <>
+          {/* Scroll Sequence Container */}
+          <Box ref={containerRef} sx={{ height: '400vh', position: 'relative', isolation: 'isolate' }}>
+            <FrameSequence scrollYProgress={scrollYProgress} />
 
-        {/* Cinematic Hero Text */}
-        <Box
-          component={motion.div}
-          style={{ y: textY, opacity: textOpacity }}
-          sx={{
-            position: 'absolute',
-            top: '40vh',
-            left: 0,
-            right: 0,
-            width: '100%',
-            textAlign: 'center',
-            px: 2,
-            zIndex: 2,
-            pointerEvents: 'none',
-            '& .MuiButton-root': { pointerEvents: 'auto' },
-          }}
-        >
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 1.5, ease: "easeOut" }}
-          >
-            <Typography
-              variant="h1"
-              gutterBottom
+            {/* Cinematic Hero Text */}
+            <Box
+              component={motion.div}
+              style={{ y: textY, opacity: textOpacity }}
               sx={{
-                fontFamily: shopSurface.font.display,
-                fontWeight: 400,
-                color: shopSurface.cream,
-                letterSpacing: '0.02em',
+                position: 'absolute',
+                top: '40vh',
+                left: 0,
+                right: 0,
+                width: '100%',
+                textAlign: 'center',
+                px: 2,
+                zIndex: 2,
+                pointerEvents: 'none',
+                '& .MuiButton-root': { pointerEvents: 'auto' },
               }}
             >
-              Timeless Elegance
-            </Typography>
-            <Typography
-              variant="h4"
-              sx={{
-                mb: 4,
-                fontFamily: shopSurface.font.display,
-                fontWeight: 400,
-                fontStyle: 'italic',
-                color: 'rgba(242, 238, 230, 0.88)',
-              }}
-            >
-              Crafted for Every Moment
-            </Typography>
-            <Button 
-              variant="contained" 
-              color="primary"
-              size="large"
-              sx={{ 
-                border: '1px solid #D6B36A',
-                background: 'transparent',
-                color: '#D6B36A',
-                '&:hover': {
-                  background: 'rgba(214, 179, 106, 0.1)',
-                }
-              }}
-              onClick={() => {
-                document.getElementById('shop')?.scrollIntoView({ behavior: 'smooth' });
-              }}
-            >
-              Explore categories
-            </Button>
-          </motion.div>
-        </Box>
-      </Box>
-
-      {/* Brand Story Section */}
-      <Box sx={{ py: 15, px: { xs: 2, md: 8 }, background: '#0F0F10', position: 'relative', zIndex: 10 }}>
-        <Container maxWidth="lg">
-          <Grid container spacing={8} alignItems="center">
-            <Grid item xs={12} md={6}>
               <motion.div
-                initial={{ opacity: 0, x: -50 }}
-                whileInView={{ opacity: 1, x: 0 }}
-                viewport={{ once: true, margin: "-100px" }}
-                transition={{ duration: 1.2, ease: "easeOut" }}
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 1.5, ease: 'easeOut' }}
               >
                 <Typography
-                  variant="h2"
-                  sx={{ mb: 3, fontFamily: shopSurface.font.display, fontWeight: 500, color: shopSurface.cream }}
+                  variant="h1"
+                  gutterBottom
+                  sx={{
+                    fontFamily: shopSurface.font.display,
+                    fontWeight: 400,
+                    color: shopSurface.cream,
+                    letterSpacing: '0.02em',
+                  }}
                 >
-                  Designed to elevate modern femininity.
+                  Timeless Elegance
                 </Typography>
                 <Typography
-                  variant="body1"
+                  variant="h4"
                   sx={{
-                    fontFamily: shopSurface.font.body,
-                    color: 'rgba(242, 238, 230, 0.65)',
-                    fontSize: '1.1rem',
                     mb: 4,
-                    maxWidth: 480,
+                    fontFamily: shopSurface.font.display,
+                    fontWeight: 400,
+                    fontStyle: 'italic',
+                    color: 'rgba(242, 238, 230, 0.88)',
                   }}
                 >
-                  Each piece is meticulously crafted using only the finest materials. We blend classic techniques with contemporary design to create accessories that are not just worn, but experienced.
+                  Crafted for Every Moment
                 </Typography>
-              </motion.div>
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                whileInView={{ opacity: 1, scale: 1 }}
-                viewport={{ once: true, margin: "-100px" }}
-                transition={{ duration: 1.2, ease: "easeOut" }}
-              >
-                <Box
+                <Button
+                  variant="contained"
+                  color="primary"
+                  size="large"
                   sx={{
-                    filter: 'grayscale(20%) contrast(110%)',
-                    boxShadow: '0 20px 40px rgba(0,0,0,0.35)',
+                    border: '1px solid #D6B36A',
+                    background: 'transparent',
+                    color: '#D6B36A',
+                    '&:hover': {
+                      background: 'rgba(214, 179, 106, 0.1)',
+                    },
+                  }}
+                  onClick={() => {
+                    document.getElementById('shop')?.scrollIntoView({ behavior: 'smooth' });
                   }}
                 >
-                  <EditorialImageFrame src="/frames/frame_0150.webp" alt="Brand aesthetics" inset />
-                </Box>
+                  Explore categories
+                </Button>
               </motion.div>
-            </Grid>
-          </Grid>
-        </Container>
-      </Box>
+            </Box>
+          </Box>
+
+          {/* Brand Story Section */}
+          <Box sx={{ py: 15, px: { xs: 2, md: 8 }, background: '#0F0F10', position: 'relative', zIndex: 10 }}>
+            <Container maxWidth="lg">
+              <Grid container spacing={8} alignItems="center">
+                <Grid item xs={12} md={6}>
+                  <motion.div
+                    initial={{ opacity: 0, x: -50 }}
+                    whileInView={{ opacity: 1, x: 0 }}
+                    viewport={{ once: true, margin: '-100px' }}
+                    transition={{ duration: 1.2, ease: 'easeOut' }}
+                  >
+                    <Typography
+                      variant="h2"
+                      sx={{ mb: 3, fontFamily: shopSurface.font.display, fontWeight: 500, color: shopSurface.cream }}
+                    >
+                      Designed to elevate modern femininity.
+                    </Typography>
+                    <Typography
+                      variant="body1"
+                      sx={{
+                        fontFamily: shopSurface.font.body,
+                        color: 'rgba(242, 238, 230, 0.65)',
+                        fontSize: '1.1rem',
+                        mb: 4,
+                        maxWidth: 480,
+                      }}
+                    >
+                      Each piece is meticulously crafted using only the finest materials. We blend classic techniques
+                      with contemporary design to create accessories that are not just worn, but experienced.
+                    </Typography>
+                  </motion.div>
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    whileInView={{ opacity: 1, scale: 1 }}
+                    viewport={{ once: true, margin: '-100px' }}
+                    transition={{ duration: 1.2, ease: 'easeOut' }}
+                  >
+                    <Box
+                      sx={{
+                        filter: 'grayscale(20%) contrast(110%)',
+                        boxShadow: '0 20px 40px rgba(0,0,0,0.35)',
+                      }}
+                    >
+                      <EditorialImageFrame src="/frames/frame_0150.webp" alt="Brand aesthetics" inset />
+                    </Box>
+                  </motion.div>
+                </Grid>
+              </Grid>
+            </Container>
+          </Box>
+        </>
+      ) : null}
 
       <ShopByCategoriesSection combos={combos} combosLoading={combosLoading} />
 
