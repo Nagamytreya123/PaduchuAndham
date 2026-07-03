@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -9,26 +8,19 @@ import { ProductModel } from '../models/Product.js';
 import { OrderModel } from '../models/Order.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { productToJson } from '../utils/productJson.js';
-import { filterValidImageUrls, persistUploadedImageFiles } from '../utils/productImageStorage.js';
+import { filterValidImageUrls, mongoErrorMessage, persistUploadedMulterFiles } from '../utils/productImageStorage.js';
 import { invalidateCatalogCache } from '../cache/catalog.js';
+import { createImageUpload, withMulter } from '../middleware/multerUpload.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadDir = path.join(__dirname, '../../uploads');
 fs.mkdirSync(uploadDir, { recursive: true });
 
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, uploadDir),
-  filename: (_req, file, cb) => {
-    const safe = `${Date.now()}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-    cb(null, safe);
-  },
-});
-const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } });
+const upload = createImageUpload();
 
 const MAX_PRODUCT_IMAGES = 15;
 
-/** Multiple files as `images`; legacy single file field `image` still accepted. */
-const productImageUpload = upload.fields([
+const productImageUpload = withMulter(upload, [
   { name: 'images', maxCount: MAX_PRODUCT_IMAGES },
   { name: 'image', maxCount: 1 },
 ]);
@@ -37,16 +29,10 @@ const router = Router();
 router.use(requireAuth, requireAdmin);
 
 async function collectUploadedImageUrls(req: { files?: unknown }): Promise<string[]> {
-  const filenames: string[] = [];
   const grouped = req.files as { images?: Express.Multer.File[]; image?: Express.Multer.File[] } | undefined;
-  for (const f of grouped?.images ?? []) {
-    filenames.push(f.filename);
-  }
-  for (const f of grouped?.image ?? []) {
-    filenames.push(f.filename);
-  }
-  if (filenames.length === 0) return [];
-  return persistUploadedImageFiles(uploadDir, filenames);
+  const files = [...(grouped?.images ?? []), ...(grouped?.image ?? [])];
+  if (files.length === 0) return [];
+  return persistUploadedMulterFiles(uploadDir, files);
 }
 
 const dimensionsSchema = z
@@ -82,7 +68,7 @@ const createSchema = z.object({
   price: z.number().int().min(0),
   stock: z.number().int().min(0),
   isActive: z.boolean().optional(),
-  images: z.array(z.string().url()).max(15).optional(),
+  images: z.array(z.string().min(1)).max(15).optional(),
   category: z.string().min(1).max(80),
   subcategory: z.string().max(80).optional(),
   sku: z.string().max(64).optional(),
@@ -104,46 +90,58 @@ const createSchema = z.object({
 });
 
 router.post('/', productImageUpload, async (req, res) => {
-  let body: z.infer<typeof createSchema>;
   try {
-    const raw = typeof req.body.data === 'string' ? JSON.parse(req.body.data) : req.body;
-    body = createSchema.parse(raw);
-  } catch {
-    res.status(400).json({ error: 'Invalid body' });
-    return;
+    let body: z.infer<typeof createSchema>;
+    try {
+      const raw = typeof req.body.data === 'string' ? JSON.parse(req.body.data) : req.body;
+      body = createSchema.parse(raw);
+    } catch {
+      res.status(400).json({ error: 'Invalid body' });
+      return;
+    }
+    const uploaded = await collectUploadedImageUrls(req);
+    const urlImages = filterValidImageUrls(body.images ?? []);
+    const images = [...uploaded, ...urlImages];
+    if (images.length > MAX_PRODUCT_IMAGES) {
+      res.status(400).json({ error: `Maximum ${MAX_PRODUCT_IMAGES} images per product` });
+      return;
+    }
+    const product = await ProductModel.create({
+      name: body.name,
+      description: body.description ?? '',
+      price: body.price,
+      stock: body.stock,
+      isActive: body.isActive ?? true,
+      images,
+      category: body.category,
+      subcategory: body.subcategory,
+      sku: body.sku,
+      slug: body.slug,
+      materials: body.materials ?? [],
+      tags: body.tags ?? [],
+      dimensions: body.dimensions,
+      weightGrams: body.weightGrams,
+      careInstructions: body.careInstructions,
+      compareAtPrice: body.compareAtPrice,
+      watchDetails: body.watchDetails,
+      jewelryDetails: body.jewelryDetails,
+      matchingBraceletIds: body.matchingBraceletIds?.map((id) => new mongoose.Types.ObjectId(id)),
+      watchBraceletBundlePrice: body.watchBraceletBundlePrice ?? undefined,
+      createdBy: req.user!.id,
+    });
+    await invalidateCatalogCache();
+    res.status(201).json({ product: productToJson(product.toObject()) });
+  } catch (err) {
+    const dup = mongoErrorMessage(err);
+    if (dup) {
+      res.status(400).json({ error: dup });
+      return;
+    }
+    console.error('[admin/products] create failed', err);
+    res.status(500).json({
+      error: err instanceof Error ? err.message : 'Failed to create product',
+    });
   }
-  const uploaded = await collectUploadedImageUrls(req);
-  const urlImages = filterValidImageUrls(body.images ?? []);
-  const images = [...uploaded, ...urlImages];
-  if (images.length > MAX_PRODUCT_IMAGES) {
-    res.status(400).json({ error: `Maximum ${MAX_PRODUCT_IMAGES} images per product` });
-    return;
-  }
-  const product = await ProductModel.create({
-    name: body.name,
-    description: body.description ?? '',
-    price: body.price,
-    stock: body.stock,
-    isActive: body.isActive ?? true,
-    images,
-    category: body.category,
-    subcategory: body.subcategory,
-    sku: body.sku,
-    slug: body.slug,
-    materials: body.materials ?? [],
-    tags: body.tags ?? [],
-    dimensions: body.dimensions,
-    weightGrams: body.weightGrams,
-    careInstructions: body.careInstructions,
-    compareAtPrice: body.compareAtPrice,
-    watchDetails: body.watchDetails,
-    jewelryDetails: body.jewelryDetails,
-    matchingBraceletIds: body.matchingBraceletIds?.map((id) => new mongoose.Types.ObjectId(id)),
-    watchBraceletBundlePrice: body.watchBraceletBundlePrice ?? undefined,
-    createdBy: req.user!.id,
-  });
-  await invalidateCatalogCache();
-  res.status(201).json({ product: productToJson(product.toObject()) });
 });
 
 const updateSchema = createSchema.partial().extend({
@@ -220,61 +218,73 @@ router.get('/', async (_req, res) => {
 });
 
 router.patch('/:id', productImageUpload, async (req, res) => {
-  let patch: z.infer<typeof updateSchema>;
   try {
-    const raw = typeof req.body.data === 'string' ? JSON.parse(req.body.data) : req.body;
-    patch = updateSchema.parse(raw);
-  } catch {
-    res.status(400).json({ error: 'Invalid body' });
-    return;
-  }
-  const doc = await ProductModel.findById(req.params.id);
-  if (!doc) {
-    res.status(404).json({ error: 'Not found' });
-    return;
-  }
-
-  if (patch.name !== undefined) doc.name = patch.name;
-  if (patch.description !== undefined) doc.description = patch.description;
-  if (patch.price !== undefined) doc.price = patch.price;
-  if (patch.stock !== undefined) doc.stock = patch.stock;
-  if (patch.isActive !== undefined) doc.isActive = patch.isActive;
-  if (patch.images !== undefined) doc.images = filterValidImageUrls(patch.images);
-  if (patch.category !== undefined) doc.category = patch.category;
-  if (patch.subcategory !== undefined) doc.subcategory = patch.subcategory;
-  if (patch.sku !== undefined) doc.sku = patch.sku;
-  if (patch.slug !== undefined) doc.slug = patch.slug;
-  if (patch.materials !== undefined) doc.materials = patch.materials;
-  if (patch.tags !== undefined) doc.tags = patch.tags;
-  if (patch.dimensions !== undefined) doc.dimensions = patch.dimensions ?? undefined;
-  if (patch.weightGrams !== undefined) doc.weightGrams = patch.weightGrams;
-  if (patch.careInstructions !== undefined) doc.careInstructions = patch.careInstructions;
-  if (patch.compareAtPrice !== undefined) doc.compareAtPrice = patch.compareAtPrice;
-  if (patch.watchDetails === null) doc.set('watchDetails', undefined);
-  else if (patch.watchDetails !== undefined) doc.watchDetails = patch.watchDetails;
-  if (patch.jewelryDetails === null) doc.set('jewelryDetails', undefined);
-  else if (patch.jewelryDetails !== undefined) doc.jewelryDetails = patch.jewelryDetails;
-  if (patch.matchingBraceletIds !== undefined) {
-    doc.matchingBraceletIds = patch.matchingBraceletIds.map((id) => new mongoose.Types.ObjectId(id));
-  }
-  if (patch.watchBraceletBundlePrice !== undefined) {
-    if (patch.watchBraceletBundlePrice === null) {
-      doc.set('watchBraceletBundlePrice', undefined);
-    } else {
-      doc.watchBraceletBundlePrice = patch.watchBraceletBundlePrice;
+    let patch: z.infer<typeof updateSchema>;
+    try {
+      const raw = typeof req.body.data === 'string' ? JSON.parse(req.body.data) : req.body;
+      patch = updateSchema.parse(raw);
+    } catch {
+      res.status(400).json({ error: 'Invalid body' });
+      return;
     }
+    const doc = await ProductModel.findById(req.params.id);
+    if (!doc) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
+
+    if (patch.name !== undefined) doc.name = patch.name;
+    if (patch.description !== undefined) doc.description = patch.description;
+    if (patch.price !== undefined) doc.price = patch.price;
+    if (patch.stock !== undefined) doc.stock = patch.stock;
+    if (patch.isActive !== undefined) doc.isActive = patch.isActive;
+    if (patch.images !== undefined) doc.images = filterValidImageUrls(patch.images);
+    if (patch.category !== undefined) doc.category = patch.category;
+    if (patch.subcategory !== undefined) doc.subcategory = patch.subcategory;
+    if (patch.sku !== undefined) doc.sku = patch.sku;
+    if (patch.slug !== undefined) doc.slug = patch.slug;
+    if (patch.materials !== undefined) doc.materials = patch.materials;
+    if (patch.tags !== undefined) doc.tags = patch.tags;
+    if (patch.dimensions !== undefined) doc.dimensions = patch.dimensions ?? undefined;
+    if (patch.weightGrams !== undefined) doc.weightGrams = patch.weightGrams;
+    if (patch.careInstructions !== undefined) doc.careInstructions = patch.careInstructions;
+    if (patch.compareAtPrice !== undefined) doc.compareAtPrice = patch.compareAtPrice;
+    if (patch.watchDetails === null) doc.set('watchDetails', undefined);
+    else if (patch.watchDetails !== undefined) doc.watchDetails = patch.watchDetails;
+    if (patch.jewelryDetails === null) doc.set('jewelryDetails', undefined);
+    else if (patch.jewelryDetails !== undefined) doc.jewelryDetails = patch.jewelryDetails;
+    if (patch.matchingBraceletIds !== undefined) {
+      doc.matchingBraceletIds = patch.matchingBraceletIds.map((id) => new mongoose.Types.ObjectId(id));
+    }
+    if (patch.watchBraceletBundlePrice !== undefined) {
+      if (patch.watchBraceletBundlePrice === null) {
+        doc.set('watchBraceletBundlePrice', undefined);
+      } else {
+        doc.watchBraceletBundlePrice = patch.watchBraceletBundlePrice;
+      }
+    }
+    const uploaded = await collectUploadedImageUrls(req);
+    if (uploaded.length > 0) {
+      doc.images = [...(doc.images ?? []), ...uploaded];
+    }
+    if ((doc.images?.length ?? 0) > MAX_PRODUCT_IMAGES) {
+      res.status(400).json({ error: `Maximum ${MAX_PRODUCT_IMAGES} images per product` });
+      return;
+    }
+    await doc.save();
+    await invalidateCatalogCache();
+    res.json({ product: productToJson(doc.toObject()) });
+  } catch (err) {
+    const dup = mongoErrorMessage(err);
+    if (dup) {
+      res.status(400).json({ error: dup });
+      return;
+    }
+    console.error('[admin/products] patch failed', err);
+    res.status(500).json({
+      error: err instanceof Error ? err.message : 'Failed to update product',
+    });
   }
-  const uploaded = await collectUploadedImageUrls(req);
-  if (uploaded.length > 0) {
-    doc.images = [...(doc.images ?? []), ...uploaded];
-  }
-  if ((doc.images?.length ?? 0) > MAX_PRODUCT_IMAGES) {
-    res.status(400).json({ error: `Maximum ${MAX_PRODUCT_IMAGES} images per product` });
-    return;
-  }
-  await doc.save();
-  await invalidateCatalogCache();
-  res.json({ product: productToJson(doc.toObject()) });
 });
 
 router.delete('/:id', async (req, res) => {

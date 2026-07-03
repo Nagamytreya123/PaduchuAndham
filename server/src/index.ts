@@ -90,6 +90,13 @@ app.use('/api/site-settings', siteSettingsRoutes);
 app.use('/api/admin/site-settings', optionalAuth, adminSiteSettingsRoutes);
 app.use('/api/admin/reviews', optionalAuth, adminReviewsRoutes);
 
+app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error('[api] unhandled error', err);
+  if (res.headersSent) return;
+  const message = err instanceof Error ? err.message : 'Server error';
+  res.status(500).json({ error: message });
+});
+
 app.use((_req, res) => {
   res.status(404).json({ error: 'Not found' });
 });
