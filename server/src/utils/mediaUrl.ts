@@ -7,6 +7,7 @@ export function uploadPublicPath(filename: string): string {
 export function normalizeStoredImageUrl(url: string): string {
   const t = url.trim();
   if (!t) return t;
+  if (t.startsWith('data:')) return t;
   if (t.startsWith('/uploads/')) return t;
   try {
     const parsed = new URL(t);

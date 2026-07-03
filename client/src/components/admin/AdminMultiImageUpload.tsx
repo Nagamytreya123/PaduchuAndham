@@ -23,7 +23,7 @@ export function AdminMultiImageUpload({
   onChange,
   disabled = false,
   label = 'Upload image files',
-  helperText = 'Select one or more images (JPEG, PNG, WebP). Uploaded files are added alongside URL images.',
+  helperText = 'JPEG, PNG, or WebP — large photos are compressed automatically on upload (up to 10 MB each).',
   existingUrls = [],
 }: AdminMultiImageUploadProps) {
   const remaining = MAX_FILES - files.length - existingUrls.length;

@@ -1,132 +1,100 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { v2 as cloudinary, type UploadApiResponse } from 'cloudinary';
 import type { Express } from 'express';
-import { env } from '../config/env.js';
-import { uploadPublicPath } from './mediaUrl.js';
+import sharp from 'sharp';
 
+/** Raw upload limit — large files are compressed before storing as base64. */
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
-let configured = false;
+/** Target max binary size per image after compression (before base64 overhead). */
+const MAX_STORED_IMAGE_BYTES = 1.2 * 1024 * 1024;
 
-export function isCloudinaryEnabled(): boolean {
-  return Boolean(
-    env.CLOUDINARY_CLOUD_NAME?.trim() &&
-      env.CLOUDINARY_API_KEY?.trim() &&
-      env.CLOUDINARY_API_SECRET?.trim(),
-  );
+const MAX_DIMENSION = 1600;
+
+/** Leave headroom under MongoDB's 16 MB document cap for other product fields. */
+export const MAX_PRODUCT_IMAGES_BYTES = 14 * 1024 * 1024;
+
+function bufferToDataUri(buffer: Buffer, mimetype: string): string {
+  const mime = mimetype?.startsWith('image/') ? mimetype : 'image/jpeg';
+  return `data:${mime};base64,${buffer.toString('base64')}`;
 }
 
-function ensureCloudinary(): boolean {
-  if (!isCloudinaryEnabled()) return false;
-  if (!configured) {
-    cloudinary.config({
-      cloud_name: env.CLOUDINARY_CLOUD_NAME!,
-      api_key: env.CLOUDINARY_API_KEY!,
-      api_secret: env.CLOUDINARY_API_SECRET!,
-      secure: true,
-    });
-    configured = true;
-  }
-  return true;
+export function imageListByteSize(images: string[]): number {
+  return images.reduce((n, s) => n + Buffer.byteLength(s, 'utf8'), 0);
 }
 
-function safeFilename(originalname: string): string {
-  return `${Date.now()}-${originalname.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-}
-
-function uploadBufferToCloudinary(buffer: Buffer): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream(
-      {
-        folder: 'paduchuandham/products',
-        resource_type: 'image',
-        overwrite: false,
-        unique_filename: true,
-      },
-      (err, result: UploadApiResponse | undefined) => {
-        if (err || !result?.secure_url) {
-          reject(err ?? new Error('Cloudinary returned no URL'));
-          return;
-        }
-        resolve(result.secure_url);
-      },
+export function assertProductImagesFitDocument(images: string[]): void {
+  const total = imageListByteSize(images);
+  if (total > MAX_PRODUCT_IMAGES_BYTES) {
+    const mb = (MAX_PRODUCT_IMAGES_BYTES / (1024 * 1024)).toFixed(0);
+    throw new Error(
+      `Total image data exceeds ${mb} MB for one product (MongoDB limit). Use fewer images.`,
     );
-    stream.end(buffer);
-  });
-}
-
-function writeBufferToDisk(uploadDir: string, originalname: string, buffer: Buffer): string {
-  fs.mkdirSync(uploadDir, { recursive: true });
-  const filename = safeFilename(originalname);
-  fs.writeFileSync(path.join(uploadDir, filename), buffer);
-  return uploadPublicPath(filename);
-}
-
-/** Persist in-memory multer file → Cloudinary URL or local /uploads path. */
-export async function persistUploadedBuffer(
-  uploadDir: string,
-  buffer: Buffer,
-  originalname: string,
-): Promise<string> {
-  if (ensureCloudinary()) {
-    try {
-      return await uploadBufferToCloudinary(buffer);
-    } catch (err) {
-      const detail =
-        err && typeof err === 'object' && 'error' in err
-          ? String((err as { error?: { message?: string } }).error?.message ?? '')
-          : err instanceof Error
-            ? err.message
-            : 'Cloudinary upload failed';
-      throw new Error(
-        detail.includes('cloud_name')
-          ? 'Cloudinary cloud name is wrong — check CLOUDINARY_CLOUD_NAME on the server'
-          : `Image upload failed: ${detail}`,
-      );
-    }
   }
-  return writeBufferToDisk(uploadDir, originalname, buffer);
 }
 
-export async function persistUploadedMulterFiles(
-  uploadDir: string,
-  files: Express.Multer.File[],
-): Promise<string[]> {
+function resizedPipeline(buffer: Buffer, meta: sharp.Metadata) {
+  const w = meta.width ?? 0;
+  const h = meta.height ?? 0;
+  let pipeline = sharp(buffer).rotate();
+  if (w > MAX_DIMENSION || h > MAX_DIMENSION) {
+    pipeline = pipeline.resize(MAX_DIMENSION, MAX_DIMENSION, {
+      fit: 'inside',
+      withoutEnlargement: true,
+    });
+  }
+  return pipeline;
+}
+
+async function compressImageBuffer(buffer: Buffer): Promise<{ buffer: Buffer; mimetype: string }> {
+  const meta = await sharp(buffer).metadata();
+  if (!meta.format) {
+    throw new Error('File is not a valid image');
+  }
+
+  const buildJpeg = async (quality: number) =>
+    resizedPipeline(buffer, meta).jpeg({ quality, mozjpeg: true }).toBuffer();
+
+  if (meta.hasAlpha) {
+    let out = await resizedPipeline(buffer, meta)
+      .png({ compressionLevel: 9, palette: (meta.width ?? 0) <= 512 })
+      .toBuffer();
+    if (out.length > MAX_STORED_IMAGE_BYTES * 1.5) {
+      out = await buildJpeg(82);
+      return { buffer: out, mimetype: 'image/jpeg' };
+    }
+    return { buffer: out, mimetype: 'image/png' };
+  }
+
+  let quality = 82;
+  let out = await buildJpeg(quality);
+  while (out.length > MAX_STORED_IMAGE_BYTES && quality > 45) {
+    quality -= 10;
+    out = await buildJpeg(quality);
+  }
+  return { buffer: out, mimetype: 'image/jpeg' };
+}
+
+/** Compress, then convert to base64 data URI for MongoDB storage. */
+export async function persistUploadedBuffer(buffer: Buffer, _mimetype: string): Promise<string> {
+  if (!buffer?.length) {
+    throw new Error('Uploaded image data was empty');
+  }
+  const { buffer: compressed, mimetype } = await compressImageBuffer(buffer);
+  return bufferToDataUri(compressed, mimetype);
+}
+
+export async function persistUploadedMulterFiles(files: Express.Multer.File[]): Promise<string[]> {
   const out: string[] = [];
   for (const file of files) {
-    if (!file.buffer?.length) {
-      throw new Error('Uploaded image data was empty');
-    }
-    out.push(await persistUploadedBuffer(uploadDir, file.buffer, file.originalname));
+    out.push(await persistUploadedBuffer(file.buffer, file.mimetype));
   }
   return out;
 }
 
-/** @deprecated disk path — use persistUploadedMulterFiles */
-export async function persistUploadedImageFiles(
-  uploadDir: string,
-  filenames: string[],
-): Promise<string[]> {
-  const out: string[] = [];
-  for (const name of filenames) {
-    const localPath = path.join(uploadDir, name);
-    const buffer = fs.readFileSync(localPath);
-    const url = await persistUploadedBuffer(uploadDir, buffer, name);
-    try {
-      fs.unlinkSync(localPath);
-    } catch {
-      /* ignore */
-    }
-    out.push(url);
-  }
-  return out;
-}
-
-/** Reject share links (Google Drive, etc.) that cannot be used as <img src>. */
+/** Accept embedded base64, local uploads, or direct HTTP image URLs. */
 export function isDirectImageUrl(url: string): boolean {
   const t = url.trim();
   if (!t) return false;
+  if (t.startsWith('data:image/')) return true;
   if (t.startsWith('/uploads/')) return true;
   if (!t.startsWith('http://') && !t.startsWith('https://')) return false;
   try {

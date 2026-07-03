@@ -2,7 +2,6 @@ import mongoose from 'mongoose';
 import { env } from '../config/env.js';
 import { ProductModel } from '../models/Product.js';
 import { normalizeStoredImageUrl } from '../utils/mediaUrl.js';
-import { isCloudinaryEnabled } from '../utils/productImageStorage.js';
 
 async function checkUrl(url: string): Promise<{ url: string; status: number | string }> {
   const resolved = url.startsWith('http')
@@ -18,7 +17,6 @@ async function checkUrl(url: string): Promise<{ url: string; status: number | st
 
 async function main() {
   await mongoose.connect(env.MONGODB_URI);
-  console.log(`Cloudinary configured: ${isCloudinaryEnabled()}`);
 
   const products = await ProductModel.find({ 'images.0': { $exists: true } })
     .select('name images')
@@ -29,6 +27,11 @@ async function main() {
     console.log(p.name);
     for (const raw of p.images ?? []) {
       const normalized = normalizeStoredImageUrl(raw);
+      if (normalized.startsWith('data:image/')) {
+        const kb = Math.round(Buffer.byteLength(normalized, 'utf8') / 1024);
+        console.log(`  embedded base64  (~${kb} KB)`);
+        continue;
+      }
       const result = await checkUrl(normalized);
       console.log(`  ${result.status}  ${result.url}`);
     }

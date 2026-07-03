@@ -1,20 +1,18 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import path from 'path';
-import fs from 'fs';
-import { fileURLToPath } from 'url';
 import mongoose from 'mongoose';
 import { ProductModel } from '../models/Product.js';
 import { OrderModel } from '../models/Order.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { productToJson } from '../utils/productJson.js';
-import { filterValidImageUrls, mongoErrorMessage, persistUploadedMulterFiles } from '../utils/productImageStorage.js';
+import {
+  assertProductImagesFitDocument,
+  filterValidImageUrls,
+  mongoErrorMessage,
+  persistUploadedMulterFiles,
+} from '../utils/productImageStorage.js';
 import { invalidateCatalogCache } from '../cache/catalog.js';
 import { createImageUpload, withMulter } from '../middleware/multerUpload.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const uploadDir = path.join(__dirname, '../../uploads');
-fs.mkdirSync(uploadDir, { recursive: true });
 
 const upload = createImageUpload();
 
@@ -32,7 +30,7 @@ async function collectUploadedImageUrls(req: { files?: unknown }): Promise<strin
   const grouped = req.files as { images?: Express.Multer.File[]; image?: Express.Multer.File[] } | undefined;
   const files = [...(grouped?.images ?? []), ...(grouped?.image ?? [])];
   if (files.length === 0) return [];
-  return persistUploadedMulterFiles(uploadDir, files);
+  return persistUploadedMulterFiles(files);
 }
 
 const dimensionsSchema = z
@@ -106,6 +104,7 @@ router.post('/', productImageUpload, async (req, res) => {
       res.status(400).json({ error: `Maximum ${MAX_PRODUCT_IMAGES} images per product` });
       return;
     }
+    assertProductImagesFitDocument(images);
     const product = await ProductModel.create({
       name: body.name,
       description: body.description ?? '',
@@ -271,6 +270,7 @@ router.patch('/:id', productImageUpload, async (req, res) => {
       res.status(400).json({ error: `Maximum ${MAX_PRODUCT_IMAGES} images per product` });
       return;
     }
+    assertProductImagesFitDocument(doc.images ?? []);
     await doc.save();
     await invalidateCatalogCache();
     res.json({ product: productToJson(doc.toObject()) });
