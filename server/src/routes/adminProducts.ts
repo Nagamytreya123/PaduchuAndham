@@ -9,7 +9,7 @@ import { ProductModel } from '../models/Product.js';
 import { OrderModel } from '../models/Order.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { productToJson } from '../utils/productJson.js';
-import { uploadPublicPath } from '../utils/mediaUrl.js';
+import { filterValidImageUrls, persistUploadedImageFiles } from '../utils/productImageStorage.js';
 import { invalidateCatalogCache } from '../cache/catalog.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -36,16 +36,17 @@ const productImageUpload = upload.fields([
 const router = Router();
 router.use(requireAuth, requireAdmin);
 
-function collectUploadedImageUrls(req: { files?: unknown }): string[] {
-  const out: string[] = [];
+async function collectUploadedImageUrls(req: { files?: unknown }): Promise<string[]> {
+  const filenames: string[] = [];
   const grouped = req.files as { images?: Express.Multer.File[]; image?: Express.Multer.File[] } | undefined;
   for (const f of grouped?.images ?? []) {
-    out.push(uploadPublicPath(f.filename));
+    filenames.push(f.filename);
   }
   for (const f of grouped?.image ?? []) {
-    out.push(uploadPublicPath(f.filename));
+    filenames.push(f.filename);
   }
-  return out;
+  if (filenames.length === 0) return [];
+  return persistUploadedImageFiles(uploadDir, filenames);
 }
 
 const dimensionsSchema = z
@@ -111,8 +112,9 @@ router.post('/', productImageUpload, async (req, res) => {
     res.status(400).json({ error: 'Invalid body' });
     return;
   }
-  const uploaded = collectUploadedImageUrls(req);
-  const images = [...uploaded, ...(body.images ?? [])];
+  const uploaded = await collectUploadedImageUrls(req);
+  const urlImages = filterValidImageUrls(body.images ?? []);
+  const images = [...uploaded, ...urlImages];
   if (images.length > MAX_PRODUCT_IMAGES) {
     res.status(400).json({ error: `Maximum ${MAX_PRODUCT_IMAGES} images per product` });
     return;
@@ -237,7 +239,7 @@ router.patch('/:id', productImageUpload, async (req, res) => {
   if (patch.price !== undefined) doc.price = patch.price;
   if (patch.stock !== undefined) doc.stock = patch.stock;
   if (patch.isActive !== undefined) doc.isActive = patch.isActive;
-  if (patch.images !== undefined) doc.images = patch.images;
+  if (patch.images !== undefined) doc.images = filterValidImageUrls(patch.images);
   if (patch.category !== undefined) doc.category = patch.category;
   if (patch.subcategory !== undefined) doc.subcategory = patch.subcategory;
   if (patch.sku !== undefined) doc.sku = patch.sku;
@@ -262,7 +264,7 @@ router.patch('/:id', productImageUpload, async (req, res) => {
       doc.watchBraceletBundlePrice = patch.watchBraceletBundlePrice;
     }
   }
-  const uploaded = collectUploadedImageUrls(req);
+  const uploaded = await collectUploadedImageUrls(req);
   if (uploaded.length > 0) {
     doc.images = [...(doc.images ?? []), ...uploaded];
   }

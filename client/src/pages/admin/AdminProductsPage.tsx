@@ -25,7 +25,7 @@ import { Link as RouterLink } from 'react-router-dom';
 import { IconDelete, IconAdd, IconRemove } from '../../icons';
 import type { AdminProductRow, AdminSalesSummary } from '../../types/product';
 import { formatInrFromPaise } from '../../utils/format';
-import { resolveMediaUrl } from '../../utils/productImage';
+import { handleProductImageError, resolveMediaUrl } from '../../utils/productImage';
 import { AdminLoadingPlaceholder } from '../../components/admin/AdminLoadingPlaceholder';
 import { AdminPageHeader, DashboardCard, MotionButton, PageTransitionWrapper, PremiumModal } from '../../components/admin/premium';
 import { AdminMultiImageUpload, appendFilesToFormData } from '../../components/admin/AdminMultiImageUpload';
@@ -297,6 +297,7 @@ function AdminProductCatalogCard({
             minHeight: 160,
           }}
           loading="lazy"
+          onError={img ? handleProductImageError : undefined}
         />
         {inactive && (
           <Chip
@@ -1286,7 +1287,7 @@ export function AdminProductsPage() {
                 value={imageUrls}
                 onChange={(e) => setImageUrls(e.target.value)}
                 fullWidth
-                helperText="External image links, separated by commas"
+                helperText="Direct image links only (https://…jpg). Google Drive share links do not work — use Upload image files instead."
               />
               <AdminMultiImageUpload
                 files={imageFiles}
@@ -1479,7 +1480,7 @@ export function AdminProductsPage() {
               value={editImageUrls}
               onChange={(e) => setEditImageUrls(e.target.value)}
               fullWidth
-              helperText="Replaces saved URL images; uploads below are added after these"
+              helperText="Direct image links only. Google Drive links are ignored — use Upload image files."
             />
             <AdminMultiImageUpload
               files={editImageFiles}
