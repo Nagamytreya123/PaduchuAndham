@@ -37,7 +37,7 @@ import {
   wordmarkParallaxVariants,
 } from '../../motion/productShowcaseVariants';
 import { ProductImageLightbox } from './ProductImageLightbox';
-import { handleProductImageError } from '../../utils/productImage';
+import { handleProductImageError, resolveMediaUrls } from '../../utils/productImage';
 
 const SWIPE_COMMIT = 72;
 const SWIPE_VELOCITY = 420;
@@ -89,7 +89,7 @@ export function ProductShowcaseHero({
   const [lightboxOpen, setLightboxOpen] = useState(false);
 
   const galleryImages = useMemo(
-    () => product.images.filter((url) => typeof url === 'string' && url.trim().length > 0),
+    () => resolveMediaUrls(product.images),
     [product.images],
   );
 

@@ -1,7 +1,7 @@
 import Box from '@mui/material/Box';
 import type { SxProps, Theme } from '@mui/material/styles';
 import { editorialFrameSx } from '../constants/shopSurface';
-import { handleProductImageError } from '../utils/productImage';
+import { handleProductImageError, resolveMediaUrl } from '../utils/productImage';
 
 type EditorialImageFrameProps = {
   src: string;
@@ -23,7 +23,7 @@ export function EditorialImageFrame({ src, alt = '', inset = false, sx }: Editor
     >
       <Box
         component="img"
-        src={src}
+        src={resolveMediaUrl(src)}
         alt={alt}
         loading="lazy"
         onError={handleProductImageError}

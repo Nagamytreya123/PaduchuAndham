@@ -25,6 +25,7 @@ import { Link as RouterLink } from 'react-router-dom';
 import { IconDelete, IconAdd, IconRemove } from '../../icons';
 import type { AdminProductRow, AdminSalesSummary } from '../../types/product';
 import { formatInrFromPaise } from '../../utils/format';
+import { resolveMediaUrl } from '../../utils/productImage';
 import { AdminLoadingPlaceholder } from '../../components/admin/AdminLoadingPlaceholder';
 import { AdminPageHeader, DashboardCard, MotionButton, PageTransitionWrapper, PremiumModal } from '../../components/admin/premium';
 import { AdminMultiImageUpload, appendFilesToFormData } from '../../components/admin/AdminMultiImageUpload';
@@ -268,7 +269,7 @@ function AdminProductCatalogCard({
   onEdit: (p: AdminProductRow) => void;
   stockSaving: boolean;
 }) {
-  const img = product.images[0];
+  const img = resolveMediaUrl(product.images[0]);
   const showCompare = product.compareAtPrice != null && product.compareAtPrice > product.price;
   const inactive = product.isActive === false;
 
@@ -675,9 +676,14 @@ export function AdminProductsPage() {
         weightGrams: wG,
         careInstructions: editCareInstructions.trim() || undefined,
         compareAtPrice: comparePaise,
-        images: urls.length ? urls : [],
         isActive: editIsActive,
       };
+
+      if (urls.length > 0) {
+        payload.images = urls;
+      } else if (editImageFiles.length > 0) {
+        payload.images = [];
+      }
 
       if (editCat === 'Watches') {
         payload.watchDetails = watchDetails ?? null;
@@ -776,6 +782,9 @@ export function AdminProductsPage() {
       }
 
       const urls = splitList(imageUrls);
+      if (urls.length === 0 && imageFiles.length === 0) {
+        throw new Error('Add at least one product image (upload a file or paste an image URL)');
+      }
 
       const watchDetails =
         cat === 'Watches' && (caseShape.trim() || dial.trim() || strapType.trim() || watchColor.trim())
@@ -920,6 +929,11 @@ export function AdminProductsPage() {
     return list;
   }, [products, catalogFilterKey, jewellerySubFilter]);
 
+  const missingImageCount = useMemo(
+    () => products.filter((p) => !(p.images?.length ?? 0)).length,
+    [products],
+  );
+
   if (loading) return <AdminLoadingPlaceholder variant="products" />;
 
   const subcategoryEntries = salesSummary
@@ -938,6 +952,14 @@ export function AdminProductsPage() {
           </MotionButton>
         }
       />
+
+      {missingImageCount > 0 ? (
+        <Alert severity="warning">
+          {missingImageCount} product{missingImageCount === 1 ? '' : 's'} ha{missingImageCount === 1 ? 's' : 've'} no
+          image saved. Edit each product, use <strong>Upload image files</strong>, then Save. The storefront shows a
+          placeholder until a photo is uploaded.
+        </Alert>
+      ) : null}
 
       <ToggleButtonGroup
         exclusive
@@ -1465,6 +1487,7 @@ export function AdminProductsPage() {
               disabled={editSaving}
               label="Upload additional image files"
               helperText="New uploads are appended to the images above (max 15 total)"
+              existingUrls={splitList(editImageUrls)}
             />
           </Stack>
         </DialogContent>

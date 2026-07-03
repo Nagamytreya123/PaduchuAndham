@@ -11,7 +11,7 @@ import type { JewelleryComboSummary } from '../types/jewelleryCombo';
 import { COMBO_CATEGORY_TILE_IMAGE } from '../constants/categoryTileImages';
 import { shopSurface } from '../constants/shopSurface';
 import { formatInrFromPaise } from '../utils/format';
-import { handleProductImageError } from '../utils/productImage';
+import { handleProductImageError, resolveMediaUrl } from '../utils/productImage';
 import { EditorialImageFrame } from './EditorialImageFrame';
 import { WishlistToggleButton } from './WishlistToggleButton';
 import { comboToWishlistItem } from '../context/WishlistContext';
@@ -32,7 +32,7 @@ export function JewelleryComboStorefrontCard({
   const thumb = combo.images[0];
   const isLight = variant === 'light';
   const isEditorial = imageFrame === 'editorial';
-  const imageSrc = thumb || COMBO_CATEGORY_TILE_IMAGE;
+  const imageSrc = resolveMediaUrl(thumb) || COMBO_CATEGORY_TILE_IMAGE;
 
   return (
     <Grid

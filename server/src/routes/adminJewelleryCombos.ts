@@ -8,9 +8,8 @@ import { z } from 'zod';
 import { JewelleryComboModel } from '../models/JewelleryCombo.js';
 import { ProductModel } from '../models/Product.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
-import type { Request } from 'express';
-import { env } from '../config/env.js';
 import { jewelleryComboToJson } from '../utils/jewelleryComboJson.js';
+import { uploadPublicPath } from '../utils/mediaUrl.js';
 import { invalidateCatalogCache } from '../cache/catalog.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -30,11 +29,6 @@ const router = Router();
 router.use(requireAuth, requireAdmin);
 
 const objectIdHex = z.string().regex(/^[a-fA-F0-9]{24}$/, 'Invalid id');
-
-function publicUrl(req: Request, filename: string): string {
-  const base = env.SERVER_PUBLIC_URL ?? `${req.protocol}://${req.get('host')}`;
-  return `${base.replace(/\/$/, '')}/uploads/${filename}`;
-}
 
 async function assertComboProducts(productIds: string[]): Promise<void> {
   const uniq = new Set(productIds);
@@ -94,7 +88,7 @@ router.post('/', upload.single('image'), async (req, res) => {
   }
   const images = [...(body.images ?? [])];
   if (req.file) {
-    images.unshift(publicUrl(req, req.file.filename));
+    images.unshift(uploadPublicPath(req.file.filename));
   }
   if (images.length === 0) {
     res.status(400).json({ error: 'Add a combo image (URL or upload a file)' });
@@ -154,7 +148,7 @@ router.patch('/:id', upload.single('image'), async (req, res) => {
   if (patch.price !== undefined) doc.price = patch.price;
   if (patch.isActive !== undefined) doc.isActive = patch.isActive;
   if (req.file) {
-    doc.images = [...(doc.images ?? []), publicUrl(req, req.file.filename)];
+    doc.images = [...(doc.images ?? []), uploadPublicPath(req.file.filename)];
   }
   if (!doc.images || doc.images.length === 0) {
     res.status(400).json({ error: 'Combo must have at least one image (URL or upload)' });

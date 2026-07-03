@@ -1,3 +1,5 @@
+import { normalizeImageList } from './mediaUrl.js';
+
 type ComboLike = {
   _id: unknown;
   name: string;
@@ -12,7 +14,7 @@ export function jewelleryComboToJson(c: ComboLike) {
   return {
     id: String(c._id),
     name: c.name,
-    images: c.images?.length ? [...c.images] : [],
+    images: normalizeImageList(c.images),
     productIds: ids,
     price: c.price,
     isActive: c.isActive !== false,

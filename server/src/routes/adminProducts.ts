@@ -8,9 +8,8 @@ import mongoose from 'mongoose';
 import { ProductModel } from '../models/Product.js';
 import { OrderModel } from '../models/Order.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
-import type { Request } from 'express';
-import { env } from '../config/env.js';
 import { productToJson } from '../utils/productJson.js';
+import { uploadPublicPath } from '../utils/mediaUrl.js';
 import { invalidateCatalogCache } from '../cache/catalog.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -37,19 +36,14 @@ const productImageUpload = upload.fields([
 const router = Router();
 router.use(requireAuth, requireAdmin);
 
-function publicUrl(req: Request, filename: string): string {
-  const base = env.SERVER_PUBLIC_URL ?? `${req.protocol}://${req.get('host')}`;
-  return `${base.replace(/\/$/, '')}/uploads/${filename}`;
-}
-
-function collectUploadedImageUrls(req: Request): string[] {
+function collectUploadedImageUrls(req: { files?: unknown }): string[] {
   const out: string[] = [];
   const grouped = req.files as { images?: Express.Multer.File[]; image?: Express.Multer.File[] } | undefined;
   for (const f of grouped?.images ?? []) {
-    out.push(publicUrl(req, f.filename));
+    out.push(uploadPublicPath(f.filename));
   }
   for (const f of grouped?.image ?? []) {
-    out.push(publicUrl(req, f.filename));
+    out.push(uploadPublicPath(f.filename));
   }
   return out;
 }

@@ -2,7 +2,9 @@ import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
+import Box from '@mui/material/Box';
 import { IconDelete } from '../../icons';
+import { resolveMediaUrl } from '../../utils/productImage';
 
 const MAX_FILES = 15;
 
@@ -12,6 +14,8 @@ type AdminMultiImageUploadProps = {
   disabled?: boolean;
   label?: string;
   helperText?: string;
+  /** Existing saved image URLs — shown as thumbnails in the edit dialog */
+  existingUrls?: string[];
 };
 
 export function AdminMultiImageUpload({
@@ -20,8 +24,9 @@ export function AdminMultiImageUpload({
   disabled = false,
   label = 'Upload image files',
   helperText = 'Select one or more images (JPEG, PNG, WebP). Uploaded files are added alongside URL images.',
+  existingUrls = [],
 }: AdminMultiImageUploadProps) {
-  const remaining = MAX_FILES - files.length;
+  const remaining = MAX_FILES - files.length - existingUrls.length;
 
   return (
     <Stack spacing={1}>
@@ -36,7 +41,7 @@ export function AdminMultiImageUpload({
           onChange={(e) => {
             const picked = Array.from(e.target.files ?? []);
             if (picked.length === 0) return;
-            const room = MAX_FILES - files.length;
+            const room = MAX_FILES - files.length - existingUrls.length;
             onChange([...files, ...picked.slice(0, room)]);
             e.target.value = '';
           }}
@@ -44,10 +49,29 @@ export function AdminMultiImageUpload({
       </Button>
       <Typography variant="caption" color="text.secondary">
         {helperText}
-        {files.length > 0 ? ` · ${files.length} file${files.length === 1 ? '' : 's'} selected` : ''}
+        {files.length > 0 ? ` · ${files.length} new file${files.length === 1 ? '' : 's'} selected` : ''}
       </Typography>
+      {existingUrls.length > 0 ? (
+        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+          {existingUrls.map((url) => (
+            <Box
+              key={url}
+              component="img"
+              src={resolveMediaUrl(url)}
+              alt=""
+              sx={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 1, border: '1px solid', borderColor: 'divider' }}
+            />
+          ))}
+        </Stack>
+      ) : null}
       {files.map((f, index) => (
         <Stack key={`${f.name}-${f.size}-${index}`} direction="row" alignItems="center" spacing={1}>
+          <Box
+            component="img"
+            src={URL.createObjectURL(f)}
+            alt=""
+            sx={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 1, flexShrink: 0 }}
+          />
           <Typography variant="body2" sx={{ flex: 1 }} noWrap>
             {f.name}
           </Typography>

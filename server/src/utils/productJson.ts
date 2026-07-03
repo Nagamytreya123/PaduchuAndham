@@ -1,3 +1,5 @@
+import { normalizeImageList } from './mediaUrl.js';
+
 /** Shared JSON shape for product responses (matches extended catalog schema). */
 
 export type ProductDimensions = {
@@ -107,7 +109,7 @@ export function productToJson(p: ProductLike) {
     description: p.description ?? '',
     price: p.price,
     compareAtPrice: p.compareAtPrice == null ? undefined : p.compareAtPrice,
-    images: p.images ?? [],
+    images: normalizeImageList(p.images),
     stock: p.stock,
     isActive: p.isActive ?? true,
     category: p.category ?? 'Watches',

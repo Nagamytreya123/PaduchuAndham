@@ -4,7 +4,7 @@ import Stack from '@mui/material/Stack';
 import IconButton from '@mui/material/IconButton';
 import { EditorialImageFrame } from '../EditorialImageFrame';
 import { IconChevronLeft, IconChevronRight } from '../../icons';
-import { PRODUCT_IMAGE_FALLBACK } from '../../utils/productImage';
+import { PRODUCT_IMAGE_FALLBACK, resolveMediaUrls } from '../../utils/productImage';
 
 type ProductDetailGalleryProps = {
   images: string[];
@@ -35,27 +35,28 @@ const galleryNavButtonSx = {
 };
 
 export function ProductDetailGallery({ images, productName }: ProductDetailGalleryProps) {
-  const slides = images.length > 0 ? images : [PRODUCT_IMAGE_FALLBACK];
+  const slides = resolveMediaUrls(images);
+  const displaySlides = slides.length > 0 ? slides : [PRODUCT_IMAGE_FALLBACK];
   const [index, setIndex] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const hasMultiple = slides.length > 1;
+  const hasMultiple = displaySlides.length > 1;
 
   const syncIndexFromScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el || el.clientWidth <= 0) return;
     const next = Math.round(el.scrollLeft / el.clientWidth);
-    setIndex(Math.max(0, Math.min(slides.length - 1, next)));
-  }, [slides.length]);
+    setIndex(Math.max(0, Math.min(displaySlides.length - 1, next)));
+  }, [displaySlides.length]);
 
   const goTo = useCallback(
     (target: number, behavior: ScrollBehavior = 'smooth') => {
       const el = scrollRef.current;
       if (!el) return;
-      const wrapped = ((target % slides.length) + slides.length) % slides.length;
+      const wrapped = ((target % displaySlides.length) + displaySlides.length) % displaySlides.length;
       el.scrollTo({ left: wrapped * el.clientWidth, behavior });
       setIndex(wrapped);
     },
-    [slides.length],
+    [displaySlides.length],
   );
 
   useEffect(() => {
@@ -87,7 +88,7 @@ export function ProductDetailGallery({ images, productName }: ProductDetailGalle
           '&::-webkit-scrollbar': { display: 'none' },
         }}
       >
-        {slides.map((src, i) => (
+        {displaySlides.map((src, i) => (
           <Box
             key={`${src}-${i}`}
             sx={{
@@ -99,7 +100,7 @@ export function ProductDetailGallery({ images, productName }: ProductDetailGalle
           >
             <EditorialImageFrame
               src={src}
-              alt={slides.length > 1 ? `${productName} — image ${i + 1}` : productName}
+              alt={displaySlides.length > 1 ? `${productName} — image ${i + 1}` : productName}
               inset
             />
           </Box>
@@ -151,7 +152,7 @@ export function ProductDetailGallery({ images, productName }: ProductDetailGalle
             pointerEvents: 'auto',
           }}
         >
-          {slides.map((_, i) => {
+          {displaySlides.map((_, i) => {
             const active = i === index;
             return (
               <Box
@@ -160,7 +161,7 @@ export function ProductDetailGallery({ images, productName }: ProductDetailGalle
                 type="button"
                 role="tab"
                 aria-selected={active}
-                aria-label={`Image ${i + 1} of ${slides.length}`}
+                aria-label={`Image ${i + 1} of ${displaySlides.length}`}
                 onClick={() => goTo(i)}
                 sx={{
                   width: active ? 8 : 6,

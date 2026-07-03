@@ -1,7 +1,6 @@
 import Card from '@mui/material/Card';
 import CardActionArea from '@mui/material/CardActionArea';
 import CardContent from '@mui/material/CardContent';
-import CardMedia from '@mui/material/CardMedia';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Chip from '@mui/material/Chip';
@@ -9,7 +8,7 @@ import Stack from '@mui/material/Stack';
 import { Link as RouterLink } from 'react-router-dom';
 import type { ProductSummary } from '../types/product';
 import { formatInrFromPaise } from '../utils/format';
-import { handleProductImageError } from '../utils/productImage';
+import { getProductDisplayImage, handleProductImageError } from '../utils/productImage';
 import { EditorialImageFrame } from './EditorialImageFrame';
 import { WishlistToggleButton } from './WishlistToggleButton';
 import { productToWishlistItem } from '../context/WishlistContext';
@@ -29,7 +28,8 @@ export function ProductCard({
   /** `editorial` = 4:5 studio frame (home / cart style). */
   imageFrame?: 'default' | 'editorial';
 }) {
-  const img = product.images[0];
+  const img = getProductDisplayImage(product);
+  const hasUploadedImage = Boolean(product.images[0]?.trim());
   const showCompare = product.compareAtPrice != null && product.compareAtPrice > product.price;
   const isLight = tone === 'light';
   const isEditorial = imageFrame === 'editorial';
@@ -46,22 +46,23 @@ export function ProductCard({
     >
       <CardActionArea component={RouterLink} to={`/products/${product.id}`} sx={{ flex: 1, alignItems: 'stretch' }}>
         <Box sx={{ position: 'relative' }}>
-          {isEditorial && img ? (
+          {isEditorial ? (
             <EditorialImageFrame src={img} alt={product.name} inset />
-          ) : isEditorial ? (
-            <Box sx={{ width: '92%', mx: 'auto', aspectRatio: '4 / 5', bgcolor: '#E8E8E8' }} />
           ) : (
-            <CardMedia
-              component={img ? 'img' : 'div'}
-              image={img || undefined}
+            <Box
+              component="img"
+              src={img}
+              alt={product.name}
+              loading="lazy"
+              onError={hasUploadedImage ? handleProductImageError : undefined}
               sx={{
+                width: '100%',
                 aspectRatio: '4/3',
                 objectFit: 'cover',
                 bgcolor: isLight ? '#e8e2d8' : 'rgba(255, 255, 255, 0.05)',
                 minHeight: 160,
+                display: 'block',
               }}
-              loading="lazy"
-              onError={handleProductImageError}
             />
           )}
           <WishlistToggleButton
