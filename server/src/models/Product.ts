@@ -52,8 +52,8 @@ const productSchema = new Schema(
     stock: { type: Number, required: true, min: 0, default: 0 },
     isActive: { type: Boolean, default: true },
 
-    /** Broad shelf, e.g. "Watches", "Bracelets" */
-    category: { type: String, required: true, trim: true, maxlength: 80, default: 'Watches', index: true },
+    /** Category slug from the Category collection, e.g. "watches" */
+    category: { type: String, required: true, trim: true, maxlength: 80, index: true },
     /** Finer grouping, e.g. "Dress", "Diver" */
     subcategory: { type: String, trim: true, maxlength: 80 },
     /** Unique stock-keeping id for admin / fulfilment (sparse: legacy products may omit) */

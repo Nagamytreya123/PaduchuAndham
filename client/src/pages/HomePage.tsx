@@ -8,8 +8,6 @@ import {
   Button,
   Stack,
   Container,
-  ToggleButton,
-  ToggleButtonGroup,
   Card,
   CardActionArea,
 } from '@mui/material';
@@ -21,23 +19,15 @@ import { JewelleryComboStorefrontCard } from '../components/JewelleryComboStoref
 import type { ProductSummary } from '../types/product';
 import type { JewelleryComboSummary } from '../types/jewelleryCombo';
 import {
-  STOREFRONT_COLLECTION_FILTERS,
-  filterKeyToApiCategory,
-  searchParamToFilterKey,
-  type StorefrontCollectionFilterKey,
-} from '../constants/collectionCategoryFilters';
-import {
-  orderedJewellerySubtypeOptions,
-  parseJewellerySubcategoryForApi,
-  type JewellerySubFilterKey,
-  type JewellerySubcategoryPreset,
-} from '../constants/jewellerySubcategories';
-import {
-  BRACELET_CATEGORY_TILE_IMAGE,
-  COMBO_CATEGORY_TILE_IMAGE,
-  JEWELLERY_CATEGORY_TILE_IMAGES,
-  WATCH_CATEGORY_TILE_IMAGE,
-} from '../constants/categoryTileImages';
+  apiCategoryForFilter,
+  parseCollectionFilterParam,
+  priceFiltersForSelection,
+  productMatchesPriceFilter,
+  resolvePriceFilterParam,
+  resolveSubcategoryParam,
+  subcategoriesForFilter,
+} from '../utils/catalogCategory';
+import { COMBO_CATEGORY_TILE_IMAGE } from '../constants/categoryTileImages';
 import { PRODUCT_IMAGE_FALLBACK } from '../utils/productImage';
 import { LuxuryShowcaseLoader } from '../components/loading';
 import { seedCatalog } from '../utils/catalogCache';
@@ -45,33 +35,17 @@ import { shopSurface } from '../constants/shopSurface';
 import { StorefrontHeader } from '../components/StorefrontHeader';
 import { EditorialImageFrame } from '../components/EditorialImageFrame';
 import { editorialFrameSx } from '../constants/shopSurface';
+import { CategoryFilterGroup } from '../components/CategoryFilterGroup';
+import { SubcategoryFilterGroup } from '../components/SubcategoryFilterGroup';
+import { PriceFilterGroup } from '../components/PriceFilterGroup';
+import { useCategories } from '../context/CategoriesContext';
 
 const TOTAL_FRAMES = 240;
 
-/** Jewellery subtype tiles — order matches common storefront hierarchy (necklaces & earrings first). */
-const HOME_JEWELLERY_CATEGORY_ORDER: JewellerySubcategoryPreset[] = [
-  'Necklaces',
-  'Earrings',
-  'Bangles',
-  'Rings',
-  'Chains',
-];
-
-const FALLBACK_FRAME_STEP = 37;
-
-function categoryTileSrc(
-  tile: { key: string; label: string; image?: string },
-  index: number,
-): string {
-  if (tile.key.startsWith('jewellery-')) {
-    const sub = tile.label as JewellerySubcategoryPreset;
-    return JEWELLERY_CATEGORY_TILE_IMAGES[sub] ?? tile.image ?? PRODUCT_IMAGE_FALLBACK;
-  }
-  if (tile.key === 'watches') return WATCH_CATEGORY_TILE_IMAGE;
-  if (tile.key === 'bracelets') return BRACELET_CATEGORY_TILE_IMAGE;
-  if (tile.key === 'combos') return tile.image ?? COMBO_CATEGORY_TILE_IMAGE;
-  const fallbackFrame = (((index * FALLBACK_FRAME_STEP) % TOTAL_FRAMES) + 1).toString().padStart(4, '0');
-  return tile.image ?? `/frames/frame_${fallbackFrame}.webp`;
+function categoryTileSrc(tile: { key: string; image?: string }): string {
+  if (tile.image) return tile.image;
+  if (tile.key === 'combos') return COMBO_CATEGORY_TILE_IMAGE;
+  return PRODUCT_IMAGE_FALLBACK;
 }
 
 function ShopByCategoriesSection({
@@ -81,21 +55,16 @@ function ShopByCategoriesSection({
   combos: JewelleryComboSummary[];
   combosLoading: boolean;
 }) {
+  const { categories } = useCategories();
   const showCombosTile = combosLoading || combos.length > 0;
 
   const tiles = useMemo(() => {
-    const rows: { key: string; label: string; search: string; image?: string }[] = [];
-    for (const sub of HOME_JEWELLERY_CATEGORY_ORDER) {
-      rows.push({
-        key: `jewellery-${sub}`,
-        label: sub,
-        search: `?category=Jewellery&subcategory=${encodeURIComponent(sub)}`,
-      });
-    }
-    rows.push(
-      { key: 'watches', label: 'Watches', search: '?category=Watches' },
-      { key: 'bracelets', label: 'Bracelets', search: '?category=Bracelets' },
-    );
+    const rows: { key: string; label: string; search: string; image?: string }[] = categories.map((c) => ({
+      key: c.slug,
+      label: c.label,
+      search: `?category=${encodeURIComponent(c.slug)}`,
+      image: c.tileImageUrl || PRODUCT_IMAGE_FALLBACK,
+    }));
     if (showCombosTile) {
       rows.push({
         key: 'combos',
@@ -105,7 +74,7 @@ function ShopByCategoriesSection({
       });
     }
     return rows;
-  }, [showCombosTile, combos]);
+  }, [categories, showCombosTile, combos]);
 
   return (
     <Box
@@ -150,7 +119,7 @@ function ShopByCategoriesSection({
 
         <Grid container spacing={{ xs: 2, sm: 2.5 }}>
           {tiles.map((tile, index) => {
-            const src = categoryTileSrc(tile, index);
+            const src = categoryTileSrc(tile);
             const showSkeleton = tile.key === 'combos' && combosLoading;
 
             return (
@@ -319,32 +288,24 @@ function FrameSequence({ scrollYProgress }: { scrollYProgress: MotionValue<numbe
 export function HomePage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
+  const { categories } = useCategories();
   const categoryParam = searchParams.get('category') ?? '';
   const subcategoryParam = searchParams.get('subcategory') ?? '';
-  const activeFilterKey = searchParamToFilterKey(categoryParam);
-  const apiCategory = filterKeyToApiCategory(activeFilterKey);
-  const showComboFilterView = activeFilterKey === 'Combos';
-  const showJewelleryTypeFilter = activeFilterKey === 'Jewellery';
-  const jewellerySubForApi = showJewelleryTypeFilter
-    ? parseJewellerySubcategoryForApi(subcategoryParam)
-    : '';
-  const jewellerySubToggle: JewellerySubFilterKey = jewellerySubForApi || 'all';
-
-  const [products, setProducts] = useState<ProductSummary[]>([]);
-  const [catalogJewellerySubcategories, setCatalogJewellerySubcategories] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const jewellerySubtypeFilterRowOptions = useMemo(
-    () =>
-      orderedJewellerySubtypeOptions(
-        [...catalogJewellerySubcategories, jewellerySubForApi].filter(Boolean),
-      ),
-    [catalogJewellerySubcategories, jewellerySubForApi],
-  );
-
+  const priceFilterParam = searchParams.get('priceFilter') ?? '';
   const [combos, setCombos] = useState<JewelleryComboSummary[]>([]);
   const [combosLoading, setCombosLoading] = useState(true);
+  const hasCombos = combos.length > 0;
+  const activeFilterKey = parseCollectionFilterParam(categoryParam, categories, hasCombos);
+  const apiCategory = apiCategoryForFilter(activeFilterKey);
+  const showComboFilterView = activeFilterKey === 'combos';
+  const subcategoryOptions = subcategoriesForFilter(categories, activeFilterKey);
+  const apiSubcategory = resolveSubcategoryParam(subcategoryParam, subcategoryOptions);
+  const priceFilterOptions = priceFiltersForSelection(categories, activeFilterKey, apiSubcategory);
+  const activePriceFilter = resolvePriceFilterParam(priceFilterParam, priceFilterOptions);
+
+  const [products, setProducts] = useState<ProductSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [homeScrollAnimationEnabled, setHomeScrollAnimationEnabled] = useState(false);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
 
@@ -433,26 +394,6 @@ export function HomePage() {
     })();
   }, []);
 
-  useEffect(() => {
-    if (!showJewelleryTypeFilter || !apiCategory) {
-      setCatalogJewellerySubcategories([]);
-      return;
-    }
-    const params = new URLSearchParams();
-    params.set('category', apiCategory);
-    void (async () => {
-      try {
-        const data = await apiFetch<{ products: ProductSummary[] }>(`/api/products?${params}`);
-        const subs = data.products
-          .map((p) => (p.subcategory ?? '').trim())
-          .filter(Boolean);
-        setCatalogJewellerySubcategories(subs);
-      } catch {
-        setCatalogJewellerySubcategories([]);
-      }
-    })();
-  }, [showJewelleryTypeFilter, apiCategory]);
-
   // Fetch products (skipped when viewing Combos — those load from `/api/jewellery-combos` above)
   useEffect(() => {
     if (showComboFilterView) {
@@ -465,7 +406,7 @@ export function HomePage() {
     setError(null);
     const params = new URLSearchParams();
     if (apiCategory) params.set('category', apiCategory);
-    if (jewellerySubForApi) params.set('subcategory', jewellerySubForApi);
+    if (apiSubcategory) params.set('subcategory', apiSubcategory);
     const q = params.toString() ? `?${params}` : '';
     void (async () => {
       try {
@@ -479,7 +420,12 @@ export function HomePage() {
         setLoading(false);
       }
     })();
-  }, [apiCategory, jewellerySubForApi, showComboFilterView]);
+  }, [apiCategory, apiSubcategory, showComboFilterView]);
+
+  const visibleProducts = useMemo(
+    () => products.filter((p) => productMatchesPriceFilter(p.price, activePriceFilter)),
+    [products, activePriceFilter],
+  );
 
   const textY = useTransform(scrollYProgress, [0, 0.5], [0, -100]);
   const textOpacity = useTransform(scrollYProgress, [0, 0.3], [1, 0]);
@@ -663,24 +609,25 @@ export function HomePage() {
                 : 'Browse the full catalogue — tap a category above or use the filters below.'}
             </Typography>
             <Stack direction="row" justifyContent="center" flexWrap="wrap" sx={{ mb: 6, gap: 1 }}>
-              <ToggleButtonGroup
-                exclusive
+              <CategoryFilterGroup
+                categories={categories}
                 value={activeFilterKey}
-                onChange={(_e, key: StorefrontCollectionFilterKey | null) => {
-                  if (key == null) return;
+                hasCombos={hasCombos}
+                ariaLabel="Filter by category"
+                onChange={(key) => {
                   setSearchParams(
                     (prev) => {
                       const next = new URLSearchParams(prev);
                       if (key === 'all') next.delete('category');
-                      else if (key === 'Combos') next.set('category', 'combos');
-                      else next.set('category', filterKeyToApiCategory(key));
-                      if (key !== 'Jewellery') next.delete('subcategory');
+                      else if (key === 'combos') next.set('category', 'combos');
+                      else next.set('category', key);
+                      next.delete('subcategory');
+                      next.delete('priceFilter');
                       return next;
                     },
                     { replace: true },
                   );
                 }}
-                aria-label="Filter by category"
                 sx={{
                   flexWrap: 'wrap',
                   justifyContent: 'center',
@@ -698,32 +645,25 @@ export function HomePage() {
                     '&:hover': { bgcolor: '#c4a055' },
                   },
                 }}
-              >
-                {STOREFRONT_COLLECTION_FILTERS.map((opt) => (
-                  <ToggleButton key={opt.key} value={opt.key}>
-                    {opt.label}
-                  </ToggleButton>
-                ))}
-              </ToggleButtonGroup>
+              />
             </Stack>
-            {showJewelleryTypeFilter && (
+            {subcategoryOptions.length > 0 && (
               <Stack direction="row" justifyContent="center" flexWrap="wrap" sx={{ mb: 6, gap: 1 }}>
-                <ToggleButtonGroup
-                  exclusive
-                  value={jewellerySubToggle}
-                  onChange={(_e, subKey: JewellerySubFilterKey | null) => {
-                    if (subKey == null) return;
+                <SubcategoryFilterGroup
+                  subcategories={subcategoryOptions}
+                  value={apiSubcategory}
+                  onChange={(sub) => {
                     setSearchParams(
                       (prev) => {
                         const next = new URLSearchParams(prev);
-                        if (subKey === 'all') next.delete('subcategory');
-                        else next.set('subcategory', subKey);
+                        if (!sub) next.delete('subcategory');
+                        else next.set('subcategory', sub);
+                        next.delete('priceFilter');
                         return next;
                       },
                       { replace: true },
                     );
                   }}
-                  aria-label="Filter jewellery by type"
                   sx={{
                     flexWrap: 'wrap',
                     justifyContent: 'center',
@@ -743,14 +683,45 @@ export function HomePage() {
                       '&:hover': { bgcolor: 'rgba(196, 160, 85, 0.95)' },
                     },
                   }}
-                >
-                  <ToggleButton value="all">All types</ToggleButton>
-                  {jewellerySubtypeFilterRowOptions.map((label) => (
-                    <ToggleButton key={label} value={label}>
-                      {label}
-                    </ToggleButton>
-                  ))}
-                </ToggleButtonGroup>
+                />
+              </Stack>
+            )}
+            {priceFilterOptions.length > 0 && (
+              <Stack direction="row" justifyContent="center" flexWrap="wrap" sx={{ mb: 6, gap: 1 }}>
+                <PriceFilterGroup
+                  filters={priceFilterOptions}
+                  value={activePriceFilter?.id ?? ''}
+                  onChange={(id) => {
+                    setSearchParams(
+                      (prev) => {
+                        const next = new URLSearchParams(prev);
+                        if (!id) next.delete('priceFilter');
+                        else next.set('priceFilter', id);
+                        return next;
+                      },
+                      { replace: true },
+                    );
+                  }}
+                  sx={{
+                    flexWrap: 'wrap',
+                    justifyContent: 'center',
+                    '& .MuiToggleButton-root': {
+                      color: '#8A8175',
+                      borderColor: 'rgba(214, 179, 106, 0.25)',
+                      textTransform: 'none',
+                      fontWeight: 500,
+                      px: 1.5,
+                      py: 0.5,
+                      fontSize: '0.85rem',
+                    },
+                    '& .MuiToggleButton-root.Mui-selected': {
+                      color: '#0F0F10',
+                      bgcolor: 'rgba(214, 179, 106, 0.85)',
+                      borderColor: 'rgba(214, 179, 106, 0.85)',
+                      '&:hover': { bgcolor: 'rgba(196, 160, 85, 0.95)' },
+                    },
+                  }}
+                />
               </Stack>
             )}
           </motion.div>
@@ -773,11 +744,11 @@ export function HomePage() {
             <LuxuryShowcaseLoader variant="inline" tone="dark" aria-label="Loading collection" />
           ) : error ? (
             <Typography color="error" align="center">{error}</Typography>
-          ) : products.length === 0 ? (
+          ) : visibleProducts.length === 0 ? (
             <Typography color="text.secondary" align="center">No products found.</Typography>
           ) : (
             <Grid container spacing={4}>
-              {products.map((p, index) => (
+              {visibleProducts.map((p, index) => (
                 <Grid item xs={12} sm={6} md={4} key={p.id}>
                   <motion.div
                     initial={{ opacity: 0, y: 50 }}
@@ -824,9 +795,17 @@ export function HomePage() {
             <Grid item xs={12} sm={6} md={2}>
               <Typography variant="subtitle2" sx={{ color: '#F5F5F5', mb: 2 }}>Collections</Typography>
               <Stack spacing={1}>
-                <Typography variant="body2" sx={{ color: '#8A8175', cursor: 'pointer', '&:hover': { color: '#D6B36A' } }}>Watches</Typography>
-                <Typography variant="body2" sx={{ color: '#8A8175', cursor: 'pointer', '&:hover': { color: '#D6B36A' } }}>Bracelets</Typography>
-                <Typography variant="body2" sx={{ color: '#8A8175', cursor: 'pointer', '&:hover': { color: '#D6B36A' } }}>Gift Sets</Typography>
+                {categories.map((c) => (
+                  <Typography
+                    key={c.slug}
+                    component={RouterLink}
+                    to={{ pathname: '/', search: `?category=${encodeURIComponent(c.slug)}`, hash: 'collection' }}
+                    variant="body2"
+                    sx={{ color: '#8A8175', cursor: 'pointer', textDecoration: 'none', '&:hover': { color: '#D6B36A' } }}
+                  >
+                    {c.label}
+                  </Typography>
+                ))}
               </Stack>
             </Grid>
             <Grid item xs={12} sm={6} md={2}>

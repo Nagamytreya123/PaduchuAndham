@@ -112,7 +112,7 @@ export function productToJson(p: ProductLike) {
     images: normalizeImageList(p.images),
     stock: p.stock,
     isActive: p.isActive ?? true,
-    category: p.category ?? 'Watches',
+    category: p.category ?? '',
     subcategory: p.subcategory == null ? undefined : p.subcategory,
     sku: p.sku == null ? undefined : p.sku,
     slug: p.slug == null ? undefined : p.slug,

@@ -93,10 +93,15 @@ async function emailLogin(req: Request, res: Response) {
     return;
   }
   const normalized = email.toLowerCase().trim();
-  const user = await UserModel.findOne({ email: normalized }).lean();
+  const user = await UserModel.findOne({ email: normalized });
   if (!user) {
     res.status(404).json({ error: 'No account found with this email. Sign up to create one.' });
     return;
+  }
+  const adminEmails = getAdminEmailSet();
+  if (adminEmails.has(normalized) && user.role !== 'admin') {
+    user.role = 'admin';
+    await user.save();
   }
   const id = user._id.toString();
   const role = user.role as 'admin' | 'customer';

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Box,
@@ -8,24 +8,21 @@ import {
   Stack,
   IconButton,
   Drawer,
-  ToggleButton,
-  ToggleButtonGroup,
 } from '@mui/material';
 import { apiFetch } from '../api/client';
 import { ProductCard } from '../components/ProductCard';
 import type { ProductSummary } from '../types/product';
 import type { JewelleryComboSummary } from '../types/jewelleryCombo';
-import {
-  STOREFRONT_COLLECTION_FILTERS,
-  filterKeyToApiCategory,
-  searchParamToFilterKey,
-  type StorefrontCollectionFilterKey,
-} from '../constants/collectionCategoryFilters';
+import { apiCategoryForFilter, parseCollectionFilterParam, priceFiltersForSelection, productMatchesPriceFilter, resolvePriceFilterParam, resolveSubcategoryParam, subcategoriesForFilter } from '../utils/catalogCategory';
 import { shopSurface, SHOP_HERO_IMAGE } from '../constants/shopSurface';
 import { LuxuryShowcaseLoader } from '../components/loading';
 import { seedCatalog } from '../utils/catalogCache';
 import { JewelleryComboStorefrontCard } from '../components/JewelleryComboStorefrontCard';
 import { StorefrontHeader } from '../components/StorefrontHeader';
+import { CategoryFilterGroup } from '../components/CategoryFilterGroup';
+import { SubcategoryFilterGroup } from '../components/SubcategoryFilterGroup';
+import { PriceFilterGroup } from '../components/PriceFilterGroup';
+import { useCategories } from '../context/CategoriesContext';
 
 function FilterIcon() {
   return (
@@ -37,15 +34,23 @@ function FilterIcon() {
 
 export function ShopPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { categories } = useCategories();
   const categoryParam = searchParams.get('category') ?? '';
-  const activeFilterKey = searchParamToFilterKey(categoryParam);
-  const apiCategory = filterKeyToApiCategory(activeFilterKey);
-  const showComboFilterView = activeFilterKey === 'Combos';
+  const subcategoryParam = searchParams.get('subcategory') ?? '';
+  const priceFilterParam = searchParams.get('priceFilter') ?? '';
+  const [combos, setCombos] = useState<JewelleryComboSummary[]>([]);
+  const [combosLoading, setCombosLoading] = useState(true);
+  const hasCombos = combos.length > 0;
+  const activeFilterKey = parseCollectionFilterParam(categoryParam, categories, hasCombos);
+  const apiCategory = apiCategoryForFilter(activeFilterKey);
+  const showComboFilterView = activeFilterKey === 'combos';
+  const subcategoryOptions = subcategoriesForFilter(categories, activeFilterKey);
+  const apiSubcategory = resolveSubcategoryParam(subcategoryParam, subcategoryOptions);
+  const priceFilterOptions = priceFiltersForSelection(categories, activeFilterKey, apiSubcategory);
+  const activePriceFilter = resolvePriceFilterParam(priceFilterParam, priceFilterOptions);
 
   const [products, setProducts] = useState<ProductSummary[]>([]);
-  const [combos, setCombos] = useState<JewelleryComboSummary[]>([]);
   const [loading, setLoading] = useState(true);
-  const [combosLoading, setCombosLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
 
@@ -73,6 +78,7 @@ export function ShopPage() {
     setError(null);
     const params = new URLSearchParams();
     if (apiCategory) params.set('category', apiCategory);
+    if (apiSubcategory) params.set('subcategory', apiSubcategory);
     const q = params.toString() ? `?${params}` : '';
     void (async () => {
       try {
@@ -86,7 +92,12 @@ export function ShopPage() {
         setLoading(false);
       }
     })();
-  }, [apiCategory, showComboFilterView]);
+  }, [apiCategory, apiSubcategory, showComboFilterView]);
+
+  const visibleProducts = useMemo(
+    () => products.filter((p) => productMatchesPriceFilter(p.price, activePriceFilter)),
+    [products, activePriceFilter],
+  );
 
   function scrollToCollections() {
     document.getElementById('collections')?.scrollIntoView({ behavior: 'smooth' });
@@ -219,6 +230,110 @@ export function ShopPage() {
           </IconButton>
         </Stack>
 
+        <Stack spacing={2} sx={{ mb: 3 }}>
+          <CategoryFilterGroup
+            categories={categories}
+            value={activeFilterKey}
+            hasCombos={hasCombos}
+            ariaLabel="Filter collections"
+            onChange={(key) => {
+              setSearchParams(
+                (prev) => {
+                  const next = new URLSearchParams(prev);
+                  if (key === 'all') next.delete('category');
+                  else if (key === 'combos') next.set('category', 'combos');
+                  else next.set('category', key);
+                  next.delete('subcategory');
+                  next.delete('priceFilter');
+                  return next;
+                },
+                { replace: true },
+              );
+            }}
+            sx={{
+              flexWrap: 'wrap',
+              '& .MuiToggleButton-root': {
+                textTransform: 'none',
+                fontWeight: 600,
+                px: 1.75,
+                borderColor: 'rgba(26, 26, 26, 0.12)',
+                color: shopSurface.ink,
+              },
+              '& .MuiToggleButton-root.Mui-selected': {
+                bgcolor: shopSurface.ink,
+                color: shopSurface.white,
+                borderColor: shopSurface.ink,
+                '&:hover': { bgcolor: '#333' },
+              },
+            }}
+          />
+          {subcategoryOptions.length > 0 ? (
+            <SubcategoryFilterGroup
+              subcategories={subcategoryOptions}
+              value={apiSubcategory}
+              onChange={(sub) => {
+                setSearchParams(
+                  (prev) => {
+                    const next = new URLSearchParams(prev);
+                    if (!sub) next.delete('subcategory');
+                    else next.set('subcategory', sub);
+                    next.delete('priceFilter');
+                    return next;
+                  },
+                  { replace: true },
+                );
+              }}
+              sx={{
+                flexWrap: 'wrap',
+                '& .MuiToggleButton-root': {
+                  textTransform: 'none',
+                  fontWeight: 500,
+                  px: 1.5,
+                  borderColor: 'rgba(26, 26, 26, 0.12)',
+                  color: shopSurface.ink,
+                },
+                '& .MuiToggleButton-root.Mui-selected': {
+                  bgcolor: shopSurface.ink,
+                  color: shopSurface.white,
+                  borderColor: shopSurface.ink,
+                },
+              }}
+            />
+          ) : null}
+          {priceFilterOptions.length > 0 ? (
+            <PriceFilterGroup
+              filters={priceFilterOptions}
+              value={activePriceFilter?.id ?? ''}
+              onChange={(id) => {
+                setSearchParams(
+                  (prev) => {
+                    const next = new URLSearchParams(prev);
+                    if (!id) next.delete('priceFilter');
+                    else next.set('priceFilter', id);
+                    return next;
+                  },
+                  { replace: true },
+                );
+              }}
+              sx={{
+                flexWrap: 'wrap',
+                '& .MuiToggleButton-root': {
+                  textTransform: 'none',
+                  fontWeight: 500,
+                  px: 1.5,
+                  borderColor: 'rgba(26, 26, 26, 0.12)',
+                  color: shopSurface.ink,
+                },
+                '& .MuiToggleButton-root.Mui-selected': {
+                  bgcolor: shopSurface.ink,
+                  color: shopSurface.white,
+                  borderColor: shopSurface.ink,
+                },
+              }}
+            />
+          ) : null}
+        </Stack>
+
         {showComboFilterView ? (
           combosLoading ? (
             <LuxuryShowcaseLoader variant="inline" tone="light" aria-label="Loading collections" />
@@ -239,13 +354,13 @@ export function ShopPage() {
           <Typography color="error" align="center">
             {error}
           </Typography>
-        ) : products.length === 0 ? (
+        ) : visibleProducts.length === 0 ? (
           <Typography sx={{ color: shopSurface.inkMuted }} align="center">
             No products found.
           </Typography>
         ) : (
           <Grid container spacing={2}>
-            {products.map((p) => (
+            {visibleProducts.map((p) => (
               <Grid item xs={6} sm={4} md={3} key={p.id}>
                 <Box
                   sx={{
@@ -288,24 +403,26 @@ export function ShopPage() {
         >
           Filter collections
         </Typography>
-        <ToggleButtonGroup
-          exclusive
+        <CategoryFilterGroup
+          categories={categories}
           value={activeFilterKey}
+          hasCombos={hasCombos}
           orientation="vertical"
           fullWidth
-          onChange={(_e, key: StorefrontCollectionFilterKey | null) => {
-            if (key == null) return;
+          ariaLabel="Filter collections"
+          onChange={(key) => {
             setSearchParams(
               (prev) => {
                 const next = new URLSearchParams(prev);
                 if (key === 'all') next.delete('category');
-                else if (key === 'Combos') next.set('category', 'combos');
-                else next.set('category', filterKeyToApiCategory(key));
+                else if (key === 'combos') next.set('category', 'combos');
+                else next.set('category', key);
+                next.delete('subcategory');
+                next.delete('priceFilter');
                 return next;
               },
               { replace: true },
             );
-            setFilterOpen(false);
           }}
           sx={{
             '& .MuiToggleButton-root': {
@@ -327,13 +444,76 @@ export function ShopPage() {
               '&:hover': { bgcolor: '#333' },
             },
           }}
-        >
-          {STOREFRONT_COLLECTION_FILTERS.map((opt) => (
-            <ToggleButton key={opt.key} value={opt.key}>
-              {opt.label}
-            </ToggleButton>
-          ))}
-        </ToggleButtonGroup>
+        />
+        {subcategoryOptions.length > 0 && (
+          <SubcategoryFilterGroup
+            subcategories={subcategoryOptions}
+            value={apiSubcategory}
+            onChange={(sub) => {
+              setSearchParams(
+                (prev) => {
+                  const next = new URLSearchParams(prev);
+                  if (!sub) next.delete('subcategory');
+                  else next.set('subcategory', sub);
+                  next.delete('priceFilter');
+                  return next;
+                },
+                { replace: true },
+              );
+            }}
+            sx={{
+              mt: 2,
+              flexWrap: 'wrap',
+              '& .MuiToggleButton-root': {
+                justifyContent: 'flex-start',
+                textTransform: 'none',
+                fontWeight: 500,
+                py: 1,
+                borderColor: 'rgba(26, 26, 26, 0.12)',
+                color: shopSurface.ink,
+              },
+              '& .MuiToggleButton-root.Mui-selected': {
+                bgcolor: shopSurface.ink,
+                color: shopSurface.white,
+                borderColor: shopSurface.ink,
+              },
+            }}
+          />
+        )}
+        {priceFilterOptions.length > 0 && (
+          <PriceFilterGroup
+            filters={priceFilterOptions}
+            value={activePriceFilter?.id ?? ''}
+            onChange={(id) => {
+              setSearchParams(
+                (prev) => {
+                  const next = new URLSearchParams(prev);
+                  if (!id) next.delete('priceFilter');
+                  else next.set('priceFilter', id);
+                  return next;
+                },
+                { replace: true },
+              );
+            }}
+            sx={{
+              mt: 2,
+              flexWrap: 'wrap',
+              '& .MuiToggleButton-root': {
+                justifyContent: 'flex-start',
+                textTransform: 'none',
+                fontWeight: 500,
+                py: 1,
+                borderColor: 'rgba(26, 26, 26, 0.12)',
+                color: shopSurface.ink,
+              },
+              '& .MuiToggleButton-root.Mui-selected': {
+                bgcolor: shopSurface.ink,
+                color: shopSurface.white,
+                borderColor: shopSurface.ink,
+              },
+            }}
+          />
+        )}
       </Drawer>
     </Box>
   );

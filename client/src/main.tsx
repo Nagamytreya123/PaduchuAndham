@@ -8,6 +8,7 @@ import { theme } from './theme';
 import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import { WishlistProvider } from './context/WishlistContext';
+import { CategoriesProvider } from './context/CategoriesContext';
 import { App } from './App';
 import { initAnalytics } from './analytics';
 
@@ -19,11 +20,13 @@ createRoot(document.getElementById('root')!).render(
       <ThemeProvider theme={theme}>
         <CssBaseline />
         <AuthProvider>
-          <CartProvider>
-            <WishlistProvider>
-              <App />
-            </WishlistProvider>
-          </CartProvider>
+          <CategoriesProvider>
+            <CartProvider>
+              <WishlistProvider>
+                <App />
+              </WishlistProvider>
+            </CartProvider>
+          </CategoriesProvider>
         </AuthProvider>
       </ThemeProvider>
     </BrowserRouter>

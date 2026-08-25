@@ -7,6 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { connectDb } from './db/connect.js';
 import { env } from './config/env.js';
+import { ensureCanonicalCategories } from './services/categories.js';
 import { optionalAuth } from './middleware/auth.js';
 import { apiLimiter, initRateLimiters } from './middleware/rateLimit.js';
 import {
@@ -31,6 +32,8 @@ import webhookRoutes from './routes/webhooks.js';
 import meRoutes from './routes/me.js';
 import siteSettingsRoutes from './routes/siteSettings.js';
 import adminSiteSettingsRoutes from './routes/adminSiteSettings.js';
+import adminCategoriesRoutes from './routes/adminCategories.js';
+import categoriesRoutes from './routes/categories.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -80,6 +83,7 @@ app.get('/api/health', async (_req, res) => {
 app.use('/api/auth', optionalAuth, authRoutes);
 app.use('/api/me', meRoutes);
 app.use('/api/cart', optionalAuth, cartRoutes);
+app.use('/api/categories', categoriesRoutes);
 app.use('/api/products', optionalAuth, productsRoutes);
 app.use('/api/jewellery-combos', optionalAuth, jewelleryCombosRoutes);
 app.use('/api/admin/products', optionalAuth, adminProductsRoutes);
@@ -88,6 +92,7 @@ app.use('/api/orders', optionalAuth, ordersRoutes);
 app.use('/api/admin/orders', optionalAuth, adminOrdersRoutes);
 app.use('/api/site-settings', siteSettingsRoutes);
 app.use('/api/admin/site-settings', optionalAuth, adminSiteSettingsRoutes);
+app.use('/api/admin/categories', optionalAuth, adminCategoriesRoutes);
 app.use('/api/admin/reviews', optionalAuth, adminReviewsRoutes);
 
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
@@ -105,6 +110,7 @@ const port = env.PORT;
 
 async function main() {
   await connectDb();
+  await ensureCanonicalCategories();
   await connectRedis();
   initRateLimiters();
   app.listen(port, () => {

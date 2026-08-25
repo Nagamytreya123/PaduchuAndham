@@ -7,42 +7,12 @@ import { Link as RouterLink } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { IconBag, IconChevronLeft, IconChevronRight, IconHeart, IconReviews } from '../../icons';
 import { editorialSurface } from '../../constants/editorialSurface';
-import {
-  BRACELET_CATEGORY_TILE_IMAGE,
-  COMBO_CATEGORY_TILE_IMAGE,
-  JEWELLERY_CATEGORY_TILE_IMAGES,
-  WATCH_CATEGORY_TILE_IMAGE,
-} from '../../constants/categoryTileImages';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
+import { useCategories } from '../../context/CategoriesContext';
+import { shopPathForCategorySlug } from '../../utils/catalogCategory';
+import { PRODUCT_IMAGE_FALLBACK, resolveMediaUrl } from '../../utils/productImage';
 
 const ACCENT_GOLD = '#C5A059';
-
-const DISCOVERY_CATEGORIES = [
-  {
-    title: 'Jewellery',
-    subtitle: 'Curated pieces',
-    image: JEWELLERY_CATEGORY_TILE_IMAGES.Necklaces,
-    to: '/shop?category=Jewellery',
-  },
-  {
-    title: 'Watches',
-    subtitle: 'Precision time',
-    image: WATCH_CATEGORY_TILE_IMAGE,
-    to: '/shop?category=Watches',
-  },
-  {
-    title: 'Bracelets',
-    subtitle: 'Fine details',
-    image: BRACELET_CATEGORY_TILE_IMAGE,
-    to: '/shop?category=Bracelets',
-  },
-  {
-    title: 'Combos',
-    subtitle: 'Complete sets',
-    image: COMBO_CATEGORY_TILE_IMAGE,
-    to: '/shop?category=Combos',
-  },
-] as const;
 
 const FLOATER_ICONS = [
   { node: <IconReviews sx={{ fontSize: '2rem' }} />, top: -16, left: -32, delay: '0.2s' },
@@ -59,6 +29,7 @@ function ParticleIcon({ kind }: { kind: Particle['icon'] }) {
 }
 
 export function EmptyCartState() {
+  const { categories } = useCategories();
   const reduced = useReducedMotion();
   const carouselRef = useRef<HTMLDivElement>(null);
   const [particles, setParticles] = useState<Particle[]>([]);
@@ -456,11 +427,11 @@ export function EmptyCartState() {
             '&::-webkit-scrollbar': { display: 'none' },
           }}
         >
-          {DISCOVERY_CATEGORIES.map((cat) => (
+          {categories.map((cat) => (
             <Box
-              key={cat.title}
+              key={cat.slug}
               component={RouterLink}
-              to={cat.to}
+              to={shopPathForCategorySlug(cat.slug)}
               sx={{
                 flex: '0 0 auto',
                 width: { xs: 260, sm: 300 },
@@ -477,7 +448,7 @@ export function EmptyCartState() {
             >
               <Box
                 component="img"
-                src={cat.image}
+                src={resolveMediaUrl(cat.tileImageUrl) || PRODUCT_IMAGE_FALLBACK}
                 alt=""
                 loading="lazy"
                 sx={{
@@ -515,7 +486,7 @@ export function EmptyCartState() {
                     mb: 0.5,
                   }}
                 >
-                  {cat.title}
+                  {cat.label}
                 </Typography>
                 <Typography
                   sx={{
@@ -525,7 +496,7 @@ export function EmptyCartState() {
                     letterSpacing: '0.18em',
                   }}
                 >
-                  {cat.subtitle}
+                  {cat.kind === 'watch' ? 'Precision time' : cat.kind === 'bracelet' ? 'Fine details' : 'Collection'}
                 </Typography>
                 <Box
                   className="empty-cart-cat-line"

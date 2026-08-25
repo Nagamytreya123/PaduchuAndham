@@ -13,6 +13,7 @@ import {
   persistUploadedMulterFiles,
 } from '../utils/productImageStorage.js';
 import { invalidateCatalogCache } from '../cache/catalog.js';
+import { normalizeCategoryInput } from '../services/categories.js';
 import { createImageUpload, withMulter } from '../middleware/multerUpload.js';
 
 const upload = createImageUpload();
@@ -116,6 +117,11 @@ router.post('/', productImageUpload, async (req, res) => {
       return;
     }
     assertProductImagesFitDocument(images);
+    const categorySlug = await normalizeCategoryInput(body.category);
+    if (!categorySlug) {
+      res.status(400).json({ error: 'Unknown or inactive category' });
+      return;
+    }
     const product = await ProductModel.create({
       name: body.name,
       description: body.description ?? '',
@@ -123,7 +129,7 @@ router.post('/', productImageUpload, async (req, res) => {
       stock: body.stock,
       isActive: body.isActive ?? true,
       images,
-      category: body.category,
+      category: categorySlug,
       subcategory: body.subcategory,
       sku: body.sku,
       slug: body.slug,
@@ -256,7 +262,14 @@ router.patch('/:id', productImageUpload, async (req, res) => {
       }
       doc.images = filterValidImageUrls(patch.images);
     }
-    if (patch.category !== undefined) doc.category = patch.category;
+    if (patch.category !== undefined) {
+      const categorySlug = await normalizeCategoryInput(patch.category);
+      if (!categorySlug) {
+        res.status(400).json({ error: 'Unknown or inactive category' });
+        return;
+      }
+      doc.category = categorySlug;
+    }
     if (patch.subcategory !== undefined) doc.subcategory = patch.subcategory;
     if (patch.sku !== undefined) doc.sku = patch.sku;
     if (patch.slug !== undefined) doc.slug = patch.slug;

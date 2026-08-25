@@ -8,7 +8,6 @@ import Alert from '@mui/material/Alert';
 import IconButton from '@mui/material/IconButton';
 import Chip from '@mui/material/Chip';
 import Avatar from '@mui/material/Avatar';
-import MenuItem from '@mui/material/MenuItem';
 import Card from '@mui/material/Card';
 import CardMedia from '@mui/material/CardMedia';
 import CardContent from '@mui/material/CardContent';
@@ -19,8 +18,6 @@ import DialogActions from '@mui/material/DialogActions';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Switch from '@mui/material/Switch';
 import Link from '@mui/material/Link';
-import ToggleButton from '@mui/material/ToggleButton';
-import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import { Link as RouterLink } from 'react-router-dom';
 import { IconDelete, IconAdd, IconRemove } from '../../icons';
 import type { AdminProductRow, AdminSalesSummary } from '../../types/product';
@@ -30,16 +27,10 @@ import { AdminLoadingPlaceholder } from '../../components/admin/AdminLoadingPlac
 import { AdminPageHeader, DashboardCard, MotionButton, PageTransitionWrapper, PremiumModal } from '../../components/admin/premium';
 import { AdminMultiImageUpload, appendFilesToFormData } from '../../components/admin/AdminMultiImageUpload';
 import { adminCatalogGridSx } from '../../constants/adminLayout';
-import {
-  COLLECTION_CATEGORY_FILTERS,
-  filterKeyToApiCategory,
-  type CollectionFilterKey,
-} from '../../constants/collectionCategoryFilters';
-import {
-  JEWELLERY_SUB_PRESETS,
-  orderedJewellerySubtypeOptions,
-  type JewellerySubFilterKey,
-} from '../../constants/jewellerySubcategories';
+import { useCategories } from '../../context/CategoriesContext';
+import { findCatalogCategory, productMatchesCategory } from '../../utils/catalogCategory';
+import { CategoryFilterGroup } from '../../components/CategoryFilterGroup';
+import { CategorySelectField } from '../../components/admin/CategorySelectField';
 
 async function postMultipart(url: string, fd: FormData): Promise<{ ok?: boolean; error?: string }> {
   const res = await fetch(url, { method: 'POST', body: fd, credentials: 'include' });
@@ -137,29 +128,16 @@ function isEmbeddedProductImage(url: string): boolean {
 
 const OBJECT_ID_RE = /^[a-fA-F0-9]{24}$/;
 
-function isBraceletCategory(category: string | undefined): boolean {
-  return (category ?? '').trim().toLowerCase() === 'bracelets';
-}
-
-function isJewelleryCategory(category: string | undefined): boolean {
-  return (category ?? '').trim().toLowerCase() === 'jewellery';
-}
-
-function jewellerySubPickFromStored(sub: string | undefined): { pick: string; custom: string } {
-  const presets: readonly string[] = JEWELLERY_SUB_PRESETS;
-  if (sub && presets.includes(sub)) return { pick: sub, custom: '' };
-  return { pick: '__custom__', custom: sub ?? '' };
-}
-
 /** Options for matching-bracelet picker: all bracelets, plus any already-selected products not in that list (legacy links). */
 function braceletPickerOptions(
   products: AdminProductRow[],
   selectedIds: string[],
   excludeProductId: string | null,
+  isBracelet: (category: string | undefined) => boolean,
 ): AdminProductRow[] {
   const byId = new Map(products.map((p) => [p.id, p]));
   const bracelets = products.filter(
-    (p) => isBraceletCategory(p.category) && (excludeProductId == null || p.id !== excludeProductId),
+    (p) => isBracelet(p.category) && (excludeProductId == null || p.id !== excludeProductId),
   );
   const map = new Map<string, AdminProductRow>();
   for (const b of bracelets) map.set(b.id, b);
@@ -184,9 +162,11 @@ function MatchingBraceletsPicker({
   excludeProductId: string | null;
   disabled?: boolean;
 }) {
+  const { kindFor } = useCategories();
+  const isBracelet = (category: string | undefined) => kindFor(category ?? '') === 'bracelet';
   const options = useMemo(
-    () => braceletPickerOptions(products, selectedIds, excludeProductId),
-    [products, selectedIds, excludeProductId],
+    () => braceletPickerOptions(products, selectedIds, excludeProductId, isBracelet),
+    [products, selectedIds, excludeProductId, kindFor],
   );
 
   const value = useMemo(() => {
@@ -234,9 +214,9 @@ function MatchingBraceletsPicker({
               <Typography variant="body2" fontWeight={600} noWrap>
                 {option.name}
               </Typography>
-              {(option.sku || !isBraceletCategory(option.category)) && (
+              {(option.sku || !isBracelet(option.category)) && (
                 <Typography variant="caption" color="text.secondary" noWrap>
-                  {[option.sku, !isBraceletCategory(option.category) ? 'Not in Bracelets category' : '']
+                  {[option.sku, !isBracelet(option.category) ? 'Not in Bracelets category' : '']
                     .filter(Boolean)
                     .join(' · ')}
                 </Typography>
@@ -273,14 +253,6 @@ function MatchingBraceletsPicker({
       )}
     />
   );
-}
-
-const CATEGORY_PRESETS = ['Watches', 'Bracelets', 'Jewellery', 'General'] as const;
-
-function categoryPresetFromProduct(category: string): { preset: string; custom: string } {
-  const presets: readonly string[] = CATEGORY_PRESETS;
-  if (presets.includes(category)) return { preset: category, custom: '' };
-  return { preset: '__custom__', custom: category };
 }
 
 function AdminProductCatalogCard({
@@ -404,9 +376,12 @@ function AdminProductCatalogCard({
 }
 
 export function AdminProductsPage() {
+  const { categories, kindFor } = useCategories();
+  const isWatch = (c: string) => kindFor(c) === 'watch';
+  const isJewelleryCat = (c: string) => kindFor(c) === 'jewellery';
+
   const [products, setProducts] = useState<AdminProductRow[]>([]);
-  const [catalogFilterKey, setCatalogFilterKey] = useState<CollectionFilterKey>('all');
-  const [jewellerySubFilter, setJewellerySubFilter] = useState<JewellerySubFilterKey>('all');
+  const [catalogFilterKey, setCatalogFilterKey] = useState<string>('all');
   const [salesSummary, setSalesSummary] = useState<AdminSalesSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -416,11 +391,8 @@ export function AdminProductsPage() {
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [category, setCategory] = useState<string>('Watches');
-  const [categoryCustom, setCategoryCustom] = useState('');
+  const [category, setCategory] = useState<string>('');
   const [subcategory, setSubcategory] = useState('');
-  const [jewellerySubPick, setJewellerySubPick] = useState<string>('Bangles');
-  const [jewellerySubCustom, setJewellerySubCustom] = useState('');
   const [sku, setSku] = useState('');
   const [slug, setSlug] = useState('');
   const [caseShape, setCaseShape] = useState('');
@@ -449,11 +421,8 @@ export function AdminProductsPage() {
   const [editSaving, setEditSaving] = useState(false);
   const [editName, setEditName] = useState('');
   const [editDescription, setEditDescription] = useState('');
-  const [editCategory, setEditCategory] = useState<string>('Watches');
-  const [editCategoryCustom, setEditCategoryCustom] = useState('');
+  const [editCategory, setEditCategory] = useState<string>('');
   const [editSubcategory, setEditSubcategory] = useState('');
-  const [editJewellerySubPick, setEditJewellerySubPick] = useState('Bangles');
-  const [editJewellerySubCustom, setEditJewellerySubCustom] = useState('');
   const [editSku, setEditSku] = useState('');
   const [editSlug, setEditSlug] = useState('');
   const [editCaseShape, setEditCaseShape] = useState('');
@@ -503,31 +472,24 @@ export function AdminProductsPage() {
   }, []);
 
   useEffect(() => {
-    if (catalogFilterKey !== 'Jewellery') {
-      setJewellerySubFilter('all');
-    }
-  }, [catalogFilterKey]);
+    if (categories.length === 0) return;
+    setCategory((prev) => (prev && categories.some((c) => c.slug === prev) ? prev : categories[0]!.slug));
+  }, [categories]);
 
   function resolvedCategory(): string {
-    if (category === '__custom__') return categoryCustom.trim() || 'Watches';
     return category;
   }
 
   function resolvedEditCategory(): string {
-    if (editCategory === '__custom__') return editCategoryCustom.trim() || 'Watches';
     return editCategory;
   }
 
   function resolvedAddSubcategory(): string | undefined {
-    if (!isJewelleryCategory(resolvedCategory())) return subcategory.trim() || undefined;
-    if (jewellerySubPick === '__custom__') return jewellerySubCustom.trim() || undefined;
-    return jewellerySubPick;
+    return subcategory.trim() || undefined;
   }
 
   function resolvedEditSubcategoryField(): string | undefined {
-    if (!isJewelleryCategory(resolvedEditCategory())) return editSubcategory.trim() || undefined;
-    if (editJewellerySubPick === '__custom__') return editJewellerySubCustom.trim() || undefined;
-    return editJewellerySubPick;
+    return editSubcategory.trim() || undefined;
   }
 
   function jewelryPayloadFromStrings(mat: string, finish: string, stone: string, custom: string) {
@@ -540,7 +502,7 @@ export function AdminProductsPage() {
   }
 
   useEffect(() => {
-    if (category !== 'Watches') {
+    if (!isWatch(category)) {
       setCaseShape('');
       setDial('');
       setStrapType('');
@@ -548,24 +510,19 @@ export function AdminProductsPage() {
       setMatchingBraceletIdsSelected([]);
       setBundlePriceRupee('');
     }
-    if (!isJewelleryCategory(category)) {
+    if (!isJewelleryCat(category)) {
       setTags('');
       setJewelryMaterialType('');
       setJewelryFinish('');
       setJewelryStoneOrMotif('');
       setJewelryCustomization('');
-      setJewellerySubCustom('');
-    } else {
-      setJewellerySubPick((prev) =>
-        [...JEWELLERY_SUB_PRESETS, '__custom__'].includes(prev) ? prev : 'Bangles',
-      );
     }
-  }, [category]);
+  }, [category, kindFor]);
 
   useEffect(() => {
     if (!editOpen) return;
     const cat = resolvedEditCategory();
-    if (cat !== 'Watches') {
+    if (!isWatch(cat)) {
       setEditCaseShape('');
       setEditDial('');
       setEditStrapType('');
@@ -573,36 +530,21 @@ export function AdminProductsPage() {
       setEditMatchingBraceletIdsSelected([]);
       setEditBundlePriceRupee('');
     }
-    if (!isJewelleryCategory(cat)) {
+    if (!isJewelleryCat(cat)) {
       setEditJewelryMaterialType('');
       setEditJewelryFinish('');
       setEditJewelryStoneOrMotif('');
       setEditJewelryCustomization('');
-      setEditJewellerySubCustom('');
-    } else {
-      setEditJewellerySubPick((prev) =>
-        [...JEWELLERY_SUB_PRESETS, '__custom__'].includes(prev) ? prev : 'Bangles',
-      );
     }
-  }, [editOpen, editCategory, editCategoryCustom]);
+  }, [editOpen, editCategory, kindFor]);
 
   function openEdit(p: AdminProductRow) {
-    const cat = categoryPresetFromProduct(p.category);
+    const matched = findCatalogCategory(p.category, categories);
     setEditId(p.id);
     setEditName(p.name);
     setEditDescription(p.description);
-    setEditCategory(cat.preset);
-    setEditCategoryCustom(cat.custom);
-    if (isJewelleryCategory(p.category)) {
-      const s = jewellerySubPickFromStored(p.subcategory);
-      setEditJewellerySubPick(s.pick);
-      setEditJewellerySubCustom(s.custom);
-      setEditSubcategory('');
-    } else {
-      setEditSubcategory(p.subcategory ?? '');
-      setEditJewellerySubPick('Bangles');
-      setEditJewellerySubCustom('');
-    }
+    setEditCategory(matched?.slug ?? categories[0]?.slug ?? p.category);
+    setEditSubcategory(p.subcategory ?? '');
     setEditSku(p.sku ?? '');
     setEditSlug(p.slug ?? '');
     setEditCaseShape(p.watchDetails?.caseShape ?? '');
@@ -669,7 +611,7 @@ export function AdminProductsPage() {
       const editCat = resolvedEditCategory();
 
       const watchDetails =
-        editCat === 'Watches' &&
+        isWatch(editCat) &&
         (editCaseShape.trim() || editDial.trim() || editStrapType.trim() || editWatchColor.trim())
           ? {
               caseShape: editCaseShape.trim() || undefined,
@@ -680,7 +622,7 @@ export function AdminProductsPage() {
           : undefined;
 
       let braceletIds: string[] = [];
-      if (editCat === 'Watches') {
+      if (isWatch(editCat)) {
         braceletIds = editMatchingBraceletIdsSelected.filter((id) => OBJECT_ID_RE.test(id));
         if (editMatchingBraceletIdsSelected.some((id) => !OBJECT_ID_RE.test(id))) {
           throw new Error('Invalid matching bracelet selection');
@@ -688,7 +630,7 @@ export function AdminProductsPage() {
       }
 
       let watchBraceletBundlePricePayload: number | null = null;
-      if (editCat === 'Watches' && braceletIds.length > 0 && editBundlePriceRupee.trim()) {
+      if (isWatch(editCat) && braceletIds.length > 0 && editBundlePriceRupee.trim()) {
         const br = Number(editBundlePriceRupee);
         if (!Number.isFinite(br) || br < 0) throw new Error('Invalid watch + bracelet bundle price');
         watchBraceletBundlePricePayload = Math.round(br * 100);
@@ -716,7 +658,7 @@ export function AdminProductsPage() {
         payload.images = [];
       }
 
-      if (editCat === 'Watches') {
+      if (isWatch(editCat)) {
         payload.watchDetails = watchDetails ?? null;
         payload.matchingBraceletIds = braceletIds.length ? braceletIds : [];
         payload.watchBraceletBundlePrice = watchBraceletBundlePricePayload;
@@ -726,7 +668,7 @@ export function AdminProductsPage() {
         payload.watchBraceletBundlePrice = null;
       }
 
-      if (isJewelleryCategory(editCat)) {
+      if (isJewelleryCat(editCat)) {
         payload.jewelryDetails =
           jewelryPayloadFromStrings(
             editJewelryMaterialType,
@@ -819,7 +761,7 @@ export function AdminProductsPage() {
       }
 
       const watchDetails =
-        cat === 'Watches' && (caseShape.trim() || dial.trim() || strapType.trim() || watchColor.trim())
+        isWatch(cat) && (caseShape.trim() || dial.trim() || strapType.trim() || watchColor.trim())
           ? {
               caseShape: caseShape.trim() || undefined,
               dial: dial.trim() || undefined,
@@ -829,7 +771,7 @@ export function AdminProductsPage() {
           : undefined;
 
       let braceletIds: string[] = [];
-      if (cat === 'Watches') {
+      if (isWatch(cat)) {
         braceletIds = matchingBraceletIdsSelected.filter((id) => OBJECT_ID_RE.test(id));
         if (matchingBraceletIdsSelected.some((id) => !OBJECT_ID_RE.test(id))) {
           throw new Error('Invalid matching bracelet selection');
@@ -837,7 +779,7 @@ export function AdminProductsPage() {
       }
 
       let bundlePaise: number | undefined;
-      if (cat === 'Watches' && bundlePriceRupee.trim()) {
+      if (isWatch(cat) && bundlePriceRupee.trim()) {
         const br = Number(bundlePriceRupee);
         if (!Number.isFinite(br) || br < 0) throw new Error('Invalid watch + bracelet bundle price');
         bundlePaise = Math.round(br * 100);
@@ -845,7 +787,7 @@ export function AdminProductsPage() {
       }
 
       const jewelryDetails =
-        isJewelleryCategory(cat) ? jewelryPayloadFromStrings(
+        isJewelleryCat(cat) ? jewelryPayloadFromStrings(
           jewelryMaterialType,
           jewelryFinish,
           jewelryStoneOrMotif,
@@ -868,7 +810,7 @@ export function AdminProductsPage() {
         images: urls,
       };
 
-      if (cat === 'Watches') {
+      if (isWatch(cat)) {
         payload.watchDetails = watchDetails;
         payload.matchingBraceletIds = braceletIds.length ? braceletIds : undefined;
         payload.watchBraceletBundlePrice = bundlePaise;
@@ -891,11 +833,8 @@ export function AdminProductsPage() {
       }
       setName('');
       setDescription('');
-      setCategory('Watches');
-      setCategoryCustom('');
+      setCategory(categories[0]?.slug ?? '');
       setSubcategory('');
-      setJewellerySubPick('Bangles');
-      setJewellerySubCustom('');
       setSku('');
       setSlug('');
       setCaseShape('');
@@ -938,31 +877,12 @@ export function AdminProductsPage() {
     }
   }
 
-  const adminJewellerySubtypeOptions = useMemo(() => {
-    const subs: string[] = [];
-    for (const p of products) {
-      if (!isJewelleryCategory(p.category)) continue;
-      const s = (p.subcategory ?? '').trim();
-      if (s) subs.push(s);
-    }
-    if (jewellerySubFilter !== 'all') subs.push(jewellerySubFilter);
-    return orderedJewellerySubtypeOptions(subs);
-  }, [products, jewellerySubFilter]);
-
   const filteredCatalog = useMemo(() => {
-    let list: AdminProductRow[];
-    if (catalogFilterKey === 'all') {
-      list = products;
-    } else {
-      const want = filterKeyToApiCategory(catalogFilterKey);
-      list = products.filter((p) => p.category.trim().toLowerCase() === want.toLowerCase());
-    }
-    if (catalogFilterKey === 'Jewellery' && jewellerySubFilter !== 'all') {
-      const wantSub = jewellerySubFilter.toLowerCase();
-      list = list.filter((p) => (p.subcategory ?? '').trim().toLowerCase() === wantSub);
-    }
-    return list;
-  }, [products, catalogFilterKey, jewellerySubFilter]);
+    if (catalogFilterKey === 'all') return products;
+    const cat = categories.find((c) => c.slug === catalogFilterKey);
+    if (!cat) return products;
+    return products.filter((p) => productMatchesCategory(p.category, cat));
+  }, [products, catalogFilterKey, categories]);
 
   const missingImageCount = useMemo(
     () => products.filter((p) => !(p.images?.length ?? 0)).length,
@@ -996,42 +916,14 @@ export function AdminProductsPage() {
         </Alert>
       ) : null}
 
-      <ToggleButtonGroup
-        exclusive
+      <CategoryFilterGroup
+        categories={categories}
         value={catalogFilterKey}
-        onChange={(_e, key: CollectionFilterKey | null) => {
-          if (key == null) return;
-          setCatalogFilterKey(key);
-        }}
-        aria-label="Filter catalog by category"
+        hasCombos={false}
+        ariaLabel="Filter catalog by category"
+        onChange={setCatalogFilterKey}
         sx={{ flexWrap: 'wrap', '& .MuiToggleButton-root': { textTransform: 'none' } }}
-      >
-        {COLLECTION_CATEGORY_FILTERS.map((opt) => (
-          <ToggleButton key={opt.key} value={opt.key}>
-            {opt.label}
-          </ToggleButton>
-        ))}
-      </ToggleButtonGroup>
-
-      {catalogFilterKey === 'Jewellery' && (
-        <ToggleButtonGroup
-          exclusive
-          value={jewellerySubFilter}
-          onChange={(_e, key: JewellerySubFilterKey | null) => {
-            if (key == null) return;
-            setJewellerySubFilter(key);
-          }}
-          aria-label="Filter jewellery catalog by type"
-          sx={{ flexWrap: 'wrap', '& .MuiToggleButton-root': { textTransform: 'none' } }}
-        >
-          <ToggleButton value="all">All types</ToggleButton>
-          {adminJewellerySubtypeOptions.map((opt) => (
-            <ToggleButton key={opt} value={opt}>
-              {opt}
-            </ToggleButton>
-          ))}
-        </ToggleButtonGroup>
-      )}
+      />
 
       {error && (
         <Alert severity="error" onClose={() => setError(null)}>
@@ -1097,8 +989,7 @@ export function AdminProductsPage() {
         <DialogContent dividers>
           <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
             Price is in INR (rupees); stored in paise. For watches, pick matching bracelets from the searchable list
-            (products in the Bracelets category). For jewellery, use subcategories (bangles, chains, etc.), tags, and the
-            material / customization fields.
+            (products in the Bracelets category).
           </Typography>
           <Stack spacing={2} sx={{ pt: 0.5 }}>
               <TextField label="Name" value={name} onChange={(e) => setName(e.target.value)} fullWidth required />
@@ -1111,64 +1002,14 @@ export function AdminProductsPage() {
                 minRows={2}
               />
               <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                <CategorySelectField value={category} onChange={setCategory} />
                 <TextField
-                  select
-                  label="Category"
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
+                  label="Subcategory"
+                  value={subcategory}
+                  onChange={(e) => setSubcategory(e.target.value)}
                   fullWidth
-                >
-                  {CATEGORY_PRESETS.map((c) => (
-                    <MenuItem key={c} value={c}>
-                      {c}
-                    </MenuItem>
-                  ))}
-                  <MenuItem value="__custom__">Custom…</MenuItem>
-                </TextField>
-                {category === '__custom__' && (
-                  <TextField
-                    label="Custom category"
-                    value={categoryCustom}
-                    onChange={(e) => setCategoryCustom(e.target.value)}
-                    fullWidth
-                    required
-                  />
-                )}
-                {isJewelleryCategory(resolvedCategory()) ? (
-                  <>
-                    <TextField
-                      select
-                      label="Jewellery subcategory"
-                      value={jewellerySubPick}
-                      onChange={(e) => setJewellerySubPick(e.target.value)}
-                      fullWidth
-                    >
-                      {JEWELLERY_SUB_PRESETS.map((s) => (
-                        <MenuItem key={s} value={s}>
-                          {s}
-                        </MenuItem>
-                      ))}
-                      <MenuItem value="__custom__">Custom…</MenuItem>
-                    </TextField>
-                    {jewellerySubPick === '__custom__' && (
-                      <TextField
-                        label="Custom subcategory"
-                        value={jewellerySubCustom}
-                        onChange={(e) => setJewellerySubCustom(e.target.value)}
-                        fullWidth
-                        required
-                      />
-                    )}
-                  </>
-                ) : (
-                  <TextField
-                    label="Subcategory"
-                    value={subcategory}
-                    onChange={(e) => setSubcategory(e.target.value)}
-                    fullWidth
-                    placeholder="e.g. Dress, Diver, Chain"
-                  />
-                )}
+                  placeholder="e.g. Dress, Diver, Chain"
+                />
               </Stack>
               <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
                 <TextField label="SKU" value={sku} onChange={(e) => setSku(e.target.value)} fullWidth placeholder="SKU" />
@@ -1181,7 +1022,7 @@ export function AdminProductsPage() {
                   helperText="Lowercase, hyphens only"
                 />
               </Stack>
-              {resolvedCategory() === 'Watches' && (
+              {isWatch(resolvedCategory()) && (
                 <>
                   <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
                     <TextField label="Case shape" value={caseShape} onChange={(e) => setCaseShape(e.target.value)} fullWidth />
@@ -1218,7 +1059,7 @@ export function AdminProductsPage() {
                   />
                 </>
               )}
-              {isJewelleryCategory(resolvedCategory()) && (
+              {isJewelleryCat(resolvedCategory()) && (
                 <>
                   <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
                     <TextField
@@ -1359,66 +1200,20 @@ export function AdminProductsPage() {
               minRows={2}
             />
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-              <TextField select label="Category" value={editCategory} onChange={(e) => setEditCategory(e.target.value)} fullWidth>
-                {CATEGORY_PRESETS.map((c) => (
-                  <MenuItem key={c} value={c}>
-                    {c}
-                  </MenuItem>
-                ))}
-                <MenuItem value="__custom__">Custom…</MenuItem>
-              </TextField>
-              {editCategory === '__custom__' && (
-                <TextField
-                  label="Custom category"
-                  value={editCategoryCustom}
-                  onChange={(e) => setEditCategoryCustom(e.target.value)}
-                  fullWidth
-                  required
-                />
-              )}
-              {isJewelleryCategory(resolvedEditCategory()) ? (
-                <>
-                  <TextField
-                    select
-                    label="Jewellery subcategory"
-                    value={editJewellerySubPick}
-                    onChange={(e) => setEditJewellerySubPick(e.target.value)}
-                    fullWidth
-                    disabled={editSaving}
-                  >
-                    {JEWELLERY_SUB_PRESETS.map((s) => (
-                      <MenuItem key={s} value={s}>
-                        {s}
-                      </MenuItem>
-                    ))}
-                    <MenuItem value="__custom__">Custom…</MenuItem>
-                  </TextField>
-                  {editJewellerySubPick === '__custom__' && (
-                    <TextField
-                      label="Custom subcategory"
-                      value={editJewellerySubCustom}
-                      onChange={(e) => setEditJewellerySubCustom(e.target.value)}
-                      fullWidth
-                      required
-                      disabled={editSaving}
-                    />
-                  )}
-                </>
-              ) : (
-                <TextField
-                  label="Subcategory"
-                  value={editSubcategory}
-                  onChange={(e) => setEditSubcategory(e.target.value)}
-                  fullWidth
-                  disabled={editSaving}
-                />
-              )}
+              <CategorySelectField value={editCategory} onChange={setEditCategory} disabled={editSaving} />
+              <TextField
+                label="Subcategory"
+                value={editSubcategory}
+                onChange={(e) => setEditSubcategory(e.target.value)}
+                fullWidth
+                disabled={editSaving}
+              />
             </Stack>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
               <TextField label="SKU" value={editSku} onChange={(e) => setEditSku(e.target.value)} fullWidth />
               <TextField label="Slug" value={editSlug} onChange={(e) => setEditSlug(e.target.value)} fullWidth />
             </Stack>
-            {resolvedEditCategory() === 'Watches' && (
+            {isWatch(resolvedEditCategory()) && (
               <>
                 <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
                   <TextField label="Case shape" value={editCaseShape} onChange={(e) => setEditCaseShape(e.target.value)} fullWidth />
@@ -1451,7 +1246,7 @@ export function AdminProductsPage() {
                 />
               </>
             )}
-            {isJewelleryCategory(resolvedEditCategory()) && (
+            {isJewelleryCat(resolvedEditCategory()) && (
               <>
                 <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
                   <TextField

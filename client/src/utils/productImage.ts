@@ -76,13 +76,14 @@ export function resolveMediaUrls(urls: string[] | undefined | null): string[] {
 }
 
 export function getCategoryPlaceholderImage(category: string, subcategory?: string): string {
-  if (category === 'Watches') return WATCH_CATEGORY_TILE_IMAGE;
-  if (category === 'Bracelets') return BRACELET_CATEGORY_TILE_IMAGE;
-  if (category === 'Jewellery' && subcategory) {
-    const key = subcategory as JewellerySubcategoryPreset;
-    if (key in JEWELLERY_CATEGORY_TILE_IMAGES) return JEWELLERY_CATEGORY_TILE_IMAGES[key];
+  const key = category.trim().toLowerCase();
+  if (key === 'watches' || key === 'watch') return WATCH_CATEGORY_TILE_IMAGE;
+  if (key === 'bracelets' || key === 'bracelet') return BRACELET_CATEGORY_TILE_IMAGE;
+  if ((key === 'jewellery' || key === 'jewelry') && subcategory) {
+    const sub = subcategory as JewellerySubcategoryPreset;
+    if (sub in JEWELLERY_CATEGORY_TILE_IMAGES) return JEWELLERY_CATEGORY_TILE_IMAGES[sub];
   }
-  return BRACELET_CATEGORY_TILE_IMAGE;
+  return PRODUCT_IMAGE_FALLBACK;
 }
 
 /** Primary storefront image: product upload first, then category placeholder. */

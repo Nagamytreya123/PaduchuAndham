@@ -1,0 +1,35 @@
+import mongoose, { Schema, type InferSchemaType } from 'mongoose';
+
+export const CATEGORY_KINDS = ['watch', 'bracelet', 'jewellery', 'generic'] as const;
+export type CategoryKind = (typeof CATEGORY_KINDS)[number];
+
+const priceFilterSchema = new Schema(
+  {
+    id: { type: String, required: true, trim: true, maxlength: 80 },
+    label: { type: String, required: true, trim: true, maxlength: 80 },
+    minPaise: { type: Number, default: null, min: 0 },
+    maxPaise: { type: Number, default: null, min: 0 },
+    /** Null/empty = applies to the whole category; otherwise a product subcategory label. */
+    subcategory: { type: String, default: null, trim: true, maxlength: 80 },
+  },
+  { _id: false },
+);
+
+const categorySchema = new Schema(
+  {
+    slug: { type: String, required: true, unique: true, lowercase: true, trim: true, maxlength: 80 },
+    label: { type: String, required: true, trim: true, maxlength: 80 },
+    sortOrder: { type: Number, required: true, default: 0 },
+    kind: { type: String, required: true, enum: CATEGORY_KINDS, default: 'generic' },
+    tileImageUrl: { type: String, trim: true, default: '' },
+    priceFilters: { type: [priceFilterSchema], default: [] },
+    priceFiltersEnabled: { type: Boolean, default: true },
+    isActive: { type: Boolean, default: true, index: true },
+  },
+  { timestamps: true },
+);
+
+categorySchema.index({ isActive: 1, sortOrder: 1 });
+
+export type CategoryDoc = InferSchemaType<typeof categorySchema>;
+export const CategoryModel = mongoose.model('Category', categorySchema);

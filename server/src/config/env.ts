@@ -78,7 +78,7 @@ if (
 }
 
 export function getAdminEmailSet(): Set<string> {
-  const raw = env.ADMIN_EMAILS ?? '';
+  const raw = [env.ADMIN_EMAILS, process.env.SEED_ADMIN_EMAIL].filter(Boolean).join(',');
   return new Set(
     raw
       .split(',')

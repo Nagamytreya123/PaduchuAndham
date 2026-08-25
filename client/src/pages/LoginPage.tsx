@@ -107,10 +107,13 @@ export function LoginPage() {
     return '/account';
   }, [searchParams]);
 
+  const postAuthRoleRef = useRef<'admin' | 'customer' | null>(null);
+
   const beginOutroThenNavigate = useCallback(() => {
     if (outroNavOnceRef.current) return;
     const v = videoRef.current;
-    const target = user?.role === 'admin' ? '/admin' : redirectTarget;
+    const role = postAuthRoleRef.current ?? user?.role;
+    const target = role === 'admin' ? '/admin' : redirectTarget;
     if (reducedMotion || !v) {
       outroNavOnceRef.current = true;
       navigate(target, { replace: true });
@@ -292,7 +295,8 @@ export function LoginPage() {
 
   const showAuthChrome = !user || authExitStage === 'collapsing';
 
-  async function finishAuthSuccess(mode: 'login' | 'signup') {
+  async function finishAuthSuccess(mode: 'login' | 'signup', role?: 'admin' | 'customer') {
+    if (role) postAuthRoleRef.current = role;
     if (mode === 'signup') trackSignUp('email');
     else trackLogin('email');
     await refresh();
@@ -307,11 +311,11 @@ export function LoginPage() {
     setFormErr(null);
     try {
       setAuthExitStage('collapsing');
-      await apiFetch('/api/auth/login', {
+      const data = await apiFetch<{ user: { role: 'admin' | 'customer' } }>('/api/auth/login', {
         method: 'POST',
         body: JSON.stringify({ email: email.trim().toLowerCase() }),
       });
-      await finishAuthSuccess('login');
+      await finishAuthSuccess('login', data.user.role);
     } catch (e) {
       setAuthExitStage('idle');
       setFormErr(e instanceof Error ? e.message : 'Sign in failed');
@@ -325,14 +329,14 @@ export function LoginPage() {
     setFormErr(null);
     try {
       setAuthExitStage('collapsing');
-      await apiFetch('/api/auth/signup', {
+      const data = await apiFetch<{ user: { role: 'admin' | 'customer' } }>('/api/auth/signup', {
         method: 'POST',
         body: JSON.stringify({
           email: email.trim().toLowerCase(),
           name: displayName.trim() || undefined,
         }),
       });
-      await finishAuthSuccess('signup');
+      await finishAuthSuccess('signup', data.user.role);
     } catch (e) {
       setAuthExitStage('idle');
       setFormErr(e instanceof Error ? e.message : 'Could not create account');

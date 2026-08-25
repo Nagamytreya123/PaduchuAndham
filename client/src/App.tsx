@@ -25,6 +25,7 @@ import { AdminJewelleryCombosPage } from './pages/admin/AdminJewelleryCombosPage
 import { AdminOrdersPage } from './pages/admin/AdminOrdersPage';
 import { AdminReviewsPage } from './pages/admin/AdminReviewsPage';
 import { AdminSettingsPage } from './pages/admin/AdminSettingsPage';
+import { AdminCategoriesPage } from './pages/admin/AdminCategoriesPage';
 import { JewelleryComboDetailPage } from './pages/JewelleryComboDetailPage';
 import { AnalyticsListener } from './components/AnalyticsListener';
 import { ScrollToTop } from './components/ScrollToTop';
@@ -109,6 +110,7 @@ export function App() {
       >
         <Route index element={<DashboardPage />} />
         <Route path="products" element={<AdminProductsPage />} />
+        <Route path="categories" element={<AdminCategoriesPage />} />
         <Route path="jewellery-combos" element={<AdminJewelleryCombosPage />} />
         <Route path="orders" element={<AdminOrdersPage />} />
         <Route path="reviews" element={<AdminReviewsPage />} />

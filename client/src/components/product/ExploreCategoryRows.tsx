@@ -8,27 +8,8 @@ import { ProductCard } from '../ProductCard';
 import { editorialSurface } from '../../constants/editorialSurface';
 import { IconChevronLeft, IconChevronRight } from '../../icons';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
-
-const CATEGORY_ROWS = [
-  {
-    category: 'Jewellery',
-    label: 'Jewellery',
-    subtitle: 'Curated pieces',
-    shopTo: '/shop?category=Jewellery',
-  },
-  {
-    category: 'Watches',
-    label: 'Watches',
-    subtitle: 'Precision time',
-    shopTo: '/shop?category=Watches',
-  },
-  {
-    category: 'Bracelets',
-    label: 'Bracelets',
-    subtitle: 'Fine details',
-    shopTo: '/shop?category=Bracelets',
-  },
-] as const;
+import { useCategories } from '../../context/CategoriesContext';
+import { productMatchesCategory, shopPathForCategorySlug } from '../../utils/catalogCategory';
 
 const PRODUCTS_PER_ROW = 5;
 
@@ -155,17 +136,23 @@ function CategoryProductRow({
 }
 
 export function ExploreCategoryRows({ catalog, excludeProductId }: ExploreCategoryRowsProps) {
-  const rows = CATEGORY_ROWS.map((row) => ({
-    ...row,
-    products: catalog
-      .filter(
-        (p) =>
-          p.isActive !== false &&
-          p.id !== excludeProductId &&
-          p.category === row.category,
-      )
-      .slice(0, PRODUCTS_PER_ROW),
-  })).filter((row) => row.products.length > 0);
+  const { categories } = useCategories();
+  const rows = categories
+    .map((cat) => ({
+      category: cat.slug,
+      label: cat.label,
+      subtitle: cat.kind === 'watch' ? 'Precision time' : cat.kind === 'bracelet' ? 'Fine details' : 'Collection',
+      shopTo: shopPathForCategorySlug(cat.slug),
+      products: catalog
+        .filter(
+          (p) =>
+            p.isActive !== false &&
+            p.id !== excludeProductId &&
+            productMatchesCategory(p.category, cat),
+        )
+        .slice(0, PRODUCTS_PER_ROW),
+    }))
+    .filter((row) => row.products.length > 0);
 
   if (rows.length === 0) return null;
 

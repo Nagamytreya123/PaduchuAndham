@@ -39,6 +39,7 @@ const DRAWER_COLLAPSED = 88;
 const links = [
   { to: '/admin', label: 'Overview', icon: <IconDashboard fontSize="small" /> },
   { to: '/admin/products', label: 'Products', icon: <IconInventory fontSize="small" /> },
+  { to: '/admin/categories', label: 'Categories', icon: <IconInventory fontSize="small" /> },
   { to: '/admin/jewellery-combos', label: 'Jewellery combos', icon: <IconInventory fontSize="small" /> },
   { to: '/admin/orders', label: 'Orders', icon: <IconShipping fontSize="small" /> },
   { to: '/admin/reviews', label: 'Reviews', icon: <IconReviews fontSize="small" /> },

@@ -1,0 +1,361 @@
+import { randomUUID } from 'node:crypto';
+import { CategoryModel, type CategoryKind } from '../models/Category.js';
+import { ProductModel } from '../models/Product.js';
+
+const WATCH_TILE =
+  'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=640&q=80&auto=format';
+const BRACELET_TILE =
+  'https://images.unsplash.com/photo-1547996160-81dfa63595aa?w=640&q=80&auto=format';
+
+/** Default categories ensured on boot. Admins can add more via POST /api/admin/categories. */
+const CANONICAL_CATEGORIES: {
+  slug: string;
+  label: string;
+  sortOrder: number;
+  kind: CategoryKind;
+  tileImageUrl: string;
+}[] = [
+  { slug: 'watches', label: 'Watches', sortOrder: 10, kind: 'watch', tileImageUrl: WATCH_TILE },
+  { slug: 'bracelets', label: 'Bracelets', sortOrder: 20, kind: 'bracelet', tileImageUrl: BRACELET_TILE },
+];
+
+export type PublicPriceFilter = {
+  id: string;
+  label: string;
+  minPaise: number | null;
+  maxPaise: number | null;
+  subcategory: string | null;
+};
+
+export type PublicCategory = {
+  slug: string;
+  label: string;
+  sortOrder: number;
+  kind: CategoryKind;
+  tileImageUrl: string;
+  productCount: number;
+  subcategories: string[];
+  priceFilters: PublicPriceFilter[];
+  priceFiltersEnabled: boolean;
+};
+
+export async function ensureCanonicalCategories(): Promise<void> {
+  for (const row of CANONICAL_CATEGORIES) {
+    await CategoryModel.updateOne(
+      { slug: row.slug },
+      {
+        $setOnInsert: {
+          slug: row.slug,
+          label: row.label,
+          sortOrder: row.sortOrder,
+          kind: row.kind,
+          tileImageUrl: row.tileImageUrl,
+          isActive: true,
+          priceFilters: [],
+          priceFiltersEnabled: true,
+        },
+      },
+      { upsert: true },
+    );
+  }
+}
+
+export async function findActiveCategoryByInput(raw: string): Promise<{
+  slug: string;
+  label: string;
+  kind: CategoryKind;
+} | null> {
+  const key = raw.trim().toLowerCase();
+  if (!key) return null;
+  const doc = await CategoryModel.findOne({
+    isActive: true,
+    $or: [{ slug: key }, { label: new RegExp(`^${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }],
+  })
+    .select('slug label kind')
+    .lean();
+  if (!doc) return null;
+  return { slug: doc.slug, label: doc.label, kind: doc.kind as CategoryKind };
+}
+
+/** Persist slug on products so filters stay stable if labels change. */
+export async function normalizeCategoryInput(raw: string): Promise<string | null> {
+  const found = await findActiveCategoryByInput(raw);
+  return found?.slug ?? null;
+}
+
+export async function listPublicCategories(): Promise<PublicCategory[]> {
+  const docs = await CategoryModel.find({ isActive: true }).sort({ sortOrder: 1, label: 1 }).lean();
+  const [counts, subRows] = await Promise.all([
+    ProductModel.aggregate<{ _id: string; n: number }>([
+      { $match: { isActive: true } },
+      { $group: { _id: { $toLower: { $ifNull: ['$category', ''] } }, n: { $sum: 1 } } },
+    ]),
+    ProductModel.aggregate<{ _id: { cat: string; sub: string } }>([
+      {
+        $match: {
+          isActive: true,
+          subcategory: { $exists: true, $nin: [null, ''] },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            cat: { $toLower: { $ifNull: ['$category', ''] } },
+            sub: '$subcategory',
+          },
+        },
+      },
+    ]),
+  ]);
+  const countByKey = new Map(counts.map((row) => [row._id, row.n]));
+  const subsByCat = new Map<string, string[]>();
+  for (const row of subRows) {
+    const catKey = (row._id.cat ?? '').trim();
+    const sub = (row._id.sub ?? '').trim();
+    if (!catKey || !sub) continue;
+    const list = subsByCat.get(catKey) ?? [];
+    if (!list.some((s) => s.toLowerCase() === sub.toLowerCase())) list.push(sub);
+    subsByCat.set(catKey, list);
+  }
+
+  return docs.map((d) => {
+    const slug = d.slug;
+    const label = d.label;
+    const productCount =
+      (countByKey.get(slug.toLowerCase()) ?? 0) +
+      (label.toLowerCase() !== slug.toLowerCase() ? (countByKey.get(label.toLowerCase()) ?? 0) : 0);
+    const subcategories = [
+      ...(subsByCat.get(slug.toLowerCase()) ?? []),
+      ...(label.toLowerCase() !== slug.toLowerCase() ? (subsByCat.get(label.toLowerCase()) ?? []) : []),
+    ]
+      .filter((s, i, arr) => arr.findIndex((x) => x.toLowerCase() === s.toLowerCase()) === i)
+      .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    return {
+      slug,
+      label,
+      sortOrder: d.sortOrder,
+      kind: d.kind as CategoryKind,
+      tileImageUrl: d.tileImageUrl ?? '',
+      productCount,
+      subcategories,
+      priceFilters: mapPriceFilters(d.priceFilters),
+      priceFiltersEnabled: d.priceFiltersEnabled !== false,
+    };
+  });
+}
+
+function mapPriceFilters(raw: unknown): PublicPriceFilter[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((row) => {
+      if (!row || typeof row !== 'object') return null;
+      const r = row as {
+        id?: unknown;
+        label?: unknown;
+        minPaise?: unknown;
+        maxPaise?: unknown;
+        subcategory?: unknown;
+      };
+      const id = typeof r.id === 'string' ? r.id.trim() : '';
+      const label = typeof r.label === 'string' ? r.label.trim() : '';
+      if (!id || !label) return null;
+      const minPaise =
+        typeof r.minPaise === 'number' && Number.isFinite(r.minPaise) ? Math.max(0, Math.round(r.minPaise)) : null;
+      const maxPaise =
+        typeof r.maxPaise === 'number' && Number.isFinite(r.maxPaise) ? Math.max(0, Math.round(r.maxPaise)) : null;
+      const sub = typeof r.subcategory === 'string' ? r.subcategory.trim() : '';
+      return {
+        id,
+        label,
+        minPaise,
+        maxPaise,
+        subcategory: sub || null,
+      };
+    })
+    .filter((x): x is PublicPriceFilter => x != null);
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+export function slugifyCategoryLabel(label: string): string {
+  return label
+    .trim()
+    .toLowerCase()
+    .replace(/['’]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+}
+
+function inferCategoryKind(slug: string, label: string): CategoryKind {
+  const hay = `${slug} ${label}`.toLowerCase();
+  if (/\bwatches?\b/.test(hay)) return 'watch';
+  if (/\bbracelets?\b/.test(hay)) return 'bracelet';
+  if (/\bjewell?ery\b/.test(hay)) return 'jewellery';
+  return 'generic';
+}
+
+export class CategoryServiceError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
+
+/** Create or reactivate a storefront category from an admin-entered name. */
+export async function createCategoryFromLabel(labelRaw: string): Promise<PublicCategory> {
+  const label = labelRaw.trim().replace(/\s+/g, ' ');
+  if (label.length < 2 || label.length > 80) {
+    throw new CategoryServiceError('Category name must be 2–80 characters', 400);
+  }
+  const slug = slugifyCategoryLabel(label);
+  if (!slug) {
+    throw new CategoryServiceError('Use letters or numbers in the category name', 400);
+  }
+
+  const existing = await CategoryModel.findOne({
+    $or: [{ slug }, { label: new RegExp(`^${escapeRegex(label)}$`, 'i') }],
+  });
+
+  if (existing) {
+    existing.isActive = true;
+    if (!existing.label.trim()) existing.label = label;
+    await existing.save();
+  } else {
+    const top = await CategoryModel.findOne().sort({ sortOrder: -1 }).select('sortOrder').lean();
+    await CategoryModel.create({
+      slug,
+      label,
+      sortOrder: (top?.sortOrder ?? 0) + 10,
+      kind: inferCategoryKind(slug, label),
+      isActive: true,
+    });
+  }
+
+  const list = await listPublicCategories();
+  const created = list.find((c) => c.slug === slug || c.label.toLowerCase() === label.toLowerCase());
+  if (!created) {
+    throw new CategoryServiceError('Category was saved but could not be loaded', 500);
+  }
+  return created;
+}
+
+export type PriceFilterInput = {
+  id?: string;
+  label: string;
+  minPaise?: number | null;
+  maxPaise?: number | null;
+  subcategory?: string | null;
+};
+
+function normalizePriceFilterInputs(raw: PriceFilterInput[]): PublicPriceFilter[] {
+  if (raw.length > 30) {
+    throw new CategoryServiceError('You can add at most 30 price filters per category', 400);
+  }
+  const seen = new Set<string>();
+  return raw.map((row, i) => {
+    const label = (row.label ?? '').trim().replace(/\s+/g, ' ');
+    if (label.length < 1 || label.length > 80) {
+      throw new CategoryServiceError(`Price filter ${i + 1}: name must be 1–80 characters`, 400);
+    }
+    const minPaise =
+      row.minPaise == null || row.minPaise === undefined ? null : Math.round(Number(row.minPaise));
+    const maxPaise =
+      row.maxPaise == null || row.maxPaise === undefined ? null : Math.round(Number(row.maxPaise));
+    if (minPaise != null && (!Number.isFinite(minPaise) || minPaise < 0)) {
+      throw new CategoryServiceError(`Price filter ${i + 1}: invalid minimum`, 400);
+    }
+    if (maxPaise != null && (!Number.isFinite(maxPaise) || maxPaise < 0)) {
+      throw new CategoryServiceError(`Price filter ${i + 1}: invalid maximum`, 400);
+    }
+    if (minPaise == null && maxPaise == null) {
+      throw new CategoryServiceError(`Price filter ${i + 1}: set a minimum, maximum, or both`, 400);
+    }
+    if (minPaise != null && maxPaise != null && minPaise > maxPaise) {
+      throw new CategoryServiceError(`Price filter ${i + 1}: minimum cannot exceed maximum`, 400);
+    }
+    const subcategory = (row.subcategory ?? '').trim() || null;
+    if (subcategory && subcategory.length > 80) {
+      throw new CategoryServiceError(`Price filter ${i + 1}: subcategory is too long`, 400);
+    }
+    let id = (row.id ?? '').trim() || randomUUID();
+    if (id.length > 80) id = randomUUID();
+    if (seen.has(id)) id = randomUUID();
+    seen.add(id);
+    return { id, label, minPaise, maxPaise, subcategory };
+  });
+}
+
+export async function updateCategory(
+  slugRaw: string,
+  patch: {
+    label?: string;
+    tileImageUrl?: string | null;
+    priceFilters?: PriceFilterInput[];
+    priceFiltersEnabled?: boolean;
+  },
+): Promise<PublicCategory> {
+  const slug = slugRaw.trim().toLowerCase();
+  const doc = await CategoryModel.findOne({ slug });
+  if (!doc || !doc.isActive) {
+    throw new CategoryServiceError('Category not found', 404);
+  }
+
+  if (patch.label !== undefined) {
+    const label = patch.label.trim().replace(/\s+/g, ' ');
+    if (label.length < 2 || label.length > 80) {
+      throw new CategoryServiceError('Category name must be 2–80 characters', 400);
+    }
+    const clash = await CategoryModel.findOne({
+      slug: { $ne: slug },
+      label: new RegExp(`^${escapeRegex(label)}$`, 'i'),
+    });
+    if (clash) {
+      throw new CategoryServiceError('Another category already uses that name', 409);
+    }
+    doc.label = label;
+  }
+
+  if (patch.tileImageUrl !== undefined) {
+    doc.tileImageUrl = patch.tileImageUrl?.trim() ?? '';
+  }
+
+  if (patch.priceFilters !== undefined) {
+    doc.set('priceFilters', normalizePriceFilterInputs(patch.priceFilters));
+  }
+
+  if (patch.priceFiltersEnabled !== undefined) {
+    doc.priceFiltersEnabled = patch.priceFiltersEnabled;
+  }
+
+  await doc.save();
+  const list = await listPublicCategories();
+  const updated = list.find((c) => c.slug === slug);
+  if (!updated) {
+    throw new CategoryServiceError('Category was saved but could not be loaded', 500);
+  }
+  return updated;
+}
+
+export async function setCategoryTileImage(slugRaw: string, imageUrl: string): Promise<PublicCategory> {
+  const url = imageUrl.trim();
+  if (!url) {
+    throw new CategoryServiceError('Upload an image file', 400);
+  }
+  return updateCategory(slugRaw, { tileImageUrl: url });
+}
+
+/** Hide a category from the shop. Products keep their slug and still appear under All. */
+export async function deleteCategory(slugRaw: string): Promise<void> {
+  const slug = slugRaw.trim().toLowerCase();
+  const doc = await CategoryModel.findOne({ slug });
+  if (!doc || !doc.isActive) {
+    throw new CategoryServiceError('Category not found', 404);
+  }
+  doc.isActive = false;
+  await doc.save();
+}
