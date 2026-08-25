@@ -376,7 +376,7 @@ function AdminProductCatalogCard({
 }
 
 export function AdminProductsPage() {
-  const { categories, kindFor } = useCategories();
+  const { categories, kindFor, catalogRevision } = useCategories();
   const isWatch = (c: string) => kindFor(c) === 'watch';
   const isJewelleryCat = (c: string) => kindFor(c) === 'jewellery';
 
@@ -469,7 +469,7 @@ export function AdminProductsPage() {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [catalogRevision]);
 
   useEffect(() => {
     if (categories.length === 0) return;

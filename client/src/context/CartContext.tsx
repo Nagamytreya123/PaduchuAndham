@@ -11,6 +11,7 @@ import {
 import { apiFetch } from '../api/client';
 import { trackAddToCart } from '../analytics';
 import { useAuth } from './AuthContext';
+import { useCategories } from './CategoriesContext';
 
 export type CartLine = {
   productId: string;
@@ -137,6 +138,7 @@ function loadGuestCart(): CartLine[] {
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
+  const { removedProductIds, catalogRevision } = useCategories();
   const [lines, setLines] = useState<CartLine[]>([]);
   /** When true, cart for current mode (guest vs user) has been loaded; enables persistence. */
   const [hydrated, setHydrated] = useState(false);
@@ -203,6 +205,22 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
     localStorage.setItem(GUEST_STORAGE_KEY, JSON.stringify(lines));
   }, [lines, hydrated, loading, user?.id, user]);
+
+  useEffect(() => {
+    if (!hydrated || removedProductIds.length === 0) return;
+    const idSet = new Set(removedProductIds);
+    setLines((prev) => {
+      const brokenGroups = new Set(
+        prev.filter((l) => idSet.has(l.productId)).map((l) => l.bundleGroupId).filter(Boolean) as string[],
+      );
+      const next = prev.filter((l) => {
+        if (idSet.has(l.productId)) return false;
+        if (l.bundleGroupId && brokenGroups.has(l.bundleGroupId)) return false;
+        return true;
+      });
+      return next.length === prev.length ? prev : next;
+    });
+  }, [removedProductIds, catalogRevision, hydrated]);
 
   const add = useCallback((line: Omit<CartLine, 'qty'> & { qty?: number }) => {
     const qty = line.qty ?? 1;

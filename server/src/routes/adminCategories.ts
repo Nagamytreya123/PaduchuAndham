@@ -8,6 +8,7 @@ import {
   CategoryServiceError,
   createCategoryFromLabel,
   deleteCategory,
+  listAdminCategories,
   updateCategory,
 } from '../services/categories.js';
 
@@ -16,6 +17,15 @@ router.use(requireAuth, requireAdmin);
 
 const upload = createImageUpload();
 const tileImageUpload = withMulter(upload, [{ name: 'image', maxCount: 1 }]);
+
+router.get('/', async (_req, res) => {
+  try {
+    const categories = await listAdminCategories();
+    res.json({ categories });
+  } catch (err) {
+    sendCategoryError(res, err, 'Could not load categories');
+  }
+});
 
 const createSchema = z.object({
   label: z.string().min(2).max(80),
@@ -34,6 +44,7 @@ const patchSchema = z.object({
   tileImageUrl: z.string().nullable().optional(),
   priceFilters: z.array(priceFilterSchema).max(30).optional(),
   priceFiltersEnabled: z.boolean().optional(),
+  isActive: z.boolean().optional(),
 });
 
 function sendCategoryError(res: import('express').Response, err: unknown, fallback: string) {
@@ -74,7 +85,8 @@ router.patch('/:slug', async (req, res) => {
     body.label === undefined &&
     body.tileImageUrl === undefined &&
     body.priceFilters === undefined &&
-    body.priceFiltersEnabled === undefined
+    body.priceFiltersEnabled === undefined &&
+    body.isActive === undefined
   ) {
     res.status(400).json({ error: 'Nothing to update' });
     return;
@@ -109,9 +121,9 @@ router.post('/:slug/image', tileImageUpload, async (req, res) => {
 
 router.delete('/:slug', async (req, res) => {
   try {
-    await deleteCategory(String(req.params.slug));
+    const result = await deleteCategory(String(req.params.slug));
     await invalidateCatalogCache();
-    res.status(204).end();
+    res.json({ ok: true, ...result });
   } catch (err) {
     sendCategoryError(res, err, 'Could not delete category');
   }

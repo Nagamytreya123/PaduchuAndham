@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import TextField from '@mui/material/TextField';
 import MenuItem from '@mui/material/MenuItem';
 import Button from '@mui/material/Button';
@@ -18,11 +18,21 @@ export function CategorySelectField({
   onChange: (slug: string) => void;
   disabled?: boolean;
 }) {
-  const { categories, refresh } = useCategories();
+  const { refresh } = useCategories();
+  const [categories, setCategories] = useState<CatalogCategory[]>([]);
   const [mode, setMode] = useState<'pick' | 'create'>('pick');
   const [newLabel, setNewLabel] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  async function loadAdminCategories() {
+    const data = await apiFetch<{ categories: CatalogCategory[] }>('/api/admin/categories');
+    setCategories(data.categories ?? []);
+  }
+
+  useEffect(() => {
+    void loadAdminCategories().catch(() => setCategories([]));
+  }, []);
 
   const selectValue = mode === 'create' ? ADD_NEW : value;
 
@@ -41,6 +51,7 @@ export function CategorySelectField({
         body: JSON.stringify({ label }),
       });
       await refresh();
+      await loadAdminCategories();
       onChange(data.category.slug);
       setMode('pick');
       setNewLabel('');
@@ -72,7 +83,7 @@ export function CategorySelectField({
       >
         {categories.map((c) => (
           <MenuItem key={c.slug} value={c.slug}>
-            {c.label}
+            {c.isActive === false ? `${c.label} (hidden)` : c.label}
           </MenuItem>
         ))}
         <MenuItem value={ADD_NEW}>Add new category…</MenuItem>

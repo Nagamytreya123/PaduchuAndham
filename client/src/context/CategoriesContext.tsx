@@ -1,5 +1,6 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { apiFetch } from '../api/client';
+import { pruneCatalog } from '../utils/catalogCache';
 import {
   categoryKindOf,
   findCatalogCategory,
@@ -7,10 +8,16 @@ import {
   type CatalogCategoryKind,
 } from '../utils/catalogCategory';
 
+type RefreshOptions = {
+  removedProductIds?: string[];
+};
+
 type CategoriesContextValue = {
   categories: CatalogCategory[];
   loading: boolean;
-  refresh: () => Promise<void>;
+  catalogRevision: number;
+  removedProductIds: string[];
+  refresh: (opts?: RefreshOptions) => Promise<void>;
   labelFor: (productCategory: string) => string;
   kindFor: (productCategory: string) => CatalogCategoryKind | undefined;
   tileFor: (productCategory: string) => string;
@@ -22,18 +29,34 @@ const CategoriesContext = createContext<CategoriesContextValue | null>(null);
 export function CategoriesProvider({ children }: { children: ReactNode }) {
   const [categories, setCategories] = useState<CatalogCategory[]>([]);
   const [loading, setLoading] = useState(true);
+  const [catalogRevision, setCatalogRevision] = useState(0);
+  const [removedProductIds, setRemovedProductIds] = useState<string[]>([]);
+  const skipRevisionBump = useRef(true);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (opts?: RefreshOptions) => {
     const data = await apiFetch<{ categories: CatalogCategory[] }>('/api/categories');
-        setCategories(
-          (data.categories ?? []).map((c) => ({
-            ...c,
-            priceFilters: c.priceFilters ?? [],
+    setCategories(
+      (data.categories ?? []).map((c) => ({
+        ...c,
+        priceFilters: c.priceFilters ?? [],
             priceFiltersEnabled: c.priceFiltersEnabled !== false,
+            isActive: c.isActive !== false,
             subcategories: c.subcategories ?? [],
-            tileImageUrl: c.tileImageUrl ?? '',
-          })),
-        );
+        tileImageUrl: c.tileImageUrl ?? '',
+      })),
+    );
+    const removed = opts?.removedProductIds ?? [];
+    if (removed.length > 0) {
+      pruneCatalog(removed);
+      setRemovedProductIds(removed);
+    } else {
+      setRemovedProductIds([]);
+    }
+    if (skipRevisionBump.current) {
+      skipRevisionBump.current = false;
+      return;
+    }
+    setCatalogRevision((n) => n + 1);
   }, []);
 
   useEffect(() => {
@@ -56,6 +79,8 @@ export function CategoriesProvider({ children }: { children: ReactNode }) {
     return {
       categories,
       loading,
+      catalogRevision,
+      removedProductIds,
       refresh,
       find: (productCategory) => findCatalogCategory(productCategory, categories),
       labelFor: (productCategory) =>
@@ -64,7 +89,7 @@ export function CategoriesProvider({ children }: { children: ReactNode }) {
       tileFor: (productCategory) =>
         findCatalogCategory(productCategory, categories)?.tileImageUrl ?? '',
     };
-  }, [categories, loading, refresh]);
+  }, [categories, loading, catalogRevision, removedProductIds, refresh]);
 
   return <CategoriesContext.Provider value={value}>{children}</CategoriesContext.Provider>;
 }

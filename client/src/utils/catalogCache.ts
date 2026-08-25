@@ -15,6 +15,12 @@ export function getCachedProduct(id: string): ProductSummary | undefined {
   return byId.get(id);
 }
 
+export function pruneCatalog(ids: string[]) {
+  for (const id of ids) {
+    byId.delete(id);
+  }
+}
+
 export function cacheProduct(product: ProductSummary) {
   byId.set(product.id, product);
 }

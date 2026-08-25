@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto';
+import { Types } from 'mongoose';
 import { CategoryModel, type CategoryKind } from '../models/Category.js';
 import { ProductModel } from '../models/Product.js';
+import { ReviewModel } from '../models/Review.js';
+import { JewelleryComboModel } from '../models/JewelleryCombo.js';
+import { CartModel } from '../models/Cart.js';
 
 const WATCH_TILE =
   'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=640&q=80&auto=format';
@@ -37,9 +41,12 @@ export type PublicCategory = {
   subcategories: string[];
   priceFilters: PublicPriceFilter[];
   priceFiltersEnabled: boolean;
+  isActive: boolean;
 };
 
 export async function ensureCanonicalCategories(): Promise<void> {
+  const existing = await CategoryModel.countDocuments();
+  if (existing > 0) return;
   for (const row of CANONICAL_CATEGORIES) {
     await CategoryModel.updateOne(
       { slug: row.slug },
@@ -65,10 +72,21 @@ export async function findActiveCategoryByInput(raw: string): Promise<{
   label: string;
   kind: CategoryKind;
 } | null> {
+  return findCategoryByInput(raw, true);
+}
+
+export async function findCategoryByInput(
+  raw: string,
+  activeOnly = false,
+): Promise<{
+  slug: string;
+  label: string;
+  kind: CategoryKind;
+} | null> {
   const key = raw.trim().toLowerCase();
   if (!key) return null;
   const doc = await CategoryModel.findOne({
-    isActive: true,
+    ...(activeOnly ? { isActive: true } : {}),
     $or: [{ slug: key }, { label: new RegExp(`^${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }],
   })
     .select('slug label kind')
@@ -79,12 +97,22 @@ export async function findActiveCategoryByInput(raw: string): Promise<{
 
 /** Persist slug on products so filters stay stable if labels change. */
 export async function normalizeCategoryInput(raw: string): Promise<string | null> {
-  const found = await findActiveCategoryByInput(raw);
+  const found = await findCategoryByInput(raw, false);
   return found?.slug ?? null;
 }
 
 export async function listPublicCategories(): Promise<PublicCategory[]> {
-  const docs = await CategoryModel.find({ isActive: true }).sort({ sortOrder: 1, label: 1 }).lean();
+  return listCategories(true);
+}
+
+export async function listAdminCategories(): Promise<PublicCategory[]> {
+  return listCategories(false);
+}
+
+async function listCategories(activeOnly: boolean): Promise<PublicCategory[]> {
+  const docs = await CategoryModel.find(activeOnly ? { isActive: true } : {})
+    .sort({ sortOrder: 1, label: 1 })
+    .lean();
   const [counts, subRows] = await Promise.all([
     ProductModel.aggregate<{ _id: string; n: number }>([
       { $match: { isActive: true } },
@@ -140,6 +168,7 @@ export async function listPublicCategories(): Promise<PublicCategory[]> {
       subcategories,
       priceFilters: mapPriceFilters(d.priceFilters),
       priceFiltersEnabled: d.priceFiltersEnabled !== false,
+      isActive: d.isActive !== false,
     };
   });
 }
@@ -177,6 +206,30 @@ function mapPriceFilters(raw: unknown): PublicPriceFilter[] {
 
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Exclude products whose category is switched off for the storefront. */
+export async function storefrontHiddenCategoryFilter(): Promise<Record<string, unknown> | null> {
+  const hidden = await CategoryModel.find({ isActive: false }).select('slug label').lean();
+  if (hidden.length === 0) return null;
+  const names = [
+    ...new Set(hidden.flatMap((d) => [d.slug, d.label].map((s) => s.trim()).filter(Boolean))),
+  ];
+  return {
+    $nor: names.map((name) => ({ category: new RegExp(`^${escapeRegex(name)}$`, 'i') })),
+  };
+}
+
+export async function isStorefrontHiddenCategory(productCategory: string): Promise<boolean> {
+  const key = productCategory.trim().toLowerCase();
+  if (!key) return false;
+  const doc = await CategoryModel.findOne({
+    isActive: false,
+    $or: [{ slug: key }, { label: new RegExp(`^${escapeRegex(key)}$`, 'i') }],
+  })
+    .select('_id')
+    .lean();
+  return Boolean(doc);
 }
 
 export function slugifyCategoryLabel(label: string): string {
@@ -297,11 +350,12 @@ export async function updateCategory(
     tileImageUrl?: string | null;
     priceFilters?: PriceFilterInput[];
     priceFiltersEnabled?: boolean;
+    isActive?: boolean;
   },
 ): Promise<PublicCategory> {
   const slug = slugRaw.trim().toLowerCase();
   const doc = await CategoryModel.findOne({ slug });
-  if (!doc || !doc.isActive) {
+  if (!doc) {
     throw new CategoryServiceError('Category not found', 404);
   }
 
@@ -332,8 +386,12 @@ export async function updateCategory(
     doc.priceFiltersEnabled = patch.priceFiltersEnabled;
   }
 
+  if (patch.isActive !== undefined) {
+    doc.isActive = patch.isActive;
+  }
+
   await doc.save();
-  const list = await listPublicCategories();
+  const list = await listAdminCategories();
   const updated = list.find((c) => c.slug === slug);
   if (!updated) {
     throw new CategoryServiceError('Category was saved but could not be loaded', 500);
@@ -349,13 +407,68 @@ export async function setCategoryTileImage(slugRaw: string, imageUrl: string): P
   return updateCategory(slugRaw, { tileImageUrl: url });
 }
 
-/** Hide a category from the shop. Products keep their slug and still appear under All. */
-export async function deleteCategory(slugRaw: string): Promise<void> {
+/** Permanently delete a category, every product in it, and related shop state. */
+export async function deleteCategory(slugRaw: string): Promise<{
+  deletedProductIds: string[];
+  deletedProducts: number;
+  deletedCombos: number;
+}> {
   const slug = slugRaw.trim().toLowerCase();
   const doc = await CategoryModel.findOne({ slug });
-  if (!doc || !doc.isActive) {
+  if (!doc) {
     throw new CategoryServiceError('Category not found', 404);
   }
-  doc.isActive = false;
-  await doc.save();
+
+  const names = [...new Set([doc.slug, doc.label].map((s) => s.trim()).filter(Boolean))];
+  const categoryFilter = {
+    $or: names.map((name) => ({
+      category: new RegExp(`^${escapeRegex(name)}$`, 'i'),
+    })),
+  };
+
+  const products = await ProductModel.find(categoryFilter).select('_id').lean();
+  const objectIds = products.map((p) => p._id as Types.ObjectId);
+  const deletedProductIds = objectIds.map((id) => String(id));
+
+  let deletedCombos = 0;
+  if (objectIds.length > 0) {
+    const comboDel = await JewelleryComboModel.deleteMany({ productIds: { $in: objectIds } });
+    deletedCombos = comboDel.deletedCount ?? 0;
+
+    await ReviewModel.deleteMany({ product: { $in: objectIds } });
+    await ProductModel.updateMany(
+      { matchingBraceletIds: { $in: objectIds } },
+      { $pull: { matchingBraceletIds: { $in: objectIds } } },
+    );
+
+    const carts = await CartModel.find({ 'items.productId': { $in: objectIds } });
+    const idSet = new Set(deletedProductIds);
+    for (const cart of carts) {
+      const brokenGroups = new Set(
+        cart.items
+          .filter((item) => idSet.has(String(item.productId)))
+          .map((item) => item.bundleGroupId)
+          .filter((g): g is string => Boolean(g)),
+      );
+      cart.set(
+        'items',
+        cart.items.filter((item) => {
+          if (idSet.has(String(item.productId))) return false;
+          if (item.bundleGroupId && brokenGroups.has(item.bundleGroupId)) return false;
+          return true;
+        }),
+      );
+      await cart.save();
+    }
+
+    await ProductModel.deleteMany({ _id: { $in: objectIds } });
+  }
+
+  await CategoryModel.deleteOne({ _id: doc._id });
+
+  return {
+    deletedProductIds,
+    deletedProducts: objectIds.length,
+    deletedCombos,
+  };
 }

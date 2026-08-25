@@ -13,6 +13,7 @@ import {
   cachedProductReviewsPage,
   invalidateCatalogForProductIds,
 } from '../cache/catalog.js';
+import { isStorefrontHiddenCategory, storefrontHiddenCategoryFilter } from '../services/categories.js';
 
 const router = Router();
 
@@ -57,7 +58,9 @@ router.get('/', publicCatalogLimiter, async (req, res) => {
     'products:list',
     [categoryRaw, subcategoryRaw],
     async () => {
-      const filter = productListFilter(categoryRaw, subcategoryRaw);
+      const hidden = await storefrontHiddenCategoryFilter();
+      const base = productListFilter(categoryRaw, subcategoryRaw);
+      const filter = hidden ? { $and: [base, hidden] } : base;
       const list = await ProductModel.find(filter).sort({ createdAt: -1 }).lean();
       return {
         products: list.map((p) => productToJson(p)),
@@ -222,6 +225,7 @@ router.get('/:id', publicCatalogLimiter, async (req, res) => {
     ]);
 
     if (!p) return null;
+    if (await isStorefrontHiddenCategory(String(p.category ?? ''))) return null;
 
     const base = productToJson(p);
     const ids = p.matchingBraceletIds ?? [];

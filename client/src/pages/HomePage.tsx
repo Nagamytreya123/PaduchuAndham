@@ -288,7 +288,7 @@ function FrameSequence({ scrollYProgress }: { scrollYProgress: MotionValue<numbe
 export function HomePage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
-  const { categories } = useCategories();
+  const { categories, catalogRevision } = useCategories();
   const categoryParam = searchParams.get('category') ?? '';
   const subcategoryParam = searchParams.get('subcategory') ?? '';
   const priceFilterParam = searchParams.get('priceFilter') ?? '';
@@ -392,7 +392,7 @@ export function HomePage() {
         setCombosLoading(false);
       }
     })();
-  }, []);
+  }, [catalogRevision]);
 
   // Fetch products (skipped when viewing Combos — those load from `/api/jewellery-combos` above)
   useEffect(() => {
@@ -420,7 +420,7 @@ export function HomePage() {
         setLoading(false);
       }
     })();
-  }, [apiCategory, apiSubcategory, showComboFilterView]);
+  }, [apiCategory, apiSubcategory, showComboFilterView, catalogRevision]);
 
   const visibleProducts = useMemo(
     () => products.filter((p) => productMatchesPriceFilter(p.price, activePriceFilter)),

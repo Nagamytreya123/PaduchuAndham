@@ -18,6 +18,7 @@ export type CatalogCategory = {
   subcategories: string[];
   priceFilters: CatalogPriceFilter[];
   priceFiltersEnabled: boolean;
+  isActive: boolean;
 };
 
 export function productMatchesCategory(productCategory: string, cat: CatalogCategory): boolean {

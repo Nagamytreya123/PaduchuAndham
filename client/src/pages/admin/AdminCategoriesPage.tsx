@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Typography from '@mui/material/Typography';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
@@ -14,6 +14,7 @@ import IconButton from '@mui/material/IconButton';
 import Divider from '@mui/material/Divider';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Switch from '@mui/material/Switch';
+import Chip from '@mui/material/Chip';
 import { IconAdd, IconDelete } from '../../icons';
 import { apiFetch } from '../../api/client';
 import { useCategories } from '../../context/CategoriesContext';
@@ -78,6 +79,17 @@ function emptyDraft(): FilterDraft {
   };
 }
 
+function normalizeAdminCategory(c: CatalogCategory): CatalogCategory {
+  return {
+    ...c,
+    priceFilters: c.priceFilters ?? [],
+    priceFiltersEnabled: c.priceFiltersEnabled !== false,
+    isActive: c.isActive !== false,
+    subcategories: c.subcategories ?? [],
+    tileImageUrl: c.tileImageUrl ?? '',
+  };
+}
+
 async function postImage(slug: string, file: File): Promise<void> {
   const fd = new FormData();
   fd.append('image', file);
@@ -92,7 +104,9 @@ async function postImage(slug: string, file: File): Promise<void> {
 
 export function AdminCategoriesPage() {
   const reduced = useReducedMotion();
-  const { categories, loading, refresh } = useCategories();
+  const { refresh } = useCategories();
+  const [categories, setCategories] = useState<CatalogCategory[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -104,6 +118,32 @@ export function AdminCategoriesPage() {
   const [filters, setFilters] = useState<FilterDraft[]>([]);
   const [priceFiltersEnabled, setPriceFiltersEnabled] = useState(true);
   const [togglingSlug, setTogglingSlug] = useState<string | null>(null);
+
+  async function loadAdmin() {
+    const data = await apiFetch<{ categories: CatalogCategory[] }>('/api/admin/categories');
+    setCategories((data.categories ?? []).map(normalizeAdminCategory));
+  }
+
+  async function reloadStorefront(removedProductIds?: string[]) {
+    await refresh(removedProductIds ? { removedProductIds } : undefined);
+    await loadAdmin();
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        await loadAdmin();
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load categories');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const editing = useMemo(
     () => (editSlug ? categories.find((c) => c.slug === editSlug) : undefined),
@@ -182,12 +222,29 @@ export function AdminCategoriesPage() {
         });
       }
 
-      await refresh();
+      await reloadStorefront();
       setDialogOpen(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save category');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function toggleStorefront(cat: CatalogCategory, visible: boolean) {
+    setError(null);
+    setTogglingSlug(cat.slug);
+    try {
+      await apiFetch(`/api/admin/categories/${encodeURIComponent(cat.slug)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isActive: visible }),
+      });
+      await reloadStorefront();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not update category visibility');
+    } finally {
+      setTogglingSlug(null);
     }
   }
 
@@ -200,7 +257,7 @@ export function AdminCategoriesPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ priceFiltersEnabled: enabled }),
       });
-      await refresh();
+      await reloadStorefront();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not update price filter visibility');
     } finally {
@@ -209,24 +266,25 @@ export function AdminCategoriesPage() {
   }
 
   async function removeCategory(cat: CatalogCategory) {
+    const count = cat.productCount;
+    const productNote =
+      count > 0
+        ? ` This also permanently deletes ${count} product${count === 1 ? '' : 's'} in this category.`
+        : '';
     if (
       !window.confirm(
-        `Remove “${cat.label}” from the shop? Products stay listed under All until you recategorize them.`,
+        `Permanently delete “${cat.label}” from the database?${productNote} This cannot be undone.`,
       )
     ) {
       return;
     }
     setError(null);
     try {
-      const res = await fetch(`/api/admin/categories/${encodeURIComponent(cat.slug)}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      });
-      if (!res.ok && res.status !== 204) {
-        const d = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(d.error || 'Delete failed');
-      }
-      await refresh();
+      const data = await apiFetch<{ deletedProductIds?: string[] }>(
+        `/api/admin/categories/${encodeURIComponent(cat.slug)}`,
+        { method: 'DELETE' },
+      );
+      await reloadStorefront(data.deletedProductIds ?? []);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Delete failed');
     }
@@ -239,7 +297,7 @@ export function AdminCategoriesPage() {
       <Stack spacing={2.5} sx={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
         <AdminPageHeader
           title="Categories"
-          description="Rename categories, replace the shop-by-category images, remove categories from the storefront, and add price bands that appear under category filters for customers."
+          description="Hide a category from customers without deleting it, or delete it (and its products) permanently. Hidden categories stay here so you can switch them back on."
           actions={
             <MotionButton variant="contained" onClick={openCreate}>
               New category
@@ -266,12 +324,27 @@ export function AdminCategoriesPage() {
                 transition={{ duration: reduced ? 0 : 0.55, ease: [0.22, 1, 0.36, 1] }}
               >
                 <DashboardCard sx={{ height: '100%', display: 'flex', flexDirection: 'column', p: 0, overflow: 'hidden' }}>
-                  <CardMedia
-                    component="img"
-                    image={thumb}
-                    alt=""
-                    sx={{ aspectRatio: '4/3', objectFit: 'cover', bgcolor: 'grey.900', minHeight: 140 }}
-                  />
+                  <Box sx={{ position: 'relative' }}>
+                    <CardMedia
+                      component="img"
+                      image={thumb}
+                      alt=""
+                      sx={{
+                        aspectRatio: '4/3',
+                        objectFit: 'cover',
+                        bgcolor: 'grey.900',
+                        minHeight: 140,
+                        opacity: c.isActive === false ? 0.45 : 1,
+                      }}
+                    />
+                    {c.isActive === false ? (
+                      <Chip
+                        label="Hidden from shop"
+                        size="small"
+                        sx={{ position: 'absolute', top: 8, left: 8, fontWeight: 700 }}
+                      />
+                    ) : null}
+                  </Box>
                   <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 1, p: 2.5 }}>
                     <Typography variant="subtitle1" fontWeight={800}>
                       {c.label}
@@ -281,15 +354,27 @@ export function AdminCategoriesPage() {
                       {c.priceFilters.length > 0
                         ? ` · ${c.priceFilters.length} price filter${c.priceFilters.length === 1 ? '' : 's'}`
                         : ''}
-                      {c.priceFiltersEnabled === false ? ' · hidden from shop' : ''}
+                      {c.priceFiltersEnabled === false ? ' · price filters off' : ''}
                     </Typography>
                     <FormControlLabel
                       sx={{ ml: 0, mt: 0.5 }}
                       control={
                         <Switch
                           size="small"
-                          checked={c.priceFiltersEnabled !== false}
+                          checked={c.isActive !== false}
                           disabled={togglingSlug === c.slug || saving}
+                          onChange={(_e, checked) => void toggleStorefront(c, checked)}
+                        />
+                      }
+                      label="Show to customers"
+                    />
+                    <FormControlLabel
+                      sx={{ ml: 0 }}
+                      control={
+                        <Switch
+                          size="small"
+                          checked={c.priceFiltersEnabled !== false}
+                          disabled={togglingSlug === c.slug || saving || c.isActive === false}
                           onChange={(_e, checked) => void togglePriceFilters(c, checked)}
                         />
                       }

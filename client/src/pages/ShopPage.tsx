@@ -34,7 +34,7 @@ function FilterIcon() {
 
 export function ShopPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { categories } = useCategories();
+  const { categories, catalogRevision } = useCategories();
   const categoryParam = searchParams.get('category') ?? '';
   const subcategoryParam = searchParams.get('subcategory') ?? '';
   const priceFilterParam = searchParams.get('priceFilter') ?? '';
@@ -65,7 +65,7 @@ export function ShopPage() {
         setCombosLoading(false);
       }
     })();
-  }, []);
+  }, [catalogRevision]);
 
   useEffect(() => {
     if (showComboFilterView) {
@@ -92,7 +92,7 @@ export function ShopPage() {
         setLoading(false);
       }
     })();
-  }, [apiCategory, apiSubcategory, showComboFilterView]);
+  }, [apiCategory, apiSubcategory, showComboFilterView, catalogRevision]);
 
   const visibleProducts = useMemo(
     () => products.filter((p) => productMatchesPriceFilter(p.price, activePriceFilter)),

@@ -9,6 +9,7 @@ import {
 } from 'react';
 import type { ProductSummary } from '../types/product';
 import type { JewelleryComboSummary } from '../types/jewelleryCombo';
+import { useCategories } from './CategoriesContext';
 
 const STORAGE_KEY = 'paduchu-wishlist-v1';
 
@@ -76,6 +77,7 @@ type WishlistCtx = {
 const WishlistContext = createContext<WishlistCtx | null>(null);
 
 export function WishlistProvider({ children }: { children: ReactNode }) {
+  const { removedProductIds, catalogRevision } = useCategories();
   const [items, setItems] = useState<WishlistItem[]>(() =>
     typeof window !== 'undefined' ? parseStored(localStorage.getItem(STORAGE_KEY)) : [],
   );
@@ -83,6 +85,15 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
   }, [items]);
+
+  useEffect(() => {
+    if (removedProductIds.length === 0) return;
+    const idSet = new Set(removedProductIds);
+    setItems((prev) => {
+      const next = prev.filter((item) => !idSet.has(item.id));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [removedProductIds, catalogRevision]);
 
   const isSaved = useCallback((id: string) => items.some((i) => i.id === id), [items]);
 
