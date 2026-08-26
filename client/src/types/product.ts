@@ -68,6 +68,10 @@ export type ProductSummary = {
   matchingBraceletIds?: string[];
   /** Combined price (paise) for this watch + one linked matching bracelet */
   watchBraceletBundlePrice?: number;
+  /** Linked products when this SKU is a combo set listing */
+  comboProductIds?: string[];
+  /** Hydrated linked products on product detail API */
+  comboProducts?: ProductSummary[];
   /** Present on product detail API */
   reviewSummary?: ReviewSummary;
   /** Present on product detail API when session is resolved */

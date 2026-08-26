@@ -77,6 +77,13 @@ if (
   );
 }
 
+if (env.NODE_ENV !== 'test' && !env.SMTP_HOST?.trim()) {
+  console.warn(
+    '[env] Order confirmation emails are disabled: set SMTP_HOST, SMTP_USER, and SMTP_PASS in .env (see .env.example).',
+    'Admin alerts use ADMIN_ORDER_NOTIFY_EMAIL, or fall back to ADMIN_EMAILS.',
+  );
+}
+
 export function getAdminEmailSet(): Set<string> {
   const raw = [env.ADMIN_EMAILS, process.env.SEED_ADMIN_EMAIL].filter(Boolean).join(',');
   return new Set(

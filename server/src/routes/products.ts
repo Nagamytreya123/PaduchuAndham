@@ -40,6 +40,7 @@ function productListFilter(categoryRaw: string, subcategoryRaw: string): Record<
 type ProductPublicCache = {
   base: ReturnType<typeof productToJson>;
   matchingBracelets: ReturnType<typeof productToJson>[];
+  comboProducts: ReturnType<typeof productToJson>[];
   reviewSummary: { reviewCount: number; averageRating: number | null };
 };
 
@@ -239,6 +240,17 @@ router.get('/:id', publicCatalogLimiter, async (req, res) => {
         .map((row) => productToJson(row));
     }
 
+    const comboIds = p.comboProductIds ?? [];
+    let comboProducts: ReturnType<typeof productToJson>[] = [];
+    if (comboIds.length > 0) {
+      const others = await ProductModel.find({ _id: { $in: comboIds }, isActive: true }).lean();
+      const byId = new Map(others.map((o) => [String(o._id), o]));
+      comboProducts = comboIds
+        .map((cid) => byId.get(String(cid)))
+        .filter((x): x is NonNullable<typeof x> => x != null)
+        .map((row) => productToJson(row));
+    }
+
     const row = reviewAgg[0];
     const reviewSummary = row
       ? {
@@ -247,7 +259,7 @@ router.get('/:id', publicCatalogLimiter, async (req, res) => {
         }
       : { reviewCount: 0, averageRating: null as number | null };
 
-    return { base, matchingBracelets, reviewSummary };
+    return { base, matchingBracelets, comboProducts, reviewSummary };
   });
 
   if (!cached) {
@@ -271,6 +283,7 @@ router.get('/:id', publicCatalogLimiter, async (req, res) => {
     product: {
       ...cached.base,
       matchingBracelets: cached.matchingBracelets,
+      comboProducts: cached.comboProducts,
       reviewSummary: cached.reviewSummary,
       viewerReview,
     },

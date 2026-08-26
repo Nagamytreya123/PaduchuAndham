@@ -24,7 +24,7 @@ import { WishlistToggleButton } from '../components/WishlistToggleButton';
 import { productToWishlistItem } from '../context/WishlistContext';
 import type { ProductSummary } from '../types/product';
 import { formatInrFromPaise } from '../utils/format';
-import { allocateWatchBraceletBundle } from '../utils/bundlePricing';
+import { allocateWatchBraceletBundle, allocateListRatioBundle } from '../utils/bundlePricing';
 import { ProductReviewsSection } from '../components/ProductReviewsSection';
 import { ProductDetailGallery } from '../components/product/ProductDetailGallery';
 import { ExploreCategoryRows } from '../components/product/ExploreCategoryRows';
@@ -189,6 +189,8 @@ export function ProductDetailPage() {
   const commitQty = Math.min(Math.max(1, qty), product.stock || 1);
 
   const bracelets = product.matchingBracelets ?? [];
+  const comboProducts = product.comboProducts ?? [];
+  const isComboProduct = comboProducts.length >= 2;
   const bundlePaiseRaw = product.watchBraceletBundlePrice;
   const hasBundleDeal =
     bundlePaiseRaw != null && bundlePaiseRaw > 0 && bracelets.length > 0;
@@ -219,6 +221,19 @@ export function ProductDetailPage() {
     product.jewelryDetails?.materialType ??
     (product.materials?.length ? product.materials.join(', ') : '');
   const collectionLabel = [product.category, product.subcategory].filter(Boolean).join(' · ');
+  const comboMaxQty = isComboProduct
+    ? Math.min(product.stock || 0, ...comboProducts.map((p) => p.stock || 0))
+    : 0;
+  const comboCommitQty = Math.min(commitQty, Math.max(1, comboMaxQty));
+  const comboListSum = isComboProduct ? comboProducts.reduce((sum, p) => sum + p.price, 0) : 0;
+  const comboSave =
+    isComboProduct && comboListSum > product.price ? comboListSum - product.price : null;
+  const comboAlloc = isComboProduct
+    ? allocateListRatioBundle(
+        comboProducts.map((p) => p.price),
+        product.price,
+      )
+    : [];
 
   return (
     <Box sx={{ pb: { xs: 10, sm: 4 } }}>
@@ -255,6 +270,9 @@ export function ProductDetailPage() {
               {formatInrFromPaise(product.compareAtPrice!)}
             </Typography>
           ) : null}
+          {comboSave != null && comboSave > 0 ? (
+            <Chip size="small" color="success" label={`Save ${formatInrFromPaise(comboSave)}`} />
+          ) : null}
         </Stack>
 
         {product.description?.trim() ? (
@@ -272,6 +290,52 @@ export function ProductDetailPage() {
             <DetailRow label="Size" value={product.dimensions.displayNote} />
           ) : null}
         </Stack>
+
+        {isComboProduct && (
+          <Paper
+            elevation={0}
+            sx={{
+              p: 2,
+              mb: 3,
+              borderRadius: 2,
+              border: '1px solid',
+              borderColor: 'divider',
+              bgcolor: 'action.hover',
+            }}
+          >
+            <Typography sx={{ ...pdpTypography.label, color: 'text.primary', mb: 1 }}>
+              Combo set includes
+            </Typography>
+            <Stack spacing={1.25}>
+              {comboProducts.map((p, i) => {
+                const thumb = p.images[0];
+                const listPrices = comboProducts.map((row) => row.price);
+                const alloc = allocateListRatioBundle(listPrices, product.price);
+                return (
+                  <Stack key={p.id} direction="row" spacing={1.5} alignItems="center">
+                    <Box
+                      component={thumb ? 'img' : 'div'}
+                      src={thumb || undefined}
+                      alt=""
+                      sx={{ width: 48, height: 48, borderRadius: 1, objectFit: 'cover', bgcolor: 'grey.200' }}
+                    />
+                    <Stack sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography variant="body2" fontWeight={700} noWrap>
+                        {p.name}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        List {formatInrFromPaise(p.price)} · In set {formatInrFromPaise(alloc[i] ?? 0)}
+                      </Typography>
+                    </Stack>
+                    <Link component={RouterLink} to={`/products/${p.id}`} variant="caption">
+                      Details
+                    </Link>
+                  </Stack>
+                );
+              })}
+            </Stack>
+          </Paper>
+        )}
 
         {showWatchBraceletPair && selectedBracelet && pairChargePaise != null && (
           <Paper
@@ -408,7 +472,7 @@ export function ProductDetailPage() {
             <IconAdd />
           </IconButton>
           <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
-            {product.stock} in stock
+            {isComboProduct ? `${comboMaxQty} full sets available` : `${product.stock} in stock`}
           </Typography>
         </Stack>
 
@@ -416,9 +480,26 @@ export function ProductDetailPage() {
           variant="contained"
           size="large"
           fullWidth
-          disabled={product.stock < 1}
+          disabled={isComboProduct ? comboMaxQty < 1 : product.stock < 1}
           sx={{ ...pdpTypography.cta, py: 1.6, borderRadius: 0 }}
           onClick={() => {
+            if (isComboProduct) {
+              addBundle({
+                groupId: `product-combo-${product.id}`,
+                displayName: product.name,
+                unitTotalPaise: product.price,
+                image: img,
+                components: comboProducts.map((p, i) => ({
+                  productId: p.id,
+                  name: p.name,
+                  unitPricePaise: comboAlloc[i]!,
+                  image: p.images[0],
+                })),
+                qty: comboCommitQty,
+              });
+              navigate('/cart');
+              return;
+            }
             remove(product.id);
             add({
               productId: product.id,
@@ -430,7 +511,7 @@ export function ProductDetailPage() {
             navigate('/cart');
           }}
         >
-          Add to bag
+          {isComboProduct ? `Add combo to bag — ${formatInrFromPaise(product.price)}` : 'Add to bag'}
         </Button>
         <Typography
           variant="caption"

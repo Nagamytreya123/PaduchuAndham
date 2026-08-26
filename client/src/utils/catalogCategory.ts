@@ -18,8 +18,13 @@ export type CatalogCategory = {
   subcategories: string[];
   priceFilters: CatalogPriceFilter[];
   priceFiltersEnabled: boolean;
+  isCombo: boolean;
   isActive: boolean;
 };
+
+export function isComboCategory(cat: CatalogCategory | undefined): boolean {
+  return cat?.isCombo === true;
+}
 
 export function productMatchesCategory(productCategory: string, cat: CatalogCategory): boolean {
   const a = productCategory.trim().toLowerCase();
@@ -50,11 +55,9 @@ export type CollectionFilterKey = string;
 export function parseCollectionFilterParam(
   categoryParam: string,
   categories: CatalogCategory[],
-  hasCombos: boolean,
 ): CollectionFilterKey {
   const p = categoryParam.trim().toLowerCase();
   if (!p) return 'all';
-  if ((p === 'combos' || p === 'combo') && hasCombos) return 'combos';
   const match = categories.find(
     (c) => c.slug.toLowerCase() === p || c.label.toLowerCase() === p,
   );
@@ -62,20 +65,16 @@ export function parseCollectionFilterParam(
 }
 
 export function apiCategoryForFilter(key: CollectionFilterKey): string {
-  if (key === 'all' || key === 'combos') return '';
+  if (key === 'all') return '';
   return key;
 }
 
 export function collectionFilterOptions(
   categories: CatalogCategory[],
-  hasCombos: boolean,
 ): { key: CollectionFilterKey; label: string }[] {
   const opts: { key: CollectionFilterKey; label: string }[] = [{ key: 'all', label: 'All' }];
   for (const c of categories) {
     opts.push({ key: c.slug, label: c.label });
-  }
-  if (hasCombos) {
-    opts.push({ key: 'combos', label: 'Combos' });
   }
   return opts;
 }
@@ -84,7 +83,7 @@ export function subcategoriesForFilter(
   categories: CatalogCategory[],
   filterKey: CollectionFilterKey,
 ): string[] {
-  if (filterKey === 'all' || filterKey === 'combos') return [];
+  if (filterKey === 'all') return [];
   return categories.find((c) => c.slug === filterKey)?.subcategories ?? [];
 }
 
@@ -100,7 +99,7 @@ export function priceFiltersForSelection(
   filterKey: CollectionFilterKey,
   subcategory: string,
 ): CatalogPriceFilter[] {
-  if (filterKey === 'all' || filterKey === 'combos') return [];
+  if (filterKey === 'all') return [];
   const cat = categories.find((c) => c.slug === filterKey);
   if (!cat || cat.priceFiltersEnabled === false) return [];
   const filters = cat.priceFilters ?? [];

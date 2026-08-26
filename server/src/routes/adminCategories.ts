@@ -6,9 +6,12 @@ import { persistUploadedMulterFiles } from '../utils/productImageStorage.js';
 import { createImageUpload, withMulter } from '../middleware/multerUpload.js';
 import {
   CategoryServiceError,
+  addSubcategory,
   createCategoryFromLabel,
   deleteCategory,
+  deleteSubcategory,
   listAdminCategories,
+  renameSubcategory,
   updateCategory,
 } from '../services/categories.js';
 
@@ -44,6 +47,7 @@ const patchSchema = z.object({
   tileImageUrl: z.string().nullable().optional(),
   priceFilters: z.array(priceFilterSchema).max(30).optional(),
   priceFiltersEnabled: z.boolean().optional(),
+  isCombo: z.boolean().optional(),
   isActive: z.boolean().optional(),
 });
 
@@ -86,6 +90,7 @@ router.patch('/:slug', async (req, res) => {
     body.tileImageUrl === undefined &&
     body.priceFilters === undefined &&
     body.priceFiltersEnabled === undefined &&
+    body.isCombo === undefined &&
     body.isActive === undefined
   ) {
     res.status(400).json({ error: 'Nothing to update' });
@@ -126,6 +131,65 @@ router.delete('/:slug', async (req, res) => {
     res.json({ ok: true, ...result });
   } catch (err) {
     sendCategoryError(res, err, 'Could not delete category');
+  }
+});
+
+const subcategoryCreateSchema = z.object({
+  label: z.string().min(2).max(80),
+});
+
+const subcategoryRenameSchema = z.object({
+  label: z.string().min(2).max(80),
+});
+
+router.post('/:slug/subcategories', async (req, res) => {
+  let body: z.infer<typeof subcategoryCreateSchema>;
+  try {
+    body = subcategoryCreateSchema.parse(req.body);
+  } catch {
+    res.status(400).json({ error: 'Subcategory name must be 2–80 characters' });
+    return;
+  }
+  try {
+    const category = await addSubcategory(String(req.params.slug), body.label);
+    await invalidateCatalogCache();
+    res.status(201).json({ category });
+  } catch (err) {
+    sendCategoryError(res, err, 'Could not add subcategory');
+  }
+});
+
+router.patch('/:slug/subcategories/:name', async (req, res) => {
+  let body: z.infer<typeof subcategoryRenameSchema>;
+  try {
+    body = subcategoryRenameSchema.parse(req.body);
+  } catch {
+    res.status(400).json({ error: 'Subcategory name must be 2–80 characters' });
+    return;
+  }
+  try {
+    const category = await renameSubcategory(
+      String(req.params.slug),
+      decodeURIComponent(String(req.params.name)),
+      body.label,
+    );
+    await invalidateCatalogCache();
+    res.json({ category });
+  } catch (err) {
+    sendCategoryError(res, err, 'Could not rename subcategory');
+  }
+});
+
+router.delete('/:slug/subcategories/:name', async (req, res) => {
+  try {
+    const category = await deleteSubcategory(
+      String(req.params.slug),
+      decodeURIComponent(String(req.params.name)),
+    );
+    await invalidateCatalogCache();
+    res.json({ category });
+  } catch (err) {
+    sendCategoryError(res, err, 'Could not delete subcategory');
   }
 });
 

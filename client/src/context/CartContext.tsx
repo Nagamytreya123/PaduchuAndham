@@ -97,6 +97,34 @@ function mergeCartLines(server: CartLine[], guest: CartLine[]): CartLine[] {
   return [...standaloneMap.values(), ...bundleOut];
 }
 
+/** Strip embedded images — product photos are often multi-MB base64 and exceed API limits. */
+function sanitizeCartForApi(items: CartLine[]): CartLine[] {
+  const safeImage = (raw: string | undefined): string | undefined => {
+    const image = raw?.trim();
+    if (!image || image.startsWith('data:') || image.length > 2000) return undefined;
+    return image;
+  };
+  return items.map((item) => ({
+    productId: item.productId,
+    name: item.name,
+    price: Math.round(item.price),
+    qty: Math.round(item.qty),
+    image: safeImage(item.image),
+    bundleGroupId: item.bundleGroupId,
+    bundleDisplayName: item.bundleDisplayName?.slice(0, 500),
+    bundleUnitTotalPaise:
+      item.bundleUnitTotalPaise !== undefined ? Math.round(item.bundleUnitTotalPaise) : undefined,
+    bundleImage: safeImage(item.bundleImage),
+  }));
+}
+
+async function persistCart(items: CartLine[]): Promise<void> {
+  await apiFetch('/api/cart', {
+    method: 'PUT',
+    body: JSON.stringify({ items: sanitizeCartForApi(items) }),
+  });
+}
+
 /** Legacy single-key cart before per-guest isolation */
 const LEGACY_STORAGE_KEY = 'paduchu-cart-v1';
 const GUEST_STORAGE_KEY = 'paduchu-cart-v1:guest';
@@ -175,10 +203,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         setLines(merged);
         if (guest.length) {
           localStorage.removeItem(GUEST_STORAGE_KEY);
-          await apiFetch('/api/cart', {
-            method: 'PUT',
-            body: JSON.stringify({ items: merged }),
-          });
+          await persistCart(merged);
         }
       } catch {
         if (gen !== hydrateGen.current) return;
@@ -195,11 +220,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!hydrated || loading || suppressPersistRef.current) return;
     if (user) {
-      void apiFetch('/api/cart', {
-        method: 'PUT',
-        body: JSON.stringify({ items: lines }),
-      }).catch(() => {
-        /* offline or session expired; cart still in memory */
+      void persistCart(lines).catch((err) => {
+        console.warn('[cart] failed to save', err);
       });
       return;
     }

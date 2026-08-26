@@ -11,7 +11,6 @@ export function CategoryFilterGroup({
   categories,
   value,
   onChange,
-  hasCombos,
   orientation = 'horizontal',
   fullWidth,
   ariaLabel = 'Filter by category',
@@ -20,13 +19,12 @@ export function CategoryFilterGroup({
   categories: CatalogCategory[];
   value: CollectionFilterKey;
   onChange: (key: CollectionFilterKey) => void;
-  hasCombos: boolean;
   orientation?: 'horizontal' | 'vertical';
   fullWidth?: boolean;
   ariaLabel?: string;
   sx?: SxProps<Theme>;
 }) {
-  const options = collectionFilterOptions(categories, hasCombos);
+  const options = collectionFilterOptions(categories);
   return (
     <ToggleButtonGroup
       exclusive

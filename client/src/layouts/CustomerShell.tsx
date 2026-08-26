@@ -43,8 +43,7 @@ export function CustomerShell() {
     location.pathname === '/checkout' ||
     location.pathname === '/account' ||
     location.pathname.startsWith('/account/') ||
-    location.pathname.startsWith('/products/') ||
-    location.pathname.startsWith('/jewellery-combos/');
+    location.pathname.startsWith('/products/');
   const isOrderComplete = location.pathname === '/checkout/complete';
   const isFullBleedRoute = hasInPageStorefrontHeader || location.pathname === '/login' || isOrderComplete;
   const isLogin = location.pathname === '/login';

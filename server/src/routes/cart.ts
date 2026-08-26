@@ -9,13 +9,29 @@ const router = Router();
 const lineSchema = z.object({
   productId: z.string().regex(/^[a-f\d]{24}$/i),
   name: z.string().min(1).max(500),
-  price: z.number().int().min(0),
-  qty: z.number().int().min(1),
-  image: z.string().max(2000).optional(),
+  price: z.coerce.number().int().min(0),
+  qty: z.coerce.number().int().min(1),
+  image: z
+    .string()
+    .max(2000)
+    .optional()
+    .transform((val) => {
+      const t = val?.trim();
+      if (!t || t.startsWith('data:')) return undefined;
+      return t;
+    }),
   bundleGroupId: z.string().min(1).max(200).optional(),
   bundleDisplayName: z.string().min(1).max(500).optional(),
-  bundleUnitTotalPaise: z.number().int().min(0).optional(),
-  bundleImage: z.string().max(2000).optional(),
+  bundleUnitTotalPaise: z.coerce.number().int().min(0).optional(),
+  bundleImage: z
+    .string()
+    .max(2000)
+    .optional()
+    .transform((val) => {
+      const t = val?.trim();
+      if (!t || t.startsWith('data:')) return undefined;
+      return t;
+    }),
 });
 
 const putBodySchema = z.object({
@@ -45,7 +61,8 @@ router.put('/', async (req, res) => {
   let body: z.infer<typeof putBodySchema>;
   try {
     body = putBodySchema.parse(req.body);
-  } catch {
+  } catch (err) {
+    console.warn('[cart] invalid body', err);
     res.status(400).json({ error: 'Invalid body' });
     return;
   }

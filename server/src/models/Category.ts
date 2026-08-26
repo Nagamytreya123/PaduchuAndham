@@ -24,6 +24,10 @@ const categorySchema = new Schema(
     tileImageUrl: { type: String, trim: true, default: '' },
     priceFilters: { type: [priceFilterSchema], default: [] },
     priceFiltersEnabled: { type: Boolean, default: true },
+    /** Admin-defined subcategory labels shown in shop filters and product forms. */
+    subcategories: { type: [String], default: [] },
+    /** When true, products in this category are combo sets linking other products. */
+    isCombo: { type: Boolean, default: false },
     isActive: { type: Boolean, default: true, index: true },
   },
   { timestamps: true },

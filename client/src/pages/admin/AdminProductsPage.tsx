@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Typography from '@mui/material/Typography';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
@@ -28,9 +28,24 @@ import { AdminPageHeader, DashboardCard, MotionButton, PageTransitionWrapper, Pr
 import { AdminMultiImageUpload, appendFilesToFormData } from '../../components/admin/AdminMultiImageUpload';
 import { adminCatalogGridSx } from '../../constants/adminLayout';
 import { useCategories } from '../../context/CategoriesContext';
-import { findCatalogCategory, productMatchesCategory } from '../../utils/catalogCategory';
+import { findCatalogCategory, isComboCategory, productMatchesCategory } from '../../utils/catalogCategory';
 import { CategoryFilterGroup } from '../../components/CategoryFilterGroup';
 import { CategorySelectField } from '../../components/admin/CategorySelectField';
+import { SubcategorySelectField } from '../../components/admin/SubcategorySelectField';
+
+const formGrid2Sx = {
+  display: 'grid',
+  gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
+  gap: 2,
+  alignItems: 'start',
+} as const;
+
+const formGrid3Sx = {
+  display: 'grid',
+  gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' },
+  gap: 2,
+  alignItems: 'start',
+} as const;
 
 async function postMultipart(url: string, fd: FormData): Promise<{ ok?: boolean; error?: string }> {
   const res = await fetch(url, { method: 'POST', body: fd, credentials: 'include' });
@@ -147,6 +162,85 @@ function braceletPickerOptions(
     if (p && (excludeProductId == null || p.id !== excludeProductId)) map.set(id, p);
   }
   return [...map.values()];
+}
+
+function ComboProductsPicker({
+  products,
+  selectedIds,
+  onSelectedIdsChange,
+  excludeProductId,
+  disabled,
+}: {
+  products: AdminProductRow[];
+  selectedIds: string[];
+  onSelectedIdsChange: (ids: string[]) => void;
+  excludeProductId: string | null;
+  disabled?: boolean;
+}) {
+  const options = useMemo(() => {
+    return products.filter((p) => excludeProductId == null || p.id !== excludeProductId);
+  }, [products, excludeProductId]);
+
+  const value = useMemo(() => {
+    const optById = new Map(options.map((p) => [p.id, p]));
+    return selectedIds.map((id) => optById.get(id)).filter((p): p is AdminProductRow => p != null);
+  }, [selectedIds, options]);
+
+  return (
+    <Autocomplete
+      multiple
+      disabled={disabled}
+      options={options}
+      value={value}
+      onChange={(_, next) => onSelectedIdsChange(next.map((p) => p.id))}
+      getOptionLabel={(p) => p.name}
+      isOptionEqualToValue={(a, b) => a.id === b.id}
+      filterOptions={(opts, state) => {
+        const q = state.inputValue.trim().toLowerCase();
+        if (!q) return opts;
+        return opts.filter(
+          (p) =>
+            p.name.toLowerCase().includes(q) ||
+            (p.sku?.toLowerCase().includes(q) ?? false) ||
+            p.category.toLowerCase().includes(q),
+        );
+      }}
+      renderOption={(props, option) => {
+        const thumb = option.images[0];
+        return (
+          <li {...props} key={option.id} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Box
+              component={thumb ? 'img' : 'div'}
+              src={thumb || undefined}
+              alt=""
+              sx={{ width: 40, height: 40, flexShrink: 0, borderRadius: 1, objectFit: 'cover', bgcolor: 'grey.200' }}
+            />
+            <Stack sx={{ minWidth: 0, flex: 1 }}>
+              <Typography variant="body2" fontWeight={600} noWrap>
+                {option.name}
+              </Typography>
+              <Typography variant="caption" color="text.secondary" noWrap>
+                {[option.category, option.subcategory, option.sku].filter(Boolean).join(' · ')}
+              </Typography>
+            </Stack>
+          </li>
+        );
+      }}
+      renderTags={(tagValue, getTagProps) =>
+        tagValue.map((option, index) => (
+          <Chip {...getTagProps({ index })} key={option.id} size="small" label={option.name} />
+        ))
+      }
+      renderInput={(params) => (
+        <TextField
+          {...params}
+          label="Products in this combo"
+          placeholder="Search products to include in the set…"
+          helperText="Pick at least two products. Customers get all of them when they add this combo to cart."
+        />
+      )}
+    />
+  );
 }
 
 function MatchingBraceletsPicker({
@@ -400,6 +494,7 @@ export function AdminProductsPage() {
   const [strapType, setStrapType] = useState('');
   const [watchColor, setWatchColor] = useState('');
   const [matchingBraceletIdsSelected, setMatchingBraceletIdsSelected] = useState<string[]>([]);
+  const [comboProductIdsSelected, setComboProductIdsSelected] = useState<string[]>([]);
   const [bundlePriceRupee, setBundlePriceRupee] = useState('');
   const [materials, setMaterials] = useState('');
   const [tags, setTags] = useState('');
@@ -430,6 +525,7 @@ export function AdminProductsPage() {
   const [editStrapType, setEditStrapType] = useState('');
   const [editWatchColor, setEditWatchColor] = useState('');
   const [editMatchingBraceletIdsSelected, setEditMatchingBraceletIdsSelected] = useState<string[]>([]);
+  const [editComboProductIdsSelected, setEditComboProductIdsSelected] = useState<string[]>([]);
   const [editBundlePriceRupee, setEditBundlePriceRupee] = useState('');
   const [editMaterials, setEditMaterials] = useState('');
   const [editTags, setEditTags] = useState('');
@@ -476,6 +572,17 @@ export function AdminProductsPage() {
     setCategory((prev) => (prev && categories.some((c) => c.slug === prev) ? prev : categories[0]!.slug));
   }, [categories]);
 
+  const prevCategoryRef = useRef(category);
+  useEffect(() => {
+    if (prevCategoryRef.current === category) return;
+    prevCategoryRef.current = category;
+    setSubcategory('');
+  }, [category]);
+
+  function categoryIsCombo(slug: string): boolean {
+    return isComboCategory(categories.find((c) => c.slug === slug));
+  }
+
   function resolvedCategory(): string {
     return category;
   }
@@ -517,7 +624,10 @@ export function AdminProductsPage() {
       setJewelryStoneOrMotif('');
       setJewelryCustomization('');
     }
-  }, [category, kindFor]);
+    if (!categoryIsCombo(category)) {
+      setComboProductIdsSelected([]);
+    }
+  }, [category, kindFor, categories]);
 
   useEffect(() => {
     if (!editOpen) return;
@@ -536,7 +646,10 @@ export function AdminProductsPage() {
       setEditJewelryStoneOrMotif('');
       setEditJewelryCustomization('');
     }
-  }, [editOpen, editCategory, kindFor]);
+    if (!categoryIsCombo(cat)) {
+      setEditComboProductIdsSelected([]);
+    }
+  }, [editOpen, editCategory, kindFor, categories]);
 
   function openEdit(p: AdminProductRow) {
     const matched = findCatalogCategory(p.category, categories);
@@ -552,6 +665,7 @@ export function AdminProductsPage() {
     setEditStrapType(p.watchDetails?.strapType ?? '');
     setEditWatchColor(p.watchDetails?.color ?? '');
     setEditMatchingBraceletIdsSelected(p.matchingBraceletIds ?? []);
+    setEditComboProductIdsSelected(p.comboProductIds ?? []);
     setEditBundlePriceRupee(
       p.watchBraceletBundlePrice != null ? (p.watchBraceletBundlePrice / 100).toFixed(2) : '',
     );
@@ -678,6 +792,14 @@ export function AdminProductsPage() {
           ) ?? null;
       } else {
         payload.jewelryDetails = null;
+      }
+
+      if (categoryIsCombo(editCat)) {
+        const comboIds = editComboProductIdsSelected.filter((id) => OBJECT_ID_RE.test(id));
+        if (comboIds.length < 2) throw new Error('Combo products must link at least two other products');
+        payload.comboProductIds = comboIds;
+      } else {
+        payload.comboProductIds = [];
       }
 
       if (editDimensionsNote.trim()) {
@@ -818,6 +940,12 @@ export function AdminProductsPage() {
 
       if (jewelryDetails) payload.jewelryDetails = jewelryDetails;
 
+      if (categoryIsCombo(cat)) {
+        const comboIds = comboProductIdsSelected.filter((id) => OBJECT_ID_RE.test(id));
+        if (comboIds.length < 2) throw new Error('Combo products must link at least two other products');
+        payload.comboProductIds = comboIds;
+      }
+
       if (dimensionsNote.trim()) {
         payload.dimensions = { displayNote: dimensionsNote.trim() };
       }
@@ -842,6 +970,7 @@ export function AdminProductsPage() {
       setStrapType('');
       setWatchColor('');
       setMatchingBraceletIdsSelected([]);
+      setComboProductIdsSelected([]);
       setBundlePriceRupee('');
       setMaterials('');
       setTags('');
@@ -919,7 +1048,6 @@ export function AdminProductsPage() {
       <CategoryFilterGroup
         categories={categories}
         value={catalogFilterKey}
-        hasCombos={false}
         ariaLabel="Filter catalog by category"
         onChange={setCatalogFilterKey}
         sx={{ flexWrap: 'wrap', '& .MuiToggleButton-root': { textTransform: 'none' } }}
@@ -986,12 +1114,12 @@ export function AdminProductsPage() {
         scroll="paper"
       >
         <DialogTitle>Add product</DialogTitle>
-        <DialogContent dividers>
+        <DialogContent dividers sx={{ px: { xs: 2, sm: 3 } }}>
           <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
             Price is in INR (rupees); stored in paise. For watches, pick matching bracelets from the searchable list
             (products in the Bracelets category).
           </Typography>
-          <Stack spacing={2} sx={{ pt: 0.5 }}>
+          <Stack spacing={2.5} sx={{ pt: 0.5 }}>
               <TextField label="Name" value={name} onChange={(e) => setName(e.target.value)} fullWidth required />
               <TextField
                 label="Description"
@@ -1001,17 +1129,16 @@ export function AdminProductsPage() {
                 multiline
                 minRows={2}
               />
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+              <Box sx={formGrid2Sx}>
                 <CategorySelectField value={category} onChange={setCategory} />
-                <TextField
-                  label="Subcategory"
+                <SubcategorySelectField
+                  categorySlug={category}
                   value={subcategory}
-                  onChange={(e) => setSubcategory(e.target.value)}
-                  fullWidth
-                  placeholder="e.g. Dress, Diver, Chain"
+                  onChange={setSubcategory}
+                  disabled={addSaving}
                 />
-              </Stack>
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+              </Box>
+              <Box sx={formGrid2Sx}>
                 <TextField label="SKU" value={sku} onChange={(e) => setSku(e.target.value)} fullWidth placeholder="SKU" />
                 <TextField
                   label="Slug (optional)"
@@ -1021,14 +1148,23 @@ export function AdminProductsPage() {
                   placeholder="my-product-name"
                   helperText="Lowercase, hyphens only"
                 />
-              </Stack>
+              </Box>
+              {categoryIsCombo(resolvedCategory()) && (
+                <ComboProductsPicker
+                  products={products}
+                  selectedIds={comboProductIdsSelected}
+                  onSelectedIdsChange={setComboProductIdsSelected}
+                  excludeProductId={null}
+                  disabled={addSaving}
+                />
+              )}
               {isWatch(resolvedCategory()) && (
                 <>
-                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                  <Box sx={formGrid2Sx}>
                     <TextField label="Case shape" value={caseShape} onChange={(e) => setCaseShape(e.target.value)} fullWidth />
                     <TextField label="Dial" value={dial} onChange={(e) => setDial(e.target.value)} fullWidth />
-                  </Stack>
-                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                  </Box>
+                  <Box sx={formGrid2Sx}>
                     <TextField
                       label="Strap / attachment"
                       value={strapType}
@@ -1036,7 +1172,7 @@ export function AdminProductsPage() {
                       fullWidth
                     />
                     <TextField label="Colour" value={watchColor} onChange={(e) => setWatchColor(e.target.value)} fullWidth />
-                  </Stack>
+                  </Box>
                   <MatchingBraceletsPicker
                     products={products}
                     selectedIds={matchingBraceletIdsSelected}
@@ -1061,7 +1197,7 @@ export function AdminProductsPage() {
               )}
               {isJewelleryCat(resolvedCategory()) && (
                 <>
-                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                  <Box sx={formGrid2Sx}>
                     <TextField
                       label="Primary material type"
                       value={jewelryMaterialType}
@@ -1076,8 +1212,8 @@ export function AdminProductsPage() {
                       fullWidth
                       placeholder="e.g. rhodium, 22K gold tone"
                     />
-                  </Stack>
-                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                  </Box>
+                  <Box sx={formGrid2Sx}>
                     <TextField
                       label="Stone or motif"
                       value={jewelryStoneOrMotif}
@@ -1092,7 +1228,7 @@ export function AdminProductsPage() {
                       fullWidth
                       placeholder="e.g. engraving, sizing, made-to-order"
                     />
-                  </Stack>
+                  </Box>
                 </>
               )}
               <TextField
@@ -1131,7 +1267,7 @@ export function AdminProductsPage() {
                 multiline
                 minRows={2}
               />
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+              <Box sx={formGrid3Sx}>
                 <TextField
                   label="Price (INR)"
                   value={priceRupee}
@@ -1156,7 +1292,7 @@ export function AdminProductsPage() {
                   type="number"
                   inputProps={{ min: 0, step: 1 }}
                 />
-              </Stack>
+              </Box>
               <TextField
                 label="Image URLs (comma-separated)"
                 value={imageUrls}
@@ -1182,10 +1318,10 @@ export function AdminProductsPage() {
         </DialogActions>
       </PremiumModal>
 
-      <PremiumModal open={editOpen} onClose={() => !editSaving && setEditOpen(false)} fullWidth maxWidth="md">
+      <PremiumModal open={editOpen} onClose={() => !editSaving && setEditOpen(false)} fullWidth maxWidth="md" scroll="paper">
         <DialogTitle>Edit product</DialogTitle>
-        <DialogContent dividers>
-          <Stack spacing={2} sx={{ pt: 1 }}>
+        <DialogContent dividers sx={{ px: { xs: 2, sm: 3 } }}>
+          <Stack spacing={2.5} sx={{ pt: 0.5 }}>
             <FormControlLabel
               control={<Switch checked={editIsActive} onChange={(e) => setEditIsActive(e.target.checked)} />}
               label="Visible in shop"
@@ -1199,30 +1335,38 @@ export function AdminProductsPage() {
               multiline
               minRows={2}
             />
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+            <Box sx={formGrid2Sx}>
               <CategorySelectField value={editCategory} onChange={setEditCategory} disabled={editSaving} />
-              <TextField
-                label="Subcategory"
+              <SubcategorySelectField
+                categorySlug={editCategory}
                 value={editSubcategory}
-                onChange={(e) => setEditSubcategory(e.target.value)}
-                fullWidth
+                onChange={setEditSubcategory}
                 disabled={editSaving}
               />
-            </Stack>
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+            </Box>
+            <Box sx={formGrid2Sx}>
               <TextField label="SKU" value={editSku} onChange={(e) => setEditSku(e.target.value)} fullWidth />
               <TextField label="Slug" value={editSlug} onChange={(e) => setEditSlug(e.target.value)} fullWidth />
-            </Stack>
+            </Box>
+            {categoryIsCombo(resolvedEditCategory()) && (
+              <ComboProductsPicker
+                products={products}
+                selectedIds={editComboProductIdsSelected}
+                onSelectedIdsChange={setEditComboProductIdsSelected}
+                excludeProductId={editId}
+                disabled={editSaving}
+              />
+            )}
             {isWatch(resolvedEditCategory()) && (
               <>
-                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                <Box sx={formGrid2Sx}>
                   <TextField label="Case shape" value={editCaseShape} onChange={(e) => setEditCaseShape(e.target.value)} fullWidth />
                   <TextField label="Dial" value={editDial} onChange={(e) => setEditDial(e.target.value)} fullWidth />
-                </Stack>
-                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                </Box>
+                <Box sx={formGrid2Sx}>
                   <TextField label="Strap / attachment" value={editStrapType} onChange={(e) => setEditStrapType(e.target.value)} fullWidth />
                   <TextField label="Colour" value={editWatchColor} onChange={(e) => setEditWatchColor(e.target.value)} fullWidth />
-                </Stack>
+                </Box>
                 <MatchingBraceletsPicker
                   products={products}
                   selectedIds={editMatchingBraceletIdsSelected}
@@ -1248,7 +1392,7 @@ export function AdminProductsPage() {
             )}
             {isJewelleryCat(resolvedEditCategory()) && (
               <>
-                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                <Box sx={formGrid2Sx}>
                   <TextField
                     label="Primary material type"
                     value={editJewelryMaterialType}
@@ -1263,8 +1407,8 @@ export function AdminProductsPage() {
                     fullWidth
                     disabled={editSaving}
                   />
-                </Stack>
-                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                </Box>
+                <Box sx={formGrid2Sx}>
                   <TextField
                     label="Stone or motif"
                     value={editJewelryStoneOrMotif}
@@ -1279,7 +1423,7 @@ export function AdminProductsPage() {
                     fullWidth
                     disabled={editSaving}
                   />
-                </Stack>
+                </Box>
               </>
             )}
             <TextField label="Materials" value={editMaterials} onChange={(e) => setEditMaterials(e.target.value)} fullWidth />
@@ -1300,11 +1444,11 @@ export function AdminProductsPage() {
               multiline
               minRows={2}
             />
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+            <Box sx={formGrid3Sx}>
               <TextField label="Price (INR)" value={editPriceRupee} onChange={(e) => setEditPriceRupee(e.target.value)} type="number" fullWidth />
               <TextField label="Compare-at (INR)" value={editCompareAtRupee} onChange={(e) => setEditCompareAtRupee(e.target.value)} type="number" fullWidth />
               <TextField label="Stock" value={editStock} onChange={(e) => setEditStock(e.target.value)} type="number" fullWidth />
-            </Stack>
+            </Box>
             <TextField
               label="Image URLs (comma-separated)"
               value={editImageUrls}
@@ -1322,7 +1466,7 @@ export function AdminProductsPage() {
             />
           </Stack>
         </DialogContent>
-        <DialogActions>
+        <DialogActions sx={{ px: 3, py: 2 }}>
           <Button onClick={() => setEditOpen(false)} disabled={editSaving}>
             Cancel
           </Button>

@@ -45,17 +45,22 @@ function formatPlacedAt(iso: string): string {
 }
 
 function parseNotifyEmails(): string[] {
-  const raw = env.ADMIN_ORDER_NOTIFY_EMAIL ?? '';
-  return raw
-    .split(',')
-    .map((e) => e.trim())
-    .filter(Boolean);
+  const raw = [env.ADMIN_ORDER_NOTIFY_EMAIL, env.ADMIN_EMAILS].filter(Boolean).join(',');
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const part of raw.split(',')) {
+    const email = part.trim().toLowerCase();
+    if (!email || seen.has(email)) continue;
+    seen.add(email);
+    out.push(email);
+  }
+  return out;
 }
 
 function absoluteImageUrl(raw: string | null | undefined): string | null {
   if (!raw || typeof raw !== 'string') return null;
   const s = raw.trim();
-  if (!s) return null;
+  if (!s || s.startsWith('data:')) return null;
   if (/^https?:\/\//i.test(s)) return s;
   const base = (env.SERVER_PUBLIC_URL ?? env.CLIENT_URL).replace(/\/$/, '');
   return `${base}${s.startsWith('/') ? '' : '/'}${s}`;
@@ -154,32 +159,52 @@ function summaryBlock(payload: PaidOrderNotifyPayload, total: string): string {
   ].join('\n');
 }
 
+let warnedMissingSmtp = false;
+
+function warnMissingSmtpOnce(reason: string): void {
+  if (warnedMissingSmtp) return;
+  warnedMissingSmtp = true;
+  console.warn(`[orderPaidEmails] ${reason}`);
+}
+
 function createTransporter() {
   const host = env.SMTP_HOST?.trim();
-  if (!host) return null;
+  if (!host) {
+    warnMissingSmtpOnce(
+      'SMTP_HOST is not set — order confirmation emails are disabled. Add SMTP_HOST, SMTP_USER, and SMTP_PASS to .env, then restart the API.',
+    );
+    return null;
+  }
   const port = Number(env.SMTP_PORT) > 0 ? Number(env.SMTP_PORT) : 587;
   const secure =
     port === 465 || env.SMTP_SECURE?.trim().toLowerCase() === 'true' || env.SMTP_SECURE === '1';
   const user = env.SMTP_USER?.trim();
   const pass = env.SMTP_PASS ?? '';
+  if (!user || !pass) {
+    warnMissingSmtpOnce(
+      'SMTP_USER or SMTP_PASS is missing — order confirmation emails are disabled. Set both in .env (Gmail: use an App Password).',
+    );
+    return null;
+  }
   return nodemailer.createTransport({
     host,
     port,
     secure,
-    auth: user ? { user, pass } : undefined,
+    auth: { user, pass },
   });
 }
 
-function fromAddress(adminFallback: string): string {
+function fromAddress(): string {
   const user = env.SMTP_USER?.trim();
-  return env.SMTP_FROM?.trim() || user || adminFallback;
+  const addr = env.SMTP_FROM?.trim() || user;
+  if (!addr) return 'orders@paduchuandham.com';
+  return `"Paduchu Andham Orders" <${addr}>`;
 }
 
 async function sendMail(opts: { to: string; subject: string; text: string; html: string }): Promise<void> {
   const transporter = createTransporter();
   if (!transporter) return;
-  const adminList = parseNotifyEmails();
-  const from = fromAddress(adminList[0] ?? env.SMTP_USER?.trim() ?? opts.to);
+  const from = fromAddress();
   await transporter.sendMail({
     from,
     to: opts.to,
@@ -187,6 +212,7 @@ async function sendMail(opts: { to: string; subject: string; text: string; html:
     text: opts.text,
     html: opts.html,
   });
+  console.info(`[orderPaidEmails] sent "${opts.subject}" to ${opts.to}`);
 }
 
 function buildAdminBodies(
@@ -284,7 +310,12 @@ ${addrHtml}
  * Uses the same SMTP settings for both. Non-blocking for payment flow — callers fire-and-forget.
  */
 export async function notifyOrderPaidEmails(payload: PaidOrderNotifyPayload): Promise<void> {
-  if (!env.SMTP_HOST?.trim()) return;
+  if (!env.SMTP_HOST?.trim()) {
+    warnMissingSmtpOnce(
+      'SMTP_HOST is not set — order confirmation emails are disabled. Add SMTP_HOST, SMTP_USER, and SMTP_PASS to .env, then restart the API.',
+    );
+    return;
+  }
 
   let customerEmail: string | undefined;
   let customerName: string | undefined;
@@ -298,28 +329,48 @@ export async function notifyOrderPaidEmails(payload: PaidOrderNotifyPayload): Pr
     console.warn('[notifyOrderPaidEmails] could not load customer user', e);
   }
 
-  const adminTo = parseNotifyEmails();
+  const adminTo = parseNotifyEmails().filter((email) => email !== customerEmail?.toLowerCase());
 
   const tasks: Promise<void>[] = [];
 
   if (customerEmail) {
     const b = buildCustomerBodies(payload, customerName);
-    tasks.push(sendMail({ to: customerEmail, ...b }));
+    tasks.push(
+      sendMail({ to: customerEmail, ...b }).catch((err) => {
+        console.error(`[notifyOrderPaidEmails] customer email failed (${customerEmail})`, err);
+        throw err;
+      }),
+    );
+  } else {
+    console.warn('[notifyOrderPaidEmails] no customer email for user', payload.userId);
   }
 
   if (adminTo.length > 0) {
     const b = buildAdminBodies(payload, customerEmail, customerName);
-    tasks.push(
-      sendMail({
-        to: adminTo.join(', '),
-        subject: b.subject,
-        text: b.text,
-        html: b.html,
-      }),
+    for (const adminEmail of adminTo) {
+      tasks.push(
+        sendMail({
+          to: adminEmail,
+          subject: b.subject,
+          text: b.text,
+          html: b.html,
+        }).catch((err) => {
+          console.error(`[notifyOrderPaidEmails] admin email failed (${adminEmail})`, err);
+          throw err;
+        }),
+      );
+    }
+  } else {
+    console.warn(
+      '[notifyOrderPaidEmails] no admin notify inbox — set ADMIN_ORDER_NOTIFY_EMAIL or ADMIN_EMAILS in .env',
     );
   }
 
   if (tasks.length === 0) return;
 
-  await Promise.all(tasks);
+  const results = await Promise.allSettled(tasks);
+  const failed = results.filter((r) => r.status === 'rejected');
+  if (failed.length > 0) {
+    console.error(`[notifyOrderPaidEmails] ${failed.length}/${results.length} email(s) failed`);
+  }
 }

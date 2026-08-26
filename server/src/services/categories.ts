@@ -41,6 +41,7 @@ export type PublicCategory = {
   subcategories: string[];
   priceFilters: PublicPriceFilter[];
   priceFiltersEnabled: boolean;
+  isCombo: boolean;
   isActive: boolean;
 };
 
@@ -152,12 +153,11 @@ async function listCategories(activeOnly: boolean): Promise<PublicCategory[]> {
     const productCount =
       (countByKey.get(slug.toLowerCase()) ?? 0) +
       (label.toLowerCase() !== slug.toLowerCase() ? (countByKey.get(label.toLowerCase()) ?? 0) : 0);
-    const subcategories = [
-      ...(subsByCat.get(slug.toLowerCase()) ?? []),
-      ...(label.toLowerCase() !== slug.toLowerCase() ? (subsByCat.get(label.toLowerCase()) ?? []) : []),
-    ]
-      .filter((s, i, arr) => arr.findIndex((x) => x.toLowerCase() === s.toLowerCase()) === i)
-      .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    const subcategories = mergeSubcategoryLists(
+      Array.isArray(d.subcategories) ? d.subcategories.map(String) : [],
+      subsByCat.get(slug.toLowerCase()) ?? [],
+      label.toLowerCase() !== slug.toLowerCase() ? (subsByCat.get(label.toLowerCase()) ?? []) : [],
+    );
     return {
       slug,
       label,
@@ -168,6 +168,7 @@ async function listCategories(activeOnly: boolean): Promise<PublicCategory[]> {
       subcategories,
       priceFilters: mapPriceFilters(d.priceFilters),
       priceFiltersEnabled: d.priceFiltersEnabled !== false,
+      isCombo: d.isCombo === true,
       isActive: d.isActive !== false,
     };
   });
@@ -206,6 +207,57 @@ function mapPriceFilters(raw: unknown): PublicPriceFilter[] {
 
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function normalizeSubcategoryLabel(raw: string): string {
+  return raw.trim().replace(/\s+/g, ' ');
+}
+
+function findStoredSubcategoryIndex(list: string[], name: string): number {
+  const key = name.trim().toLowerCase();
+  return list.findIndex((s) => s.trim().toLowerCase() === key);
+}
+
+async function loadCategoryDoc(slugRaw: string) {
+  const slug = slugRaw.trim().toLowerCase();
+  const doc = await CategoryModel.findOne({ slug });
+  if (!doc) {
+    throw new CategoryServiceError('Category not found', 404);
+  }
+  return doc;
+}
+
+async function reloadCategory(slug: string): Promise<PublicCategory> {
+  const list = await listAdminCategories();
+  const updated = list.find((c) => c.slug === slug);
+  if (!updated) {
+    throw new CategoryServiceError('Category was saved but could not be loaded', 500);
+  }
+  return updated;
+}
+
+function mergeSubcategoryLists(...lists: string[][]): string[] {
+  const merged: string[] = [];
+  for (const list of lists) {
+    for (const raw of list) {
+      const sub = raw.trim();
+      if (!sub) continue;
+      if (!merged.some((s) => s.toLowerCase() === sub.toLowerCase())) merged.push(sub);
+    }
+  }
+  return merged.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+}
+
+function categoryNamesForFilter(slug: string, label: string): string[] {
+  return [...new Set([slug, label].map((s) => s.trim()).filter(Boolean))];
+}
+
+function productCategoryFilter(names: string[]): Record<string, unknown> {
+  return {
+    $or: names.map((name) => ({
+      category: new RegExp(`^${escapeRegex(name)}$`, 'i'),
+    })),
+  };
 }
 
 /** Exclude products whose category is switched off for the storefront. */
@@ -350,6 +402,7 @@ export async function updateCategory(
     tileImageUrl?: string | null;
     priceFilters?: PriceFilterInput[];
     priceFiltersEnabled?: boolean;
+    isCombo?: boolean;
     isActive?: boolean;
   },
 ): Promise<PublicCategory> {
@@ -384,6 +437,10 @@ export async function updateCategory(
 
   if (patch.priceFiltersEnabled !== undefined) {
     doc.priceFiltersEnabled = patch.priceFiltersEnabled;
+  }
+
+  if (patch.isCombo !== undefined) {
+    doc.isCombo = patch.isCombo;
   }
 
   if (patch.isActive !== undefined) {
@@ -471,4 +528,129 @@ export async function deleteCategory(slugRaw: string): Promise<{
     deletedProducts: objectIds.length,
     deletedCombos,
   };
+}
+
+/** Add an admin-defined subcategory to a category. */
+export async function addSubcategory(slugRaw: string, labelRaw: string): Promise<PublicCategory> {
+  const label = normalizeSubcategoryLabel(labelRaw);
+  if (label.length < 2 || label.length > 80) {
+    throw new CategoryServiceError('Subcategory name must be 2–80 characters', 400);
+  }
+  const doc = await loadCategoryDoc(slugRaw);
+  const stored = [...(doc.subcategories ?? []).map(String)];
+  if (findStoredSubcategoryIndex(stored, label) >= 0) {
+    throw new CategoryServiceError('That subcategory already exists', 409);
+  }
+  stored.push(label);
+  doc.set('subcategories', stored);
+  await doc.save();
+  return reloadCategory(doc.slug);
+}
+
+/** Rename a subcategory and update products and price filters in that category. */
+export async function renameSubcategory(
+  slugRaw: string,
+  oldNameRaw: string,
+  newNameRaw: string,
+): Promise<PublicCategory> {
+  const oldName = normalizeSubcategoryLabel(oldNameRaw);
+  const newName = normalizeSubcategoryLabel(newNameRaw);
+  if (!oldName) {
+    throw new CategoryServiceError('Subcategory name is required', 400);
+  }
+  if (newName.length < 2 || newName.length > 80) {
+    throw new CategoryServiceError('Subcategory name must be 2–80 characters', 400);
+  }
+  if (oldName.toLowerCase() === newName.toLowerCase()) {
+    return reloadCategory(slugRaw);
+  }
+
+  const doc = await loadCategoryDoc(slugRaw);
+  const stored = [...(doc.subcategories ?? []).map(String)];
+  const idx = findStoredSubcategoryIndex(stored, oldName);
+  if (idx >= 0) {
+    if (findStoredSubcategoryIndex(stored, newName) >= 0) {
+      throw new CategoryServiceError('Another subcategory already uses that name', 409);
+    }
+    stored[idx] = newName;
+  } else if (findStoredSubcategoryIndex(stored, newName) < 0) {
+    stored.push(newName);
+  } else {
+    throw new CategoryServiceError('Another subcategory already uses that name', 409);
+  }
+  doc.set('subcategories', stored);
+
+  const names = categoryNamesForFilter(doc.slug, doc.label);
+  const oldRegex = new RegExp(`^${escapeRegex(oldName)}$`, 'i');
+
+  const productCount = await ProductModel.countDocuments({
+    ...productCategoryFilter(names),
+    subcategory: oldRegex,
+  });
+  if (productCount === 0 && idx < 0) {
+    throw new CategoryServiceError('Subcategory not found', 404);
+  }
+
+  await ProductModel.updateMany(
+    { ...productCategoryFilter(names), subcategory: oldRegex },
+    { $set: { subcategory: newName } },
+  );
+
+  const filters = mapPriceFilters(doc.priceFilters);
+  if (filters.some((f) => f.subcategory && oldRegex.test(f.subcategory))) {
+    doc.set(
+      'priceFilters',
+      filters.map((f) =>
+        f.subcategory && oldRegex.test(f.subcategory) ? { ...f, subcategory: newName } : f,
+      ),
+    );
+  }
+
+  await doc.save();
+  return reloadCategory(doc.slug);
+}
+
+/** Remove a subcategory and clear it from products and price filters in that category. */
+export async function deleteSubcategory(slugRaw: string, nameRaw: string): Promise<PublicCategory> {
+  const name = normalizeSubcategoryLabel(nameRaw);
+  if (!name) {
+    throw new CategoryServiceError('Subcategory name is required', 400);
+  }
+
+  const doc = await loadCategoryDoc(slugRaw);
+  const stored = [...(doc.subcategories ?? []).map(String)];
+  const idx = findStoredSubcategoryIndex(stored, name);
+  if (idx >= 0) {
+    stored.splice(idx, 1);
+    doc.set('subcategories', stored);
+  }
+
+  const names = categoryNamesForFilter(doc.slug, doc.label);
+  const nameRegex = new RegExp(`^${escapeRegex(name)}$`, 'i');
+
+  const productCount = await ProductModel.countDocuments({
+    ...productCategoryFilter(names),
+    subcategory: nameRegex,
+  });
+  if (idx < 0 && productCount === 0) {
+    throw new CategoryServiceError('Subcategory not found', 404);
+  }
+
+  await ProductModel.updateMany(
+    { ...productCategoryFilter(names), subcategory: nameRegex },
+    { $set: { subcategory: '' } },
+  );
+
+  const filters = mapPriceFilters(doc.priceFilters);
+  if (filters.some((f) => f.subcategory && nameRegex.test(f.subcategory))) {
+    doc.set(
+      'priceFilters',
+      filters.map((f) =>
+        f.subcategory && nameRegex.test(f.subcategory) ? { ...f, subcategory: null } : f,
+      ),
+    );
+  }
+
+  await doc.save();
+  return reloadCategory(doc.slug);
 }

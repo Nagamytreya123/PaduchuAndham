@@ -4,7 +4,6 @@ import {
   Box,
   Typography,
   Grid,
-  Skeleton,
   Button,
   Stack,
   Container,
@@ -15,9 +14,7 @@ import { motion, useScroll, useTransform, useSpring, MotionValue } from 'framer-
 import Lenis from 'lenis';
 import { apiFetch } from '../api/client';
 import { ProductCard } from '../components/ProductCard';
-import { JewelleryComboStorefrontCard } from '../components/JewelleryComboStorefrontCard';
 import type { ProductSummary } from '../types/product';
-import type { JewelleryComboSummary } from '../types/jewelleryCombo';
 import {
   apiCategoryForFilter,
   parseCollectionFilterParam,
@@ -27,14 +24,12 @@ import {
   resolveSubcategoryParam,
   subcategoriesForFilter,
 } from '../utils/catalogCategory';
-import { COMBO_CATEGORY_TILE_IMAGE } from '../constants/categoryTileImages';
 import { PRODUCT_IMAGE_FALLBACK } from '../utils/productImage';
 import { LuxuryShowcaseLoader } from '../components/loading';
 import { seedCatalog } from '../utils/catalogCache';
 import { shopSurface } from '../constants/shopSurface';
 import { StorefrontHeader } from '../components/StorefrontHeader';
 import { EditorialImageFrame } from '../components/EditorialImageFrame';
-import { editorialFrameSx } from '../constants/shopSurface';
 import { CategoryFilterGroup } from '../components/CategoryFilterGroup';
 import { SubcategoryFilterGroup } from '../components/SubcategoryFilterGroup';
 import { PriceFilterGroup } from '../components/PriceFilterGroup';
@@ -42,39 +37,21 @@ import { useCategories } from '../context/CategoriesContext';
 
 const TOTAL_FRAMES = 240;
 
-function categoryTileSrc(tile: { key: string; image?: string }): string {
-  if (tile.image) return tile.image;
-  if (tile.key === 'combos') return COMBO_CATEGORY_TILE_IMAGE;
-  return PRODUCT_IMAGE_FALLBACK;
+function categoryTileSrc(tile: { image?: string }): string {
+  return tile.image || PRODUCT_IMAGE_FALLBACK;
 }
 
-function ShopByCategoriesSection({
-  combos,
-  combosLoading,
-}: {
-  combos: JewelleryComboSummary[];
-  combosLoading: boolean;
-}) {
+function ShopByCategoriesSection() {
   const { categories } = useCategories();
-  const showCombosTile = combosLoading || combos.length > 0;
 
   const tiles = useMemo(() => {
-    const rows: { key: string; label: string; search: string; image?: string }[] = categories.map((c) => ({
+    return categories.map((c) => ({
       key: c.slug,
       label: c.label,
       search: `?category=${encodeURIComponent(c.slug)}`,
       image: c.tileImageUrl || PRODUCT_IMAGE_FALLBACK,
     }));
-    if (showCombosTile) {
-      rows.push({
-        key: 'combos',
-        label: 'Curated sets',
-        search: '?category=combos',
-        image: combos[0]?.images[0],
-      });
-    }
-    return rows;
-  }, [categories, showCombosTile, combos]);
+  }, [categories]);
 
   return (
     <Box
@@ -120,7 +97,6 @@ function ShopByCategoriesSection({
         <Grid container spacing={{ xs: 2, sm: 2.5 }}>
           {tiles.map((tile, index) => {
             const src = categoryTileSrc(tile);
-            const showSkeleton = tile.key === 'combos' && combosLoading;
 
             return (
               <Grid item xs={12} sm={6} md={4} key={tile.key}>
@@ -145,14 +121,7 @@ function ShopByCategoriesSection({
                       to={{ pathname: '/', search: tile.search, hash: 'collection' }}
                       sx={{ display: 'block' }}
                     >
-                      {showSkeleton ? (
-                        <Skeleton
-                          variant="rectangular"
-                          sx={{ ...editorialFrameSx.root, ...editorialFrameSx.inset }}
-                        />
-                      ) : (
-                        <EditorialImageFrame src={src} alt={tile.label} inset />
-                      )}
+                      <EditorialImageFrame src={src} alt={tile.label} inset />
                       <Typography
                         sx={{
                           py: 1.5,
@@ -292,12 +261,8 @@ export function HomePage() {
   const categoryParam = searchParams.get('category') ?? '';
   const subcategoryParam = searchParams.get('subcategory') ?? '';
   const priceFilterParam = searchParams.get('priceFilter') ?? '';
-  const [combos, setCombos] = useState<JewelleryComboSummary[]>([]);
-  const [combosLoading, setCombosLoading] = useState(true);
-  const hasCombos = combos.length > 0;
-  const activeFilterKey = parseCollectionFilterParam(categoryParam, categories, hasCombos);
+  const activeFilterKey = parseCollectionFilterParam(categoryParam, categories);
   const apiCategory = apiCategoryForFilter(activeFilterKey);
-  const showComboFilterView = activeFilterKey === 'combos';
   const subcategoryOptions = subcategoriesForFilter(categories, activeFilterKey);
   const apiSubcategory = resolveSubcategoryParam(subcategoryParam, subcategoryOptions);
   const priceFilterOptions = priceFiltersForSelection(categories, activeFilterKey, apiSubcategory);
@@ -382,26 +347,6 @@ export function HomePage() {
   }, []);
 
   useEffect(() => {
-    void (async () => {
-      try {
-        const data = await apiFetch<{ combos: JewelleryComboSummary[] }>('/api/jewellery-combos');
-        setCombos(data.combos);
-      } catch {
-        setCombos([]);
-      } finally {
-        setCombosLoading(false);
-      }
-    })();
-  }, [catalogRevision]);
-
-  // Fetch products (skipped when viewing Combos — those load from `/api/jewellery-combos` above)
-  useEffect(() => {
-    if (showComboFilterView) {
-      setProducts([]);
-      setLoading(false);
-      setError(null);
-      return;
-    }
     setLoading(true);
     setError(null);
     const params = new URLSearchParams();
@@ -420,7 +365,7 @@ export function HomePage() {
         setLoading(false);
       }
     })();
-  }, [apiCategory, apiSubcategory, showComboFilterView, catalogRevision]);
+  }, [apiCategory, apiSubcategory, catalogRevision]);
 
   const visibleProducts = useMemo(
     () => products.filter((p) => productMatchesPriceFilter(p.price, activePriceFilter)),
@@ -572,7 +517,7 @@ export function HomePage() {
         </>
       ) : null}
 
-      <ShopByCategoriesSection combos={combos} combosLoading={combosLoading} />
+      <ShopByCategoriesSection />
 
       {/* Featured Collection Section */}
       <Box
@@ -604,22 +549,18 @@ export function HomePage() {
               The Collection
             </Typography>
             <Typography variant="subtitle1" align="center" sx={{ mb: 3, color: '#8A8175', maxWidth: 640, mx: 'auto' }}>
-              {showComboFilterView
-                ? 'Curated jewellery sets at a fixed bundle price'
-                : 'Browse the full catalogue — tap a category above or use the filters below.'}
+              Browse the full catalogue — tap a category above or use the filters below.
             </Typography>
             <Stack direction="row" justifyContent="center" flexWrap="wrap" sx={{ mb: 6, gap: 1 }}>
               <CategoryFilterGroup
                 categories={categories}
                 value={activeFilterKey}
-                hasCombos={hasCombos}
                 ariaLabel="Filter by category"
                 onChange={(key) => {
                   setSearchParams(
                     (prev) => {
                       const next = new URLSearchParams(prev);
                       if (key === 'all') next.delete('category');
-                      else if (key === 'combos') next.set('category', 'combos');
                       else next.set('category', key);
                       next.delete('subcategory');
                       next.delete('priceFilter');
@@ -726,21 +667,7 @@ export function HomePage() {
             )}
           </motion.div>
 
-          {showComboFilterView ? (
-            combosLoading ? (
-              <LuxuryShowcaseLoader variant="inline" tone="dark" aria-label="Loading jewellery sets" />
-            ) : combos.length === 0 ? (
-              <Typography color="text.secondary" align="center">
-                No jewellery sets available yet.
-              </Typography>
-            ) : (
-              <Grid container spacing={4}>
-                {combos.map((c, index) => (
-                  <JewelleryComboStorefrontCard key={c.id} combo={c} index={index} imageFrame="editorial" />
-                ))}
-              </Grid>
-            )
-          ) : loading ? (
+          {loading ? (
             <LuxuryShowcaseLoader variant="inline" tone="dark" aria-label="Loading collection" />
           ) : error ? (
             <Typography color="error" align="center">{error}</Typography>

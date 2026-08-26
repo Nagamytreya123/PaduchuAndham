@@ -97,12 +97,14 @@ type ProductLike = {
   jewelryDetails?: JewelryDetailsLike;
   matchingBraceletIds?: unknown[] | null;
   watchBraceletBundlePrice?: number | null;
+  comboProductIds?: unknown[] | null;
 };
 
 export function productToJson(p: ProductLike) {
   const braceletIds = p.matchingBraceletIds?.length
     ? p.matchingBraceletIds.map((id) => String(id))
     : undefined;
+  const comboIds = p.comboProductIds?.length ? p.comboProductIds.map((id) => String(id)) : undefined;
   return {
     id: String(p._id),
     name: p.name,
@@ -126,5 +128,6 @@ export function productToJson(p: ProductLike) {
     matchingBraceletIds: braceletIds,
     watchBraceletBundlePrice:
       p.watchBraceletBundlePrice == null ? undefined : p.watchBraceletBundlePrice,
+    comboProductIds: comboIds,
   };
 }

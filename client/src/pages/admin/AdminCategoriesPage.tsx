@@ -42,6 +42,13 @@ type FilterDraft = {
   appliesTo: string;
 };
 
+type SubcategoryDraft = {
+  key: string;
+  name: string;
+  editing: boolean;
+  originalName?: string;
+};
+
 function paiseToRupeeField(paise: number | null): string {
   if (paise == null) return '';
   const rupees = paise / 100;
@@ -84,6 +91,7 @@ function normalizeAdminCategory(c: CatalogCategory): CatalogCategory {
     ...c,
     priceFilters: c.priceFilters ?? [],
     priceFiltersEnabled: c.priceFiltersEnabled !== false,
+    isCombo: c.isCombo === true,
     isActive: c.isActive !== false,
     subcategories: c.subcategories ?? [],
     tileImageUrl: c.tileImageUrl ?? '',
@@ -117,7 +125,14 @@ export function AdminCategoriesPage() {
   const [imagePreview, setImagePreview] = useState('');
   const [filters, setFilters] = useState<FilterDraft[]>([]);
   const [priceFiltersEnabled, setPriceFiltersEnabled] = useState(true);
+  const [isCombo, setIsCombo] = useState(false);
   const [togglingSlug, setTogglingSlug] = useState<string | null>(null);
+
+  const [subDialogOpen, setSubDialogOpen] = useState(false);
+  const [subCategorySlug, setSubCategorySlug] = useState<string | null>(null);
+  const [subDrafts, setSubDrafts] = useState<SubcategoryDraft[]>([]);
+  const [newSubName, setNewSubName] = useState('');
+  const [subSaving, setSubSaving] = useState(false);
 
   async function loadAdmin() {
     const data = await apiFetch<{ categories: CatalogCategory[] }>('/api/admin/categories');
@@ -150,6 +165,25 @@ export function AdminCategoriesPage() {
     [categories, editSlug],
   );
 
+  const subManaging = useMemo(
+    () => (subCategorySlug ? categories.find((c) => c.slug === subCategorySlug) : undefined),
+    [categories, subCategorySlug],
+  );
+
+  function openSubcategories(cat: CatalogCategory) {
+    setSubCategorySlug(cat.slug);
+    setSubDrafts(
+      (cat.subcategories ?? []).map((name, i) => ({
+        key: `sub-${i}-${name}`,
+        name,
+        editing: false,
+      })),
+    );
+    setNewSubName('');
+    setError(null);
+    setSubDialogOpen(true);
+  }
+
   function openCreate() {
     setEditSlug(null);
     setLabel('');
@@ -157,6 +191,7 @@ export function AdminCategoriesPage() {
     setImagePreview('');
     setFilters([]);
     setPriceFiltersEnabled(true);
+    setIsCombo(false);
     setError(null);
     setDialogOpen(true);
   }
@@ -168,6 +203,7 @@ export function AdminCategoriesPage() {
     setImagePreview(cat.tileImageUrl);
     setFilters(draftsFromFilters(cat.priceFilters ?? []));
     setPriceFiltersEnabled(cat.priceFiltersEnabled !== false);
+    setIsCombo(cat.isCombo === true);
     setError(null);
     setDialogOpen(true);
   }
@@ -206,7 +242,7 @@ export function AdminCategoriesPage() {
         await apiFetch(`/api/admin/categories/${encodeURIComponent(slug)}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ label: name, priceFilters, priceFiltersEnabled }),
+          body: JSON.stringify({ label: name, priceFilters, priceFiltersEnabled, isCombo }),
         });
       }
 
@@ -218,7 +254,7 @@ export function AdminCategoriesPage() {
         await apiFetch(`/api/admin/categories/${encodeURIComponent(slug)}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ priceFilters, priceFiltersEnabled }),
+          body: JSON.stringify({ priceFilters, priceFiltersEnabled, isCombo }),
         });
       }
 
@@ -248,6 +284,23 @@ export function AdminCategoriesPage() {
     }
   }
 
+  async function toggleComboCategory(cat: CatalogCategory, enabled: boolean) {
+    setError(null);
+    setTogglingSlug(cat.slug);
+    try {
+      await apiFetch(`/api/admin/categories/${encodeURIComponent(cat.slug)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isCombo: enabled }),
+      });
+      await reloadStorefront();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not update combo setting');
+    } finally {
+      setTogglingSlug(null);
+    }
+  }
+
   async function togglePriceFilters(cat: CatalogCategory, enabled: boolean) {
     setError(null);
     setTogglingSlug(cat.slug);
@@ -262,6 +315,117 @@ export function AdminCategoriesPage() {
       setError(e instanceof Error ? e.message : 'Could not update price filter visibility');
     } finally {
       setTogglingSlug(null);
+    }
+  }
+
+  async function addSubcategory() {
+    if (!subCategorySlug) return;
+    const label = newSubName.trim();
+    if (label.length < 2) {
+      setError('Enter a subcategory name (at least 2 characters)');
+      return;
+    }
+    setError(null);
+    setSubSaving(true);
+    try {
+      const data = await apiFetch<{ category: CatalogCategory }>(
+        `/api/admin/categories/${encodeURIComponent(subCategorySlug)}/subcategories`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ label }),
+        },
+      );
+      setCategories((rows) =>
+        rows.map((c) => (c.slug === subCategorySlug ? normalizeAdminCategory(data.category) : c)),
+      );
+      setSubDrafts(
+        (data.category.subcategories ?? []).map((name, i) => ({
+          key: `sub-${i}-${name}`,
+          name,
+          editing: false,
+        })),
+      );
+      setNewSubName('');
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not add subcategory');
+    } finally {
+      setSubSaving(false);
+    }
+  }
+
+  async function saveSubcategoryEdit(draft: SubcategoryDraft) {
+    if (!subCategorySlug || !draft.originalName) return;
+    const label = draft.name.trim();
+    if (label.length < 2) {
+      setError('Enter a subcategory name (at least 2 characters)');
+      return;
+    }
+    if (label.toLowerCase() === draft.originalName.toLowerCase()) {
+      setSubDrafts((rows) =>
+        rows.map((r) =>
+          r.key === draft.key ? { ...r, name: draft.originalName!, editing: false, originalName: undefined } : r,
+        ),
+      );
+      return;
+    }
+    setError(null);
+    setSubSaving(true);
+    try {
+      const data = await apiFetch<{ category: CatalogCategory }>(
+        `/api/admin/categories/${encodeURIComponent(subCategorySlug)}/subcategories/${encodeURIComponent(draft.originalName)}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ label }),
+        },
+      );
+      setCategories((rows) =>
+        rows.map((c) => (c.slug === subCategorySlug ? normalizeAdminCategory(data.category) : c)),
+      );
+      setSubDrafts(
+        (data.category.subcategories ?? []).map((name, i) => ({
+          key: `sub-${i}-${name}`,
+          name,
+          editing: false,
+        })),
+      );
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not rename subcategory');
+    } finally {
+      setSubSaving(false);
+    }
+  }
+
+  async function removeSubcategory(name: string) {
+    if (!subCategorySlug) return;
+    if (!window.confirm(`Remove subcategory “${name}”? Products using it will have their subcategory cleared.`)) {
+      return;
+    }
+    setError(null);
+    setSubSaving(true);
+    try {
+      const data = await apiFetch<{ category: CatalogCategory }>(
+        `/api/admin/categories/${encodeURIComponent(subCategorySlug)}/subcategories/${encodeURIComponent(name)}`,
+        { method: 'DELETE' },
+      );
+      setCategories((rows) =>
+        rows.map((c) => (c.slug === subCategorySlug ? normalizeAdminCategory(data.category) : c)),
+      );
+      setSubDrafts(
+        (data.category.subcategories ?? []).map((subName, i) => ({
+          key: `sub-${i}-${subName}`,
+          name: subName,
+          editing: false,
+        })),
+      );
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not delete subcategory');
+    } finally {
+      setSubSaving(false);
     }
   }
 
@@ -351,9 +515,13 @@ export function AdminCategoriesPage() {
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
                       {c.productCount} product{c.productCount === 1 ? '' : 's'}
+                      {(c.subcategories ?? []).length > 0
+                        ? ` · ${c.subcategories.length} subcategor${c.subcategories.length === 1 ? 'y' : 'ies'}`
+                        : ''}
                       {c.priceFilters.length > 0
                         ? ` · ${c.priceFilters.length} price filter${c.priceFilters.length === 1 ? '' : 's'}`
                         : ''}
+                      {c.isCombo ? ' · combo category' : ''}
                       {c.priceFiltersEnabled === false ? ' · price filters off' : ''}
                     </Typography>
                     <FormControlLabel
@@ -373,6 +541,18 @@ export function AdminCategoriesPage() {
                       control={
                         <Switch
                           size="small"
+                          checked={c.isCombo === true}
+                          disabled={togglingSlug === c.slug || saving}
+                          onChange={(_e, checked) => void toggleComboCategory(c, checked)}
+                        />
+                      }
+                      label="Combo category"
+                    />
+                    <FormControlLabel
+                      sx={{ ml: 0 }}
+                      control={
+                        <Switch
+                          size="small"
                           checked={c.priceFiltersEnabled !== false}
                           disabled={togglingSlug === c.slug || saving || c.isActive === false}
                           onChange={(_e, checked) => void togglePriceFilters(c, checked)}
@@ -380,9 +560,17 @@ export function AdminCategoriesPage() {
                       }
                       label="Show price filters"
                     />
-                    <Stack direction="row" gap={1} sx={{ mt: 'auto' }}>
+                    <Stack direction="row" gap={1} sx={{ mt: 'auto' }} flexWrap="wrap">
                       <Button size="small" variant="outlined" onClick={() => openEdit(c)} sx={{ cursor: 'pointer' }}>
                         Edit
+                      </Button>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => openSubcategories(c)}
+                        sx={{ cursor: 'pointer' }}
+                      >
+                        Subcategories
                       </Button>
                       <Button
                         size="small"
@@ -441,6 +629,15 @@ export function AdminCategoriesPage() {
               </Typography>
             )}
 
+            <FormControlLabel
+              control={
+                <Switch checked={isCombo} disabled={saving} onChange={(_e, checked) => setIsCombo(checked)} />
+              }
+              label="Combo category"
+            />
+            <Typography variant="caption" color="text.secondary">
+              Combo categories let you create product sets that add all linked items to the cart at one price.
+            </Typography>
             <Divider />
             <Stack direction="row" alignItems="center" justifyContent="space-between" flexWrap="wrap" gap={1}>
               <Typography variant="subtitle2" fontWeight={700}>
@@ -558,6 +755,156 @@ export function AdminCategoriesPage() {
           <MotionButton variant="contained" onClick={() => void save()} disabled={saving}>
             {saving ? 'Saving…' : 'Save'}
           </MotionButton>
+        </DialogActions>
+      </PremiumModal>
+
+      <PremiumModal
+        open={subDialogOpen}
+        onClose={() => !subSaving && setSubDialogOpen(false)}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle sx={{ fontWeight: 800 }}>
+          Subcategories{subManaging ? ` — ${subManaging.label}` : ''}
+        </DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            {error && subDialogOpen ? <Alert severity="error">{error}</Alert> : null}
+            <Typography variant="caption" color="text.secondary">
+              Subcategories appear as filter chips on the shop. Renaming updates products; deleting clears the
+              subcategory from products in this category.
+            </Typography>
+            {subDrafts.length === 0 ? (
+              <Typography variant="body2" color="text.secondary">
+                No subcategories yet. Add one below or they will appear automatically when products use them.
+              </Typography>
+            ) : (
+              subDrafts.map((draft) => (
+                <Stack
+                  key={draft.key}
+                  direction="row"
+                  spacing={1}
+                  alignItems="center"
+                  sx={{ p: 1.25, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}
+                >
+                  {draft.editing ? (
+                    <TextField
+                      value={draft.name}
+                      onChange={(e) =>
+                        setSubDrafts((rows) =>
+                          rows.map((r) => (r.key === draft.key ? { ...r, name: e.target.value } : r)),
+                        )
+                      }
+                      size="small"
+                      fullWidth
+                      disabled={subSaving}
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') void saveSubcategoryEdit(draft);
+                        if (e.key === 'Escape') {
+                          setSubDrafts((rows) =>
+                            rows.map((r) =>
+                              r.key === draft.key
+                                ? { ...r, name: r.originalName ?? r.name, editing: false, originalName: undefined }
+                                : r,
+                            ),
+                          );
+                        }
+                      }}
+                    />
+                  ) : (
+                    <Typography variant="body2" sx={{ flexGrow: 1, fontWeight: 600 }}>
+                      {draft.name}
+                    </Typography>
+                  )}
+                  {draft.editing ? (
+                    <>
+                      <Button
+                        size="small"
+                        variant="contained"
+                        disabled={subSaving}
+                        onClick={() => void saveSubcategoryEdit(draft)}
+                        sx={{ cursor: 'pointer' }}
+                      >
+                        Save
+                      </Button>
+                      <Button
+                        size="small"
+                        disabled={subSaving}
+                        onClick={() =>
+                          setSubDrafts((rows) =>
+                            rows.map((r) =>
+                              r.key === draft.key
+                                ? { ...r, name: r.originalName ?? r.name, editing: false, originalName: undefined }
+                                : r,
+                            ),
+                          )
+                        }
+                        sx={{ cursor: 'pointer' }}
+                      >
+                        Cancel
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        disabled={subSaving}
+                        onClick={() =>
+                          setSubDrafts((rows) =>
+                            rows.map((r) =>
+                              r.key === draft.key ? { ...r, editing: true, originalName: r.name } : r,
+                            ),
+                          )
+                        }
+                        sx={{ cursor: 'pointer' }}
+                      >
+                        Edit
+                      </Button>
+                      <IconButton
+                        size="small"
+                        aria-label="Delete subcategory"
+                        disabled={subSaving}
+                        onClick={() => void removeSubcategory(draft.name)}
+                        sx={{ cursor: 'pointer' }}
+                      >
+                        <IconDelete fontSize="small" />
+                      </IconButton>
+                    </>
+                  )}
+                </Stack>
+              ))
+            )}
+            <Divider />
+            <Stack direction="row" spacing={1} alignItems="flex-start">
+              <TextField
+                label="New subcategory"
+                value={newSubName}
+                onChange={(e) => setNewSubName(e.target.value)}
+                fullWidth
+                disabled={subSaving}
+                placeholder="e.g. Dress, Chain, Diver"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void addSubcategory();
+                }}
+              />
+              <Button
+                variant="outlined"
+                startIcon={<IconAdd />}
+                onClick={() => void addSubcategory()}
+                disabled={subSaving || newSubName.trim().length < 2}
+                sx={{ cursor: 'pointer', flexShrink: 0, mt: 0.5 }}
+              >
+                Add
+              </Button>
+            </Stack>
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setSubDialogOpen(false)} disabled={subSaving} sx={{ cursor: 'pointer' }}>
+            Close
+          </Button>
         </DialogActions>
       </PremiumModal>
     </PageTransitionWrapper>

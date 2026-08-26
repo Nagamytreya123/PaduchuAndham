@@ -14,6 +14,7 @@ import {
 } from '../utils/productImageStorage.js';
 import { invalidateCatalogCache } from '../cache/catalog.js';
 import { normalizeCategoryInput } from '../services/categories.js';
+import { CategoryModel } from '../models/Category.js';
 import { createImageUpload, withMulter } from '../middleware/multerUpload.js';
 
 const upload = createImageUpload();
@@ -87,7 +88,36 @@ const createSchema = z.object({
   jewelryDetails: jewelryDetailsBodySchema.optional(),
   matchingBraceletIds: z.array(objectIdHex).max(24).optional(),
   watchBraceletBundlePrice: z.union([z.number().int().min(0), z.null()]).optional(),
+  comboProductIds: z.array(objectIdHex).max(24).optional(),
 });
+
+async function categoryIsCombo(slug: string): Promise<boolean> {
+  const doc = await CategoryModel.findOne({ slug }).select('isCombo').lean();
+  return doc?.isCombo === true;
+}
+
+async function validateComboProductIds(
+  comboIds: string[] | undefined,
+  categorySlug: string,
+  excludeProductId?: string,
+): Promise<string[] | undefined> {
+  const isCombo = await categoryIsCombo(categorySlug);
+  const ids = [...new Set((comboIds ?? []).filter((id) => id !== excludeProductId))];
+  if (!isCombo) {
+    if (ids.length > 0) {
+      throw new Error('Linked products are only allowed for combo categories');
+    }
+    return undefined;
+  }
+  if (ids.length < 2) {
+    throw new Error('Combo products must link at least two other products');
+  }
+  const docs = await ProductModel.find({ _id: { $in: ids }, isActive: true }).select('_id').lean();
+  if (docs.length !== ids.length) {
+    throw new Error('All linked combo products must exist and be active');
+  }
+  return ids;
+}
 
 router.post('/', productImageUpload, async (req, res) => {
   try {
@@ -122,6 +152,13 @@ router.post('/', productImageUpload, async (req, res) => {
       res.status(400).json({ error: 'Unknown or inactive category' });
       return;
     }
+    let comboProductIds: string[] | undefined;
+    try {
+      comboProductIds = await validateComboProductIds(body.comboProductIds, categorySlug);
+    } catch (e) {
+      res.status(400).json({ error: e instanceof Error ? e.message : 'Invalid combo products' });
+      return;
+    }
     const product = await ProductModel.create({
       name: body.name,
       description: body.description ?? '',
@@ -143,6 +180,7 @@ router.post('/', productImageUpload, async (req, res) => {
       jewelryDetails: body.jewelryDetails,
       matchingBraceletIds: body.matchingBraceletIds?.map((id) => new mongoose.Types.ObjectId(id)),
       watchBraceletBundlePrice: body.watchBraceletBundlePrice ?? undefined,
+      comboProductIds: comboProductIds?.map((id) => new mongoose.Types.ObjectId(id)),
       createdBy: req.user!.id,
     });
     await invalidateCatalogCache();
@@ -291,6 +329,20 @@ router.patch('/:id', productImageUpload, async (req, res) => {
         doc.set('watchBraceletBundlePrice', undefined);
       } else {
         doc.watchBraceletBundlePrice = patch.watchBraceletBundlePrice;
+      }
+    }
+    if (patch.comboProductIds !== undefined || patch.category !== undefined) {
+      const categorySlug = doc.category as string;
+      const nextComboIds =
+        patch.comboProductIds !== undefined
+          ? patch.comboProductIds
+          : (doc.comboProductIds ?? []).map((id) => String(id));
+      try {
+        const validated = await validateComboProductIds(nextComboIds, categorySlug, String(doc._id));
+        doc.comboProductIds = validated?.map((id) => new mongoose.Types.ObjectId(id)) ?? [];
+      } catch (e) {
+        res.status(400).json({ error: e instanceof Error ? e.message : 'Invalid combo products' });
+        return;
       }
     }
     const uploaded = await collectUploadedImageUrls(req);

@@ -7,7 +7,6 @@ import { Types } from 'mongoose';
 import { OrderModel } from '../models/Order.js';
 import { ProductModel } from '../models/Product.js';
 import { ReviewModel } from '../models/Review.js';
-import { JewelleryComboModel } from '../models/JewelleryCombo.js';
 import { requireAuth } from '../middleware/auth.js';
 import { env } from '../config/env.js';
 import { completePaidOrder } from '../services/completePaidOrder.js';
@@ -185,12 +184,17 @@ router.post('/', checkoutLimiter, async (req, res) => {
   }[];
   let amountPaise: number;
 
-  const comboDocs = await JewelleryComboModel.find({ isActive: true }).select('productIds price').lean();
-  const jewelleryComboDefs: JewelleryComboDefinition[] = [];
-  for (const c of comboDocs) {
-    const ids = (c.productIds ?? []).map((id) => String(id));
-    if (ids.length < 2 || c.price == null || c.price <= 0) continue;
-    jewelleryComboDefs.push({ productIds: ids, bundlePricePaise: c.price });
+  const comboProductDocs = await ProductModel.find({
+    isActive: true,
+    comboProductIds: { $exists: true, $not: { $size: 0 } },
+  })
+    .select('comboProductIds price')
+    .lean();
+  const productComboDefs: JewelleryComboDefinition[] = [];
+  for (const p of comboProductDocs) {
+    const ids = (p.comboProductIds ?? []).map((id) => String(id));
+    if (ids.length < 2 || p.price == null || p.price <= 0) continue;
+    productComboDefs.push({ productIds: ids, bundlePricePaise: p.price });
   }
 
   try {
@@ -206,7 +210,7 @@ router.post('/', checkoutLimiter, async (req, res) => {
         },
       ]),
     );
-    const validated = validateOrderItemsWithBundles(body.items, bundleMap, jewelleryComboDefs);
+    const validated = validateOrderItemsWithBundles(body.items, bundleMap, productComboDefs);
     amountPaise = validated.amountPaise;
     lineItems = validated.lines;
   } catch (e) {

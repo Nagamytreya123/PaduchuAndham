@@ -12,12 +12,10 @@ import {
 import { apiFetch } from '../api/client';
 import { ProductCard } from '../components/ProductCard';
 import type { ProductSummary } from '../types/product';
-import type { JewelleryComboSummary } from '../types/jewelleryCombo';
 import { apiCategoryForFilter, parseCollectionFilterParam, priceFiltersForSelection, productMatchesPriceFilter, resolvePriceFilterParam, resolveSubcategoryParam, subcategoriesForFilter } from '../utils/catalogCategory';
 import { shopSurface, SHOP_HERO_IMAGE } from '../constants/shopSurface';
 import { LuxuryShowcaseLoader } from '../components/loading';
 import { seedCatalog } from '../utils/catalogCache';
-import { JewelleryComboStorefrontCard } from '../components/JewelleryComboStorefrontCard';
 import { StorefrontHeader } from '../components/StorefrontHeader';
 import { CategoryFilterGroup } from '../components/CategoryFilterGroup';
 import { SubcategoryFilterGroup } from '../components/SubcategoryFilterGroup';
@@ -38,12 +36,8 @@ export function ShopPage() {
   const categoryParam = searchParams.get('category') ?? '';
   const subcategoryParam = searchParams.get('subcategory') ?? '';
   const priceFilterParam = searchParams.get('priceFilter') ?? '';
-  const [combos, setCombos] = useState<JewelleryComboSummary[]>([]);
-  const [combosLoading, setCombosLoading] = useState(true);
-  const hasCombos = combos.length > 0;
-  const activeFilterKey = parseCollectionFilterParam(categoryParam, categories, hasCombos);
+  const activeFilterKey = parseCollectionFilterParam(categoryParam, categories);
   const apiCategory = apiCategoryForFilter(activeFilterKey);
-  const showComboFilterView = activeFilterKey === 'combos';
   const subcategoryOptions = subcategoriesForFilter(categories, activeFilterKey);
   const apiSubcategory = resolveSubcategoryParam(subcategoryParam, subcategoryOptions);
   const priceFilterOptions = priceFiltersForSelection(categories, activeFilterKey, apiSubcategory);
@@ -55,25 +49,6 @@ export function ShopPage() {
   const [filterOpen, setFilterOpen] = useState(false);
 
   useEffect(() => {
-    void (async () => {
-      try {
-        const data = await apiFetch<{ combos: JewelleryComboSummary[] }>('/api/jewellery-combos');
-        setCombos(data.combos);
-      } catch {
-        setCombos([]);
-      } finally {
-        setCombosLoading(false);
-      }
-    })();
-  }, [catalogRevision]);
-
-  useEffect(() => {
-    if (showComboFilterView) {
-      setProducts([]);
-      setLoading(false);
-      setError(null);
-      return;
-    }
     setLoading(true);
     setError(null);
     const params = new URLSearchParams();
@@ -92,7 +67,7 @@ export function ShopPage() {
         setLoading(false);
       }
     })();
-  }, [apiCategory, apiSubcategory, showComboFilterView, catalogRevision]);
+  }, [apiCategory, apiSubcategory, catalogRevision]);
 
   const visibleProducts = useMemo(
     () => products.filter((p) => productMatchesPriceFilter(p.price, activePriceFilter)),
@@ -234,14 +209,12 @@ export function ShopPage() {
           <CategoryFilterGroup
             categories={categories}
             value={activeFilterKey}
-            hasCombos={hasCombos}
             ariaLabel="Filter collections"
             onChange={(key) => {
               setSearchParams(
                 (prev) => {
                   const next = new URLSearchParams(prev);
                   if (key === 'all') next.delete('category');
-                  else if (key === 'combos') next.set('category', 'combos');
                   else next.set('category', key);
                   next.delete('subcategory');
                   next.delete('priceFilter');
@@ -334,21 +307,7 @@ export function ShopPage() {
           ) : null}
         </Stack>
 
-        {showComboFilterView ? (
-          combosLoading ? (
-            <LuxuryShowcaseLoader variant="inline" tone="light" aria-label="Loading collections" />
-          ) : combos.length === 0 ? (
-            <Typography sx={{ color: shopSurface.inkMuted }} align="center">
-              No jewellery sets available yet.
-            </Typography>
-          ) : (
-            <Grid container spacing={2}>
-              {combos.map((c, index) => (
-                <JewelleryComboStorefrontCard key={c.id} combo={c} index={index} variant="light" />
-              ))}
-            </Grid>
-          )
-        ) : loading ? (
+        {loading ? (
           <LuxuryShowcaseLoader variant="inline" tone="light" aria-label="Loading products" />
         ) : error ? (
           <Typography color="error" align="center">
@@ -406,7 +365,6 @@ export function ShopPage() {
         <CategoryFilterGroup
           categories={categories}
           value={activeFilterKey}
-          hasCombos={hasCombos}
           orientation="vertical"
           fullWidth
           ariaLabel="Filter collections"
@@ -415,7 +373,6 @@ export function ShopPage() {
               (prev) => {
                 const next = new URLSearchParams(prev);
                 if (key === 'all') next.delete('category');
-                else if (key === 'combos') next.set('category', 'combos');
                 else next.set('category', key);
                 next.delete('subcategory');
                 next.delete('priceFilter');

@@ -75,6 +75,8 @@ const productSchema = new Schema(
     matchingBraceletIds: [{ type: Schema.Types.ObjectId, ref: 'Product' }],
     /** Combined price (paise) for this watch + one linked bracelet; validated at checkout */
     watchBraceletBundlePrice: { type: Number, min: 0 },
+    /** Products included when this SKU is sold as a combo set (combo-category products only). */
+    comboProductIds: [{ type: Schema.Types.ObjectId, ref: 'Product' }],
 
     createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   },
