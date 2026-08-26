@@ -13,7 +13,8 @@
     "clear:orders": "tsx src/scripts/clearOrders.ts",
     "seed:starter": "tsx src/scripts/seedStarterProducts.ts",
     "fix:product-images": "tsx src/scripts/fixProductImages.ts",
-    "check:product-images": "tsx src/scripts/checkProductImages.ts"
+    "check:product-images": "tsx src/scripts/checkProductImages.ts",
+    "migrate:db": "tsx src/scripts/migrateDb.ts"
   },
   "dependencies": {
     "cookie-parser": "^1.4.7",
