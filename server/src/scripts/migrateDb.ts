@@ -4,13 +4,17 @@
  */
 import mongoose from 'mongoose';
 
-const sourceUri = process.env.SOURCE_MONGODB_URI?.trim();
-const targetUri = process.env.MONGODB_URI?.trim();
-
-if (!sourceUri || !targetUri) {
-  console.error('Set SOURCE_MONGODB_URI (old cluster) and MONGODB_URI (new cluster).');
-  process.exit(1);
+function requireEnv(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    console.error(`Missing ${name}.`);
+    process.exit(1);
+  }
+  return value;
 }
+
+const sourceUri = requireEnv('SOURCE_MONGODB_URI');
+const targetUri = requireEnv('MONGODB_URI');
 
 if (sourceUri === targetUri) {
   console.error('SOURCE_MONGODB_URI and MONGODB_URI must be different.');
