@@ -6,3 +6,6 @@ build/
 *.log
 .DS_Store
 server/uploads/
+infra/.state/
+infra/config.env
+infra/.env.production

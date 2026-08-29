@@ -8,7 +8,7 @@ import { SAMPLE_CATALOG } from './sampleCatalog.js';
 const adminEmail = process.env.SEED_ADMIN_EMAIL?.toLowerCase() || 'admin@example.com';
 
 async function seedProducts() {
-  await mongoose.connect(env.MONGODB_URI);
+  await mongoose.connect(env.MONGODB_URI!);
 
   const admin = await UserModel.findOne({ email: adminEmail, role: 'admin' }).exec();
   if (!admin) {

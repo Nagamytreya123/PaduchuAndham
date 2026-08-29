@@ -15,7 +15,7 @@ export function ensureGoogleStrategy(): boolean {
   }
   if (googleConfigured) return true;
 
-  const callbackURL = `${env.CLIENT_URL.replace(/\/$/, '')}/api/auth/google/callback`;
+  const callbackURL = `${(env.SERVER_PUBLIC_URL ?? env.CLIENT_URL).replace(/\/$/, '')}/api/auth/google/callback`;
 
   passport.use(
     new GoogleStrategy(

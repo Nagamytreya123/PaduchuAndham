@@ -4,9 +4,11 @@ import { ProductModel } from '../models/Product.js';
 import { normalizeStoredImageUrl } from '../utils/mediaUrl.js';
 
 async function checkUrl(url: string): Promise<{ url: string; status: number | string }> {
-  const resolved = url.startsWith('http')
-    ? url
-    : `https://paduchuandham.onrender.com${normalizeStoredImageUrl(url)}`;
+  const base = (env.SERVER_PUBLIC_URL ?? 'https://4cntwh9o4m.execute-api.ap-south-1.amazonaws.com').replace(
+    /\/$/,
+    '',
+  );
+  const resolved = url.startsWith('http') ? url : `${base}${normalizeStoredImageUrl(url)}`;
   try {
     const res = await fetch(resolved, { method: 'HEAD', signal: AbortSignal.timeout(15000) });
     return { url: resolved, status: res.status };
@@ -16,7 +18,7 @@ async function checkUrl(url: string): Promise<{ url: string; status: number | st
 }
 
 async function main() {
-  await mongoose.connect(env.MONGODB_URI);
+  await mongoose.connect(env.MONGODB_URI!);
 
   const products = await ProductModel.find({ 'images.0': { $exists: true } })
     .select('name images')

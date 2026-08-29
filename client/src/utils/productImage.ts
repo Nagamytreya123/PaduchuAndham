@@ -6,6 +6,7 @@ import {
   WATCH_CATEGORY_TILE_IMAGE,
 } from '../constants/categoryTileImages';
 import type { JewellerySubcategoryPreset } from '../constants/jewellerySubcategories';
+import { apiUrl } from '../api/client';
 
 const GRAY_PLACEHOLDER_SVG =
   '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1000" viewBox="0 0 800 1000">' +
@@ -16,27 +17,7 @@ export const PRODUCT_IMAGE_FALLBACK =
   `data:image/svg+xml,${encodeURIComponent(GRAY_PLACEHOLDER_SVG)}`;
 
 function mediaBaseOrigin(): string {
-  const mediaOrigin = (import.meta.env.VITE_MEDIA_ORIGIN ?? '').replace(/\/$/, '');
-  if (mediaOrigin) return mediaOrigin;
-
-  const raw = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
-  if (!raw || typeof window === 'undefined') return raw;
-
-  try {
-    const api = new URL(raw);
-    // Dev: load /uploads through the Vite origin (proxied) when API and files are both local.
-    if (
-      import.meta.env.DEV &&
-      api.hostname === window.location.hostname &&
-      api.port !== window.location.port
-    ) {
-      return '';
-    }
-    if (api.origin !== window.location.origin) return raw;
-  } catch {
-    return raw;
-  }
-  return raw;
+  return apiUrl('').replace(/\/$/, '');
 }
 
 /** Turn stored `/uploads/...` paths (or legacy absolute URLs) into a browser-loadable URL. */

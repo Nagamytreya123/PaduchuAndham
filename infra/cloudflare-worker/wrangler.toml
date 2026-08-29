@@ -1,0 +1,12 @@
+name = "paduchuandham-proxy"
+main = "src/index.js"
+compatibility_date = "2024-08-01"
+account_id = "9e6b8e36a3399eb7970dafa4abfe966b"
+
+[[routes]]
+pattern = "paduchuandham.com/*"
+zone_name = "paduchuandham.com"
+
+[[routes]]
+pattern = "www.paduchuandham.com/*"
+zone_name = "paduchuandham.com"

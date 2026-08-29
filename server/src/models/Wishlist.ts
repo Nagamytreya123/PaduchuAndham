@@ -1,4 +1,5 @@
 import mongoose, { Schema, type InferSchemaType } from 'mongoose';
+import { pickModel } from './pick.js';
 
 const wishlistItemSchema = new Schema(
   {
@@ -23,4 +24,5 @@ const wishlistSchema = new Schema(
 );
 
 export type WishlistDoc = InferSchemaType<typeof wishlistSchema>;
-export const WishlistModel = mongoose.model('Wishlist', wishlistSchema);
+const MongoWishlistModel = mongoose.model('Wishlist', wishlistSchema);
+export const WishlistModel = pickModel(MongoWishlistModel, 'Wishlist') as typeof MongoWishlistModel;

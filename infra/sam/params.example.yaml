@@ -1,0 +1,20 @@
+Parameters:
+  ClientUrl: https://www.paduchuandham.com
+  JwtSecret: PLACEHOLDER
+  MongoDbUri: PLACEHOLDER
+  GoogleClientId: PLACEHOLDER
+  GoogleClientSecret: PLACEHOLDER
+  AdminEmails: PLACEHOLDER
+  AdminOrderNotifyEmail: PLACEHOLDER
+  RazorpayKeyId: PLACEHOLDER
+  RazorpayKeySecret: PLACEHOLDER
+  RazorpayWebhookSecret: PLACEHOLDER
+  SmtpHost: PLACEHOLDER
+  SmtpPort: '587'
+  SmtpSecure: 'false'
+  SmtpUser: PLACEHOLDER
+  SmtpPass: PLACEHOLDER
+  SmtpFrom: PLACEHOLDER
+  RedisUrl: PLACEHOLDER
+  UploadsBucketName: paduchuandham-uploads-474476202047
+  FrontendBucketName: paduchuandham-frontend-474476202047

@@ -7,7 +7,7 @@ import { ReviewModel } from '../models/Review.js';
 import { invalidateCatalogCache } from '../cache/catalog.js';
 
 async function clearProducts() {
-  await mongoose.connect(env.MONGODB_URI);
+  await mongoose.connect(env.MONGODB_URI!);
 
   const products = await ProductModel.deleteMany({});
   const combos = await JewelleryComboModel.deleteMany({});

@@ -1,19 +1,29 @@
-/** In production, set VITE_API_URL to your API origin (no trailing slash). Dev uses Vite proxy with this unset. */
+const AWS_API_ORIGIN = 'https://4cntwh9o4m.execute-api.ap-south-1.amazonaws.com';
+
+const SAME_ORIGIN_API_HOSTS = new Set(['paduchuandham.com', 'www.paduchuandham.com']);
+
+/**
+ * API base URL for fetch(). On paduchuandham.com the Cloudflare Worker proxies /api/*
+ * same-origin — required so the JWT cookie (Domain=.paduchuandham.com) is sent.
+ * VITE_API_URL is only for local dev / preview without the worker proxy.
+ */
 function resolveApiBase(): string {
-  const raw = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
-  if (!raw || typeof window === 'undefined') return raw;
-  try {
-    // Cross-origin API (e.g. onrender.com) cannot read cookies set on the shop domain.
-    if (new URL(raw).origin !== window.location.origin) return '';
-  } catch {
-    return raw;
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    if (SAME_ORIGIN_API_HOSTS.has(host)) return '';
+    if (host === 'localhost' || host === '127.0.0.1') {
+      const raw = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
+      return raw || AWS_API_ORIGIN;
+    }
   }
-  return raw;
+
+  const raw = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
+  if (raw) return raw;
+  if (import.meta.env.DEV) return '';
+  return '';
 }
 
-const base = resolveApiBase();
-
-/** Retries for Render cold-start / hibernate 429s and transient 503s (GET only). */
+/** Retries for transient 429/503 on GET requests (cold starts, rate limits). */
 const MAX_RETRIES = 4;
 const INITIAL_RETRY_MS = 2000;
 const MAX_RETRY_MS = 16000;
@@ -71,11 +81,15 @@ function responseErrorMessage(res: Response, data: unknown): string {
   return res.statusText;
 }
 
+export function apiUrl(path: string): string {
+  return path.startsWith('http') ? path : `${resolveApiBase()}${path}`;
+}
+
 export async function apiFetch<T = unknown>(
   path: string,
   init?: RequestInit & { parseJson?: boolean },
 ): Promise<T> {
-  const url = path.startsWith('http') ? path : `${base}${path}`;
+  const url = apiUrl(path);
   const headers = new Headers(init?.headers);
   if (!headers.has('Content-Type') && init?.body && typeof init.body === 'string') {
     headers.set('Content-Type', 'application/json');

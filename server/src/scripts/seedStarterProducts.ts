@@ -32,7 +32,7 @@ function pickStarterProducts(): SampleProductInput[] {
 const adminEmail = process.env.SEED_ADMIN_EMAIL?.toLowerCase() || 'admin@example.com';
 
 async function seedStarterProducts() {
-  await mongoose.connect(env.MONGODB_URI);
+  await mongoose.connect(env.MONGODB_URI!);
 
   const admin = await UserModel.findOne({ email: adminEmail, role: 'admin' }).exec();
   if (!admin) {

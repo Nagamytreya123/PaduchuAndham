@@ -1,4 +1,5 @@
 import mongoose, { Schema, type InferSchemaType } from 'mongoose';
+import { pickModel } from './pick.js';
 
 export const SITE_SETTINGS_ID = 'site';
 
@@ -12,4 +13,5 @@ const siteSettingsSchema = new Schema(
 );
 
 export type SiteSettingsDoc = InferSchemaType<typeof siteSettingsSchema>;
-export const SiteSettingsModel = mongoose.model('SiteSettings', siteSettingsSchema);
+const MongoSiteSettingsModel = mongoose.model('SiteSettings', siteSettingsSchema);
+export const SiteSettingsModel = pickModel(MongoSiteSettingsModel, 'SiteSettings') as typeof MongoSiteSettingsModel;

@@ -1,0 +1,12 @@
+FROM public.ecr.aws/lambda/nodejs:20
+
+WORKDIR ${LAMBDA_TASK_ROOT}
+
+COPY server/package.json server/package-lock.json ./
+RUN npm ci
+
+COPY server/tsconfig.json ./
+COPY server/src ./src
+RUN npm run build && npm prune --omit=dev && npm cache clean --force
+
+CMD ["dist/lambda.main"]

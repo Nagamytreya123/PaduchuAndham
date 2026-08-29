@@ -1,4 +1,5 @@
 import mongoose, { Schema, type InferSchemaType } from 'mongoose';
+import { pickModel } from './pick.js';
 
 const jewelleryComboSchema = new Schema(
   {
@@ -18,4 +19,5 @@ const jewelleryComboSchema = new Schema(
 jewelleryComboSchema.index({ isActive: 1 });
 
 export type JewelleryComboDoc = InferSchemaType<typeof jewelleryComboSchema>;
-export const JewelleryComboModel = mongoose.model('JewelleryCombo', jewelleryComboSchema);
+const MongoJewelleryComboModel = mongoose.model('JewelleryCombo', jewelleryComboSchema);
+export const JewelleryComboModel = pickModel(MongoJewelleryComboModel, 'JewelleryCombo') as typeof MongoJewelleryComboModel;

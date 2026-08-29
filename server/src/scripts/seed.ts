@@ -23,7 +23,7 @@ async function upsertSeedUser(
 }
 
 async function seed() {
-  await mongoose.connect(env.MONGODB_URI);
+  await mongoose.connect(env.MONGODB_URI!);
 
   await upsertSeedUser(adminEmail, {
     name: 'Seed Admin',

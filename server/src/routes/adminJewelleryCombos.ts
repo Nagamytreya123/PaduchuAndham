@@ -11,19 +11,33 @@ import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { jewelleryComboToJson } from '../utils/jewelleryComboJson.js';
 import { uploadPublicPath } from '../utils/mediaUrl.js';
 import { invalidateCatalogCache } from '../cache/catalog.js';
+import { isS3UploadsEnabled, uploadComboImageToS3 } from '../utils/s3Upload.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadDir = path.join(__dirname, '../../uploads');
-fs.mkdirSync(uploadDir, { recursive: true });
 
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, uploadDir),
+const diskStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    fs.mkdirSync(uploadDir, { recursive: true });
+    cb(null, uploadDir);
+  },
   filename: (_req, file, cb) => {
     const safe = `combo-${Date.now()}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
     cb(null, safe);
   },
 });
-const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } });
+
+const upload = multer({
+  storage: isS3UploadsEnabled() ? multer.memoryStorage() : diskStorage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+});
+
+async function persistComboImage(file: Express.Multer.File): Promise<string> {
+  if (isS3UploadsEnabled()) {
+    return uploadComboImageToS3(file.buffer, file.originalname, file.mimetype);
+  }
+  return uploadPublicPath(file.filename);
+}
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
@@ -88,7 +102,12 @@ router.post('/', upload.single('image'), async (req, res) => {
   }
   const images = [...(body.images ?? [])];
   if (req.file) {
-    images.unshift(uploadPublicPath(req.file.filename));
+    try {
+      images.unshift(await persistComboImage(req.file));
+    } catch (e) {
+      res.status(500).json({ error: e instanceof Error ? e.message : 'Image upload failed' });
+      return;
+    }
   }
   if (images.length === 0) {
     res.status(400).json({ error: 'Add a combo image (URL or upload a file)' });
@@ -148,7 +167,12 @@ router.patch('/:id', upload.single('image'), async (req, res) => {
   if (patch.price !== undefined) doc.price = patch.price;
   if (patch.isActive !== undefined) doc.isActive = patch.isActive;
   if (req.file) {
-    doc.images = [...(doc.images ?? []), uploadPublicPath(req.file.filename)];
+    try {
+      doc.images = [...(doc.images ?? []), await persistComboImage(req.file)];
+    } catch (e) {
+      res.status(500).json({ error: e instanceof Error ? e.message : 'Image upload failed' });
+      return;
+    }
   }
   if (!doc.images || doc.images.length === 0) {
     res.status(400).json({ error: 'Combo must have at least one image (URL or upload)' });

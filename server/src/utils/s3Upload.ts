@@ -1,0 +1,85 @@
+import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import type { Request, Response, NextFunction } from 'express';
+import { env } from '../config/env.js';
+import { uploadPublicPath } from './mediaUrl.js';
+
+let client: S3Client | null = null;
+
+export function isS3UploadsEnabled(): boolean {
+  return Boolean(env.S3_UPLOADS_BUCKET?.trim());
+}
+
+export function getS3Client(): S3Client {
+  if (!client) {
+    client = new S3Client({ region: env.AWS_REGION });
+  }
+  return client;
+}
+
+function uploadsBucket(): string {
+  return env.S3_UPLOADS_BUCKET!.trim();
+}
+
+/** Upload bytes to S3 under uploads/; returns `/uploads/...` path. */
+export async function uploadBufferToS3(
+  buffer: Buffer,
+  keySuffix: string,
+  mimetype: string,
+): Promise<string> {
+  const bucket = uploadsBucket();
+  const safe = keySuffix.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const key = `uploads/${safe}`;
+  const contentType = mimetype?.startsWith('image/') ? mimetype : 'image/jpeg';
+
+  await getS3Client().send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: buffer,
+      ContentType: contentType,
+      CacheControl: 'public, max-age=31536000, immutable',
+    }),
+  );
+
+  return uploadPublicPath(safe);
+}
+
+/** Upload combo image bytes to S3; returns `/uploads/...` path served via CloudFront. */
+export async function uploadComboImageToS3(
+  buffer: Buffer,
+  originalName: string,
+  mimetype: string,
+): Promise<string> {
+  const safe = originalName.replace(/[^a-zA-Z0-9._-]/g, '_');
+  return uploadBufferToS3(buffer, `combo-${Date.now()}-${safe}`, mimetype);
+}
+
+/** Serve GET /uploads/* from S3 when local disk has no file (Lambda). */
+export async function serveUploadFromS3(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  if (!isS3UploadsEnabled() || req.method !== 'GET') {
+    next();
+    return;
+  }
+  const match = req.path.match(/^\/uploads\/(.+)$/);
+  if (!match?.[1]) {
+    next();
+    return;
+  }
+  const key = `uploads/${match[1]}`;
+  try {
+    const url = await getSignedUrl(
+      getS3Client(),
+      new GetObjectCommand({ Bucket: uploadsBucket(), Key: key }),
+      { expiresIn: 3600 },
+    );
+    res.redirect(302, url);
+  } catch (err) {
+    console.error('[s3 uploads] GET failed', key, err instanceof Error ? err.message : err);
+    next();
+  }
+}

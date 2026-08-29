@@ -17,7 +17,7 @@ function fallbackCatalogIndex(sku: string): number {
 }
 
 async function fixProductImages() {
-  await mongoose.connect(env.MONGODB_URI);
+  await mongoose.connect(env.MONGODB_URI!);
 
   const products = await ProductModel.find().sort({ sku: 1 }).lean();
   let updated = 0;

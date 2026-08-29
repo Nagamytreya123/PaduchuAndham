@@ -79,3 +79,27 @@ Set `REDIS_URL` in `.env` (e.g. [Upstash](https://upstash.com/) or Render Redis)
 - Rate limits stay in-memory (Upstash read-only tokens cannot use INCR; catalog cache needs a **read-write** TCP URL)
 
 Check `GET /api/health` — you want `redis.writeEnabled: true` and `redis.cacheEnabled: true`. If `writeEnabled` is false, replace `REDIS_URL` with the **read-write** TCP URL from the Upstash database **TCP** tab (not a read replica or REST token). In development, cached responses may include `X-Cache: HIT`.
+
+## AWS deployment (production)
+
+See **[infra/README.md](infra/README.md)** for the full migration from Vercel + Render to CloudFront + S3 + App Runner.
+
+Quick summary:
+
+- **Frontend:** S3 + CloudFront (`/*`)
+- **API:** App Runner (`/api/*`)
+- **Combo uploads:** S3 (`/uploads/*`)
+- **Database:** MongoDB Atlas (unchanged)
+
+```bash
+aws configure   # or set AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
+cp infra/config.env.example infra/config.env
+bash infra/provision.sh
+bash infra/set-secrets.sh .env
+bash infra/deploy-api.sh
+bash infra/migrate-uploads.sh
+bash infra/deploy-frontend.sh
+bash infra/dns-cutover.sh
+```
+
+Cutover checklist: [infra/CUTOVER.md](infra/CUTOVER.md). GitHub Actions workflow: `.github/workflows/aws-deploy.yml`.

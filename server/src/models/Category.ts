@@ -1,4 +1,5 @@
 import mongoose, { Schema, type InferSchemaType } from 'mongoose';
+import { pickModel } from './pick.js';
 
 export const CATEGORY_KINDS = ['watch', 'bracelet', 'jewellery', 'generic'] as const;
 export type CategoryKind = (typeof CATEGORY_KINDS)[number];
@@ -36,4 +37,6 @@ const categorySchema = new Schema(
 categorySchema.index({ isActive: 1, sortOrder: 1 });
 
 export type CategoryDoc = InferSchemaType<typeof categorySchema>;
-export const CategoryModel = mongoose.model('Category', categorySchema);
+const MongoCategoryModel = mongoose.model('Category', categorySchema);
+export const CategoryModel = pickModel(MongoCategoryModel, 'Category') as typeof MongoCategoryModel;
+

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { Types } from 'mongoose';
+import { isDynamoDbEnabled } from '../db/dynamo/client.js';
 import { CartModel } from '../models/Cart.js';
 import { requireAuth } from '../middleware/auth.js';
 
@@ -42,9 +43,12 @@ router.use(requireAuth);
 
 router.get('/', async (req, res) => {
   const userId = req.user!.id;
-  const doc = await CartModel.findOne({ user: new Types.ObjectId(userId) }).lean();
+  const userRef = isDynamoDbEnabled() ? userId : new Types.ObjectId(userId);
+  const doc = isDynamoDbEnabled()
+    ? await CartModel.findOne({ user: userRef })
+    : await CartModel.findOne({ user: userRef }).lean();
   const items = (doc?.items ?? []).map((it) => ({
-    productId: (it.productId as Types.ObjectId).toString(),
+    productId: String(it.productId),
     name: it.name,
     price: it.price,
     qty: it.qty,
@@ -68,8 +72,9 @@ router.put('/', async (req, res) => {
   }
 
   const userId = req.user!.id;
+  const userRef = isDynamoDbEnabled() ? userId : new Types.ObjectId(userId);
   const items = body.items.map((it) => ({
-    productId: new Types.ObjectId(it.productId),
+    productId: isDynamoDbEnabled() ? it.productId : new Types.ObjectId(it.productId),
     name: it.name,
     price: it.price,
     qty: it.qty,
@@ -81,8 +86,8 @@ router.put('/', async (req, res) => {
   }));
 
   await CartModel.findOneAndUpdate(
-    { user: new Types.ObjectId(userId) },
-    { $set: { items }, $setOnInsert: { user: new Types.ObjectId(userId) } },
+    { user: userRef },
+    { $set: { items }, $setOnInsert: { user: userRef } },
     { upsert: true, new: true },
   );
 

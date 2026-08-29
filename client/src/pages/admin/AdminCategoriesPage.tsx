@@ -16,7 +16,7 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import Switch from '@mui/material/Switch';
 import Chip from '@mui/material/Chip';
 import { IconAdd, IconDelete } from '../../icons';
-import { apiFetch } from '../../api/client';
+import { apiFetch, apiUrl } from '../../api/client';
 import { useCategories } from '../../context/CategoriesContext';
 import type { CatalogCategory, CatalogPriceFilter } from '../../utils/catalogCategory';
 import { formatInrFromPaise } from '../../utils/format';
@@ -101,7 +101,7 @@ function normalizeAdminCategory(c: CatalogCategory): CatalogCategory {
 async function postImage(slug: string, file: File): Promise<void> {
   const fd = new FormData();
   fd.append('image', file);
-  const res = await fetch(`/api/admin/categories/${encodeURIComponent(slug)}/image`, {
+  const res = await fetch(apiUrl(`/api/admin/categories/${encodeURIComponent(slug)}/image`), {
     method: 'POST',
     body: fd,
     credentials: 'include',

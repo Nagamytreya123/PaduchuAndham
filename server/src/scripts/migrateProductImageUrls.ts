@@ -7,7 +7,7 @@ import { invalidateCatalogCache } from '../cache/catalog.js';
 import { connectRedis, disconnectRedis } from '../redis/client.js';
 
 async function migrateProductImageUrls() {
-  await mongoose.connect(env.MONGODB_URI);
+  await mongoose.connect(env.MONGODB_URI!);
 
   const products = await ProductModel.find().lean();
   let updated = 0;

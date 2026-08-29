@@ -32,6 +32,7 @@ import { findCatalogCategory, isComboCategory, productMatchesCategory } from '..
 import { CategoryFilterGroup } from '../../components/CategoryFilterGroup';
 import { CategorySelectField } from '../../components/admin/CategorySelectField';
 import { SubcategorySelectField } from '../../components/admin/SubcategorySelectField';
+import { apiUrl } from '../../api/client';
 
 const formGrid2Sx = {
   display: 'grid',
@@ -48,7 +49,7 @@ const formGrid3Sx = {
 } as const;
 
 async function postMultipart(url: string, fd: FormData): Promise<{ ok?: boolean; error?: string }> {
-  const res = await fetch(url, { method: 'POST', body: fd, credentials: 'include' });
+  const res = await fetch(apiUrl(url), { method: 'POST', body: fd, credentials: 'include' });
   const text = await res.text();
   let data: unknown = null;
   try {
@@ -67,7 +68,7 @@ async function postMultipart(url: string, fd: FormData): Promise<{ ok?: boolean;
 }
 
 async function patchMultipart(url: string, fd: FormData): Promise<void> {
-  const res = await fetch(url, { method: 'PATCH', body: fd, credentials: 'include' });
+  const res = await fetch(apiUrl(url), { method: 'PATCH', body: fd, credentials: 'include' });
   const text = await res.text();
   let data: unknown = null;
   try {
@@ -85,7 +86,7 @@ async function patchMultipart(url: string, fd: FormData): Promise<void> {
 }
 
 async function postJson(url: string, body: Record<string, unknown>): Promise<void> {
-  const res = await fetch(url, {
+  const res = await fetch(apiUrl(url), {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
@@ -108,7 +109,7 @@ async function postJson(url: string, body: Record<string, unknown>): Promise<voi
 }
 
 async function patchJson(url: string, body: Record<string, unknown>): Promise<void> {
-  const res = await fetch(url, {
+  const res = await fetch(apiUrl(url), {
     method: 'PATCH',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
@@ -545,7 +546,7 @@ export function AdminProductsPage() {
   const [editImageFiles, setEditImageFiles] = useState<File[]>([]);
 
   async function reload() {
-    const res = await fetch('/api/admin/products', { credentials: 'include' });
+    const res = await fetch(apiUrl('/api/admin/products'), { credentials: 'include' });
     const data = (await res.json()) as {
       products: AdminProductRow[];
       salesSummary: AdminSalesSummary;
@@ -998,7 +999,7 @@ export function AdminProductsPage() {
   async function deleteProduct(id: string) {
     setError(null);
     try {
-      const res = await fetch(`/api/admin/products/${id}`, { method: 'DELETE', credentials: 'include' });
+      const res = await fetch(apiUrl(`/api/admin/products/${id}`), { method: 'DELETE', credentials: 'include' });
       if (!res.ok) throw new Error('Delete failed');
       await reload();
     } catch (e) {

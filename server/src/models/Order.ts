@@ -1,4 +1,5 @@
 import mongoose, { Schema, type InferSchemaType } from 'mongoose';
+import { pickModel } from './pick.js';
 
 const orderItemSchema = new Schema(
   {
@@ -48,4 +49,6 @@ orderSchema.index({ user: 1, createdAt: -1 });
 orderSchema.index({ status: 1 });
 
 export type OrderDoc = InferSchemaType<typeof orderSchema>;
-export const OrderModel = mongoose.model('Order', orderSchema);
+const MongoOrderModel = mongoose.model('Order', orderSchema);
+export const OrderModel = pickModel(MongoOrderModel, 'Order') as typeof MongoOrderModel;
+

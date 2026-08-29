@@ -5,6 +5,7 @@ import { ProductModel } from '../models/Product.js';
 import { ReviewModel } from '../models/Review.js';
 import { JewelleryComboModel } from '../models/JewelleryCombo.js';
 import { CartModel } from '../models/Cart.js';
+import { isDynamoDbEnabled } from '../db/dynamo/client.js';
 
 const WATCH_TILE =
   'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=640&q=80&auto=format';
@@ -114,40 +115,59 @@ async function listCategories(activeOnly: boolean): Promise<PublicCategory[]> {
   const docs = await CategoryModel.find(activeOnly ? { isActive: true } : {})
     .sort({ sortOrder: 1, label: 1 })
     .lean();
-  const [counts, subRows] = await Promise.all([
-    ProductModel.aggregate<{ _id: string; n: number }>([
-      { $match: { isActive: true } },
-      { $group: { _id: { $toLower: { $ifNull: ['$category', ''] } }, n: { $sum: 1 } } },
-    ]),
-    ProductModel.aggregate<{ _id: { cat: string; sub: string } }>([
-      {
-        $match: {
-          isActive: true,
-          subcategory: { $exists: true, $nin: [null, ''] },
-        },
-      },
-      {
-        $group: {
-          _id: {
-            cat: { $toLower: { $ifNull: ['$category', ''] } },
-            sub: '$subcategory',
+
+  let countByKey = new Map<string, number>();
+  let subsByCat = new Map<string, string[]>();
+
+  if (isDynamoDbEnabled()) {
+    const products = await ProductModel.find({ isActive: true }).lean();
+    for (const p of products) {
+      const cat = String(p.category ?? '').trim().toLowerCase();
+      if (!cat) continue;
+      countByKey.set(cat, (countByKey.get(cat) ?? 0) + 1);
+      const sub = String(p.subcategory ?? '').trim();
+      if (!sub) continue;
+      const list = subsByCat.get(cat) ?? [];
+      if (!list.some((s) => s.toLowerCase() === sub.toLowerCase())) list.push(sub);
+      subsByCat.set(cat, list);
+    }
+  } else {
+    const [counts, subRows] = await Promise.all([
+      ProductModel.aggregate<{ _id: string; n: number }>([
+        { $match: { isActive: true } },
+        { $group: { _id: { $toLower: { $ifNull: ['$category', ''] } }, n: { $sum: 1 } } },
+      ]),
+      ProductModel.aggregate<{ _id: { cat: string; sub: string } }>([
+        {
+          $match: {
+            isActive: true,
+            subcategory: { $exists: true, $nin: [null, ''] },
           },
         },
-      },
-    ]),
-  ]);
-  const countByKey = new Map(counts.map((row) => [row._id, row.n]));
-  const subsByCat = new Map<string, string[]>();
-  for (const row of subRows) {
-    const catKey = (row._id.cat ?? '').trim();
-    const sub = (row._id.sub ?? '').trim();
-    if (!catKey || !sub) continue;
-    const list = subsByCat.get(catKey) ?? [];
-    if (!list.some((s) => s.toLowerCase() === sub.toLowerCase())) list.push(sub);
-    subsByCat.set(catKey, list);
+        {
+          $group: {
+            _id: {
+              cat: { $toLower: { $ifNull: ['$category', ''] } },
+              sub: '$subcategory',
+            },
+          },
+        },
+      ]),
+    ]);
+    countByKey = new Map(counts.map((row) => [row._id, row.n]));
+    subsByCat = new Map<string, string[]>();
+    for (const row of subRows) {
+      const id = row._id as { cat?: string; sub?: string };
+      const catKey = String(id.cat ?? '').trim();
+      const sub = String(id.sub ?? '').trim();
+      if (!catKey || !sub) continue;
+      const list = subsByCat.get(catKey) ?? [];
+      if (!list.some((s) => s.toLowerCase() === sub.toLowerCase())) list.push(sub);
+      subsByCat.set(catKey, list);
+    }
   }
 
-  return docs.map((d) => {
+  const mapped = docs.map((d) => {
     const slug = d.slug;
     const label = d.label;
     const productCount =
@@ -172,6 +192,16 @@ async function listCategories(activeOnly: boolean): Promise<PublicCategory[]> {
       isActive: d.isActive !== false,
     };
   });
+
+  const bySlug = new Map<string, PublicCategory>();
+  for (const cat of mapped) {
+    const key = cat.slug.toLowerCase();
+    const existing = bySlug.get(key);
+    if (!existing || cat.productCount > existing.productCount) {
+      bySlug.set(key, cat);
+    }
+  }
+  return [...bySlug.values()].sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label));
 }
 
 function mapPriceFilters(raw: unknown): PublicPriceFilter[] {

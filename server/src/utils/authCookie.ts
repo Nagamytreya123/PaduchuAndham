@@ -10,7 +10,9 @@ export function authCookieDomain(): string | undefined {
       host === 'localhost' ||
       host.endsWith('.localhost') ||
       host.endsWith('.onrender.com') ||
-      host.endsWith('.vercel.app')
+      host.endsWith('.vercel.app') ||
+      host.endsWith('.amazonaws.com') ||
+      host.endsWith('.cloudfront.net')
     ) {
       return undefined;
     }
@@ -22,12 +24,17 @@ export function authCookieDomain(): string | undefined {
   }
 }
 
+function crossOriginCookiesEnabled(): boolean {
+  return process.env.CROSS_ORIGIN_COOKIES === 'true';
+}
+
 export function authCookieOptions(maxAge: number): CookieOptions {
   const domain = authCookieDomain();
+  const sameSite = crossOriginCookiesEnabled() ? 'none' : 'lax';
   return {
     httpOnly: true,
     secure: env.NODE_ENV === 'production',
-    sameSite: 'lax',
+    sameSite,
     maxAge,
     path: '/',
     ...(domain ? { domain } : {}),

@@ -1,4 +1,5 @@
 import mongoose, { Schema, type InferSchemaType } from 'mongoose';
+import { pickModel } from './pick.js';
 
 /** Customer can review only after the order line is marked delivered (fulfilment complete). */
 export const REVIEW_ELIGIBLE_ORDER_STATUSES = ['delivered'] as const;
@@ -22,4 +23,5 @@ reviewSchema.index({ user: 1, product: 1 }, { unique: true });
 reviewSchema.index({ product: 1, createdAt: -1 });
 
 export type ReviewDoc = InferSchemaType<typeof reviewSchema>;
-export const ReviewModel = mongoose.model('Review', reviewSchema);
+const MongoReviewModel = mongoose.model('Review', reviewSchema);
+export const ReviewModel = pickModel(MongoReviewModel, 'Review') as typeof MongoReviewModel;

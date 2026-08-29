@@ -1,0 +1,190 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: PaduchuAndham — API Gateway + Lambda + DynamoDB + S3
+
+Globals:
+  Function:
+    Timeout: 60
+    MemorySize: 1024
+    Architectures:
+      - x86_64
+
+Parameters:
+  ClientUrl:
+    Type: String
+    Default: https://www.paduchuandham.com
+  JwtSecret:
+    Type: String
+    NoEcho: true
+  MongoDbUri:
+    Type: String
+    NoEcho: true
+    Default: ''
+  GoogleClientId:
+    Type: String
+    Default: ''
+  GoogleClientSecret:
+    Type: String
+    NoEcho: true
+    Default: ''
+  AdminEmails:
+    Type: String
+    Default: ''
+  AdminOrderNotifyEmail:
+    Type: String
+    Default: ''
+  RazorpayKeyId:
+    Type: String
+    Default: ''
+  RazorpayKeySecret:
+    Type: String
+    NoEcho: true
+    Default: ''
+  RazorpayWebhookSecret:
+    Type: String
+    NoEcho: true
+    Default: ''
+  SmtpHost:
+    Type: String
+    Default: ''
+  SmtpPort:
+    Type: String
+    Default: '587'
+  SmtpSecure:
+    Type: String
+    Default: 'false'
+  SmtpUser:
+    Type: String
+    Default: ''
+  SmtpPass:
+    Type: String
+    NoEcho: true
+    Default: ''
+  SmtpFrom:
+    Type: String
+    Default: ''
+  RedisUrl:
+    Type: String
+    NoEcho: true
+    Default: ''
+  UploadsBucketName:
+    Type: String
+    Default: paduchuandham-uploads-474476202047
+  FrontendBucketName:
+    Type: String
+    Default: paduchuandham-frontend-474476202047
+
+Resources:
+  MainTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: paduchuandham-main
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+        - AttributeName: gsi1pk
+          AttributeType: S
+        - AttributeName: gsi1sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: GSI1
+          KeySchema:
+            - AttributeName: gsi1pk
+              KeyType: HASH
+            - AttributeName: gsi1sk
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      DockerTag: paduchuandham-api
+      DockerContext: ../..
+      Dockerfile: Dockerfile.lambda
+    Properties:
+      PackageType: Image
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref MainTable
+        - S3CrudPolicy:
+            BucketName: !Ref UploadsBucketName
+      Environment:
+        Variables:
+          NODE_ENV: production
+          DYNAMODB_TABLE: !Ref MainTable
+          S3_UPLOADS_BUCKET: !Ref UploadsBucketName
+          CLIENT_URL: !Ref ClientUrl
+          SERVER_PUBLIC_URL: !Ref ClientUrl
+          CROSS_ORIGIN_COOKIES: 'true'
+          JWT_SECRET: !Ref JwtSecret
+          JWT_COOKIE_NAME: token
+          MONGODB_URI: !Ref MongoDbUri
+          GOOGLE_CLIENT_ID: !Ref GoogleClientId
+          GOOGLE_CLIENT_SECRET: !Ref GoogleClientSecret
+          ADMIN_EMAILS: !Ref AdminEmails
+          ADMIN_ORDER_NOTIFY_EMAIL: !Ref AdminOrderNotifyEmail
+          RAZORPAY_KEY_ID: !Ref RazorpayKeyId
+          RAZORPAY_KEY_SECRET: !Ref RazorpayKeySecret
+          RAZORPAY_WEBHOOK_SECRET: !Ref RazorpayWebhookSecret
+          SMTP_HOST: !Ref SmtpHost
+          SMTP_PORT: !Ref SmtpPort
+          SMTP_SECURE: !Ref SmtpSecure
+          SMTP_USER: !Ref SmtpUser
+          SMTP_PASS: !Ref SmtpPass
+          SMTP_FROM: !Ref SmtpFrom
+          REDIS_URL: !Ref RedisUrl
+      Events:
+        HttpApiProxy:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /{proxy+}
+            Method: ANY
+        HttpApiRoot:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /
+            Method: ANY
+
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowCredentials: true
+        AllowHeaders:
+          - '*'
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - PATCH
+          - DELETE
+          - OPTIONS
+        AllowOrigins:
+          - !Ref ClientUrl
+          - https://paduchuandham.com
+          - http://localhost:5173
+          - http://127.0.0.1:5173
+          - http://localhost:8000
+          - http://127.0.0.1:8000
+
+Outputs:
+  ApiUrl:
+    Description: API Gateway HTTP API URL
+    Value: !Sub https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com
+  DynamoTableName:
+    Value: !Ref MainTable
+  UploadsBucketName:
+    Value: !Ref UploadsBucketName
+  FrontendBucketName:
+    Value: !Ref FrontendBucketName

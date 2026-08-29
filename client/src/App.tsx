@@ -1,6 +1,5 @@
 import type { ReactElement } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
-import { SpeedInsights } from '@vercel/speed-insights/react';
 import { useAuth } from './context/AuthContext';
 import { LuxuryShowcaseLoader } from './components/loading';
 import { CustomerShell } from './layouts/CustomerShell';
@@ -54,7 +53,6 @@ function ProtectedAdmin({ children }: { children: ReactElement }) {
 export function App() {
   return (
     <>
-      <SpeedInsights />
       <AnalyticsListener />
       <ScrollToTop />
       <Routes>

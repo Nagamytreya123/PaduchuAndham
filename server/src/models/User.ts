@@ -1,4 +1,5 @@
 import mongoose, { Schema, type InferSchemaType } from 'mongoose';
+import { pickModel } from './pick.js';
 
 const savedAddressSchema = new Schema(
   {
@@ -33,4 +34,5 @@ const userSchema = new Schema(
 );
 
 export type UserDoc = InferSchemaType<typeof userSchema>;
-export const UserModel = mongoose.model('User', userSchema);
+const MongoUserModel = mongoose.model('User', userSchema);
+export const UserModel = pickModel(MongoUserModel, 'User') as typeof MongoUserModel;

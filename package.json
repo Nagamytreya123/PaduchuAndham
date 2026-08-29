@@ -6,11 +6,16 @@
     "build": "npm run build --prefix client && npm run build --prefix server",
     "start": "npm run start --prefix server",
     "seed": "npm run seed --prefix server",
-    "seed:products": "npm run seed:products --prefix server"
+    "seed:products": "npm run seed:products --prefix server",
+    "cloudflare:whoami": "wrangler whoami",
+    "cloudflare:zones": "python infra/cloudflare-api.py zones",
+    "cloudflare:dns": "python infra/cloudflare-api.py dns",
+    "cloudflare:deploy": "wrangler deploy --config infra/cloudflare-worker/wrangler.toml"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",
-    "wait-on": "^8.0.1"
+    "wait-on": "^8.0.1",
+    "wrangler": "^4.127.1"
   },
   "dependencies": {
     "motion": "^12.38.0"

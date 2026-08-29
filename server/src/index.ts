@@ -1,113 +1,11 @@
-import express from 'express';
-import cookieParser from 'cookie-parser';
-import cors from 'cors';
-import helmet from 'helmet';
-import passport from 'passport';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import { connectDb } from './db/connect.js';
 import { env } from './config/env.js';
 import { ensureCanonicalCategories } from './services/categories.js';
-import { optionalAuth } from './middleware/auth.js';
-import { apiLimiter, initRateLimiters } from './middleware/rateLimit.js';
-import {
-  connectRedis,
-  disconnectRedis,
-  isRedisCacheEnabled,
-  isRedisConnected,
-  isRedisEnabled,
-  isRedisWriteEnabled,
-} from './redis/client.js';
-import { readCatalogVersion } from './cache/catalog.js';
-import authRoutes from './routes/auth.js';
-import productsRoutes from './routes/products.js';
-import adminProductsRoutes from './routes/adminProducts.js';
-import ordersRoutes from './routes/orders.js';
-import adminOrdersRoutes from './routes/adminOrders.js';
-import adminReviewsRoutes from './routes/adminReviews.js';
-import adminJewelleryCombosRoutes from './routes/adminJewelleryCombos.js';
-import jewelleryCombosRoutes from './routes/jewelleryCombos.js';
-import cartRoutes from './routes/cart.js';
-import wishlistRoutes from './routes/wishlist.js';
-import webhookRoutes from './routes/webhooks.js';
-import meRoutes from './routes/me.js';
-import siteSettingsRoutes from './routes/siteSettings.js';
-import adminSiteSettingsRoutes from './routes/adminSiteSettings.js';
-import adminCategoriesRoutes from './routes/adminCategories.js';
-import categoriesRoutes from './routes/categories.js';
+import { connectRedis, disconnectRedis } from './redis/client.js';
+import { initRateLimiters } from './middleware/rateLimit.js';
+import { createApp } from './app.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-const app = express();
-
-app.set('trust proxy', 1);
-
-app.use(
-  helmet({
-    crossOriginResourcePolicy: { policy: 'cross-origin' },
-  }),
-);
-
-app.use(
-  cors({
-    origin: env.CLIENT_URL,
-    credentials: true,
-  }),
-);
-
-const uploadsDir = path.join(__dirname, '../uploads');
-app.use('/uploads', express.static(uploadsDir));
-
-app.use('/api/webhooks', webhookRoutes);
-
-app.use(cookieParser());
-app.use(express.json({ limit: '2mb' }));
-app.use(passport.initialize());
-
-app.use('/api', apiLimiter);
-
-app.get('/api/health', async (_req, res) => {
-  res.json({
-    ok: true,
-    redis: isRedisEnabled()
-      ? {
-          enabled: true,
-          connected: isRedisConnected(),
-          writeEnabled: isRedisWriteEnabled(),
-          cacheEnabled: isRedisCacheEnabled(),
-          catalogVersion: await readCatalogVersion(),
-        }
-      : { enabled: false },
-  });
-});
-
-app.use('/api/auth', optionalAuth, authRoutes);
-app.use('/api/me', meRoutes);
-app.use('/api/cart', optionalAuth, cartRoutes);
-app.use('/api/wishlist', optionalAuth, wishlistRoutes);
-app.use('/api/categories', categoriesRoutes);
-app.use('/api/products', optionalAuth, productsRoutes);
-app.use('/api/jewellery-combos', optionalAuth, jewelleryCombosRoutes);
-app.use('/api/admin/products', optionalAuth, adminProductsRoutes);
-app.use('/api/admin/jewellery-combos', optionalAuth, adminJewelleryCombosRoutes);
-app.use('/api/orders', optionalAuth, ordersRoutes);
-app.use('/api/admin/orders', optionalAuth, adminOrdersRoutes);
-app.use('/api/site-settings', siteSettingsRoutes);
-app.use('/api/admin/site-settings', optionalAuth, adminSiteSettingsRoutes);
-app.use('/api/admin/categories', optionalAuth, adminCategoriesRoutes);
-app.use('/api/admin/reviews', optionalAuth, adminReviewsRoutes);
-
-app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error('[api] unhandled error', err);
-  if (res.headersSent) return;
-  const message = err instanceof Error ? err.message : 'Server error';
-  res.status(500).json({ error: message });
-});
-
-app.use((_req, res) => {
-  res.status(404).json({ error: 'Not found' });
-});
-
+const app = createApp();
 const port = env.PORT;
 
 async function main() {

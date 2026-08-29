@@ -14,9 +14,15 @@
     "seed:starter": "tsx src/scripts/seedStarterProducts.ts",
     "fix:product-images": "tsx src/scripts/fixProductImages.ts",
     "check:product-images": "tsx src/scripts/checkProductImages.ts",
-    "migrate:db": "tsx src/scripts/migrateDb.ts"
+    "migrate:db": "tsx src/scripts/migrateDb.ts",
+    "migrate:mongo-to-dynamo": "tsx src/scripts/migrateMongoToDynamo.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.750.0",
+    "@aws-sdk/client-s3": "^3.750.0",
+    "@aws-sdk/lib-dynamodb": "^3.750.0",
+    "@aws-sdk/s3-request-presigner": "^3.1121.0",
+    "@vendia/serverless-express": "^4.12.6",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
@@ -35,6 +41,7 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@types/aws-lambda": "^8.10.147",
     "@types/cookie-parser": "^1.4.8",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",

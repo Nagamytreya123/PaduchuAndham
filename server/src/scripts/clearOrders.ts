@@ -4,7 +4,7 @@ import { OrderModel } from '../models/Order.js';
 import { ReviewModel } from '../models/Review.js';
 
 async function clearOrders() {
-  await mongoose.connect(env.MONGODB_URI);
+  await mongoose.connect(env.MONGODB_URI!);
 
   const orders = await OrderModel.deleteMany({});
   const reviews = await ReviewModel.deleteMany({});

@@ -31,6 +31,7 @@ import {
 import { motion } from 'framer-motion';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { adminCardGridSx } from '../../constants/adminLayout';
+import { apiUrl } from '../../api/client';
 
 const OBJECT_ID_RE = /^[a-fA-F0-9]{24}$/;
 
@@ -39,7 +40,7 @@ function isJewelleryCategory(category: string | undefined): boolean {
 }
 
 async function postMultipart(url: string, fd: FormData): Promise<void> {
-  const res = await fetch(url, { method: 'POST', body: fd, credentials: 'include' });
+  const res = await fetch(apiUrl(url), { method: 'POST', body: fd, credentials: 'include' });
   const text = await res.text();
   let data: unknown = null;
   try {
@@ -57,7 +58,7 @@ async function postMultipart(url: string, fd: FormData): Promise<void> {
 }
 
 async function patchMultipart(url: string, fd: FormData): Promise<void> {
-  const res = await fetch(url, { method: 'PATCH', body: fd, credentials: 'include' });
+  const res = await fetch(apiUrl(url), { method: 'PATCH', body: fd, credentials: 'include' });
   const text = await res.text();
   let data: unknown = null;
   try {
@@ -106,8 +107,8 @@ export function AdminJewelleryCombosPage() {
 
   async function load() {
     const [pr, cr] = await Promise.all([
-      fetch('/api/admin/products', { credentials: 'include' }),
-      fetch('/api/admin/jewellery-combos', { credentials: 'include' }),
+      fetch(apiUrl('/api/admin/products'), { credentials: 'include' }),
+      fetch(apiUrl('/api/admin/jewellery-combos'), { credentials: 'include' }),
     ]);
     const pd = (await pr.json()) as { products: AdminProductRow[] };
     const cd = (await cr.json()) as { combos: JewelleryComboSummary[] };
@@ -205,7 +206,7 @@ export function AdminJewelleryCombosPage() {
     if (!window.confirm('Delete this jewellery combo?')) return;
     setError(null);
     try {
-      const res = await fetch(`/api/admin/jewellery-combos/${id}`, { method: 'DELETE', credentials: 'include' });
+      const res = await fetch(apiUrl(`/api/admin/jewellery-combos/${id}`), { method: 'DELETE', credentials: 'include' });
       if (!res.ok) {
         const d = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(d.error || 'Delete failed');

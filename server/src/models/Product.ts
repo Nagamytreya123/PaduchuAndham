@@ -1,4 +1,5 @@
 import mongoose, { Schema, type InferSchemaType } from 'mongoose';
+import { pickModel } from './pick.js';
 
 /** Optional physical dimensions (e.g. case diameter note). */
 const dimensionsSchema = new Schema(
@@ -88,4 +89,5 @@ productSchema.index({ category: 1, isActive: 1 });
 productSchema.index({ createdAt: -1 });
 
 export type ProductDoc = InferSchemaType<typeof productSchema>;
-export const ProductModel = mongoose.model('Product', productSchema);
+const MongoProductModel = mongoose.model('Product', productSchema);
+export const ProductModel = pickModel(MongoProductModel, 'Product') as typeof MongoProductModel;

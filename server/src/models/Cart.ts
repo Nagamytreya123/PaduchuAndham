@@ -1,4 +1,5 @@
 import mongoose, { Schema, type InferSchemaType } from 'mongoose';
+import { pickModel } from './pick.js';
 
 const cartItemSchema = new Schema(
   {
@@ -25,4 +26,6 @@ const cartSchema = new Schema(
 );
 
 export type CartDoc = InferSchemaType<typeof cartSchema>;
-export const CartModel = mongoose.model('Cart', cartSchema);
+const MongoCartModel = mongoose.model('Cart', cartSchema);
+export const CartModel = pickModel(MongoCartModel, 'Cart') as typeof MongoCartModel;
+
