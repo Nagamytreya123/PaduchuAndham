@@ -54,6 +54,7 @@ export function ProductCard({
               src={img}
               alt={product.name}
               loading="lazy"
+              decoding="async"
               onError={hasUploadedImage ? handleProductImageError : undefined}
               sx={{
                 width: '100%',

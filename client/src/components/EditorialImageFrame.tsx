@@ -26,6 +26,7 @@ export function EditorialImageFrame({ src, alt = '', inset = false, sx }: Editor
         src={resolveMediaUrl(src)}
         alt={alt}
         loading="lazy"
+        decoding="async"
         onError={handleProductImageError}
         sx={editorialFrameSx.img}
       />

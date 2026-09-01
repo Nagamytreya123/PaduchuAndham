@@ -3,7 +3,7 @@ import { Types } from 'mongoose';
 import { z } from 'zod';
 import { ProductModel } from '../models/Product.js';
 import { ReviewModel } from '../models/Review.js';
-import { productToJson } from '../utils/productJson.js';
+import { productToJson, productToListJson } from '../utils/productJson.js';
 import { requireAuth } from '../middleware/auth.js';
 import { findPurchasedOrderForProduct } from '../utils/reviewQualification.js';
 import { publicCatalogLimiter } from '../middleware/rateLimit.js';
@@ -13,7 +13,11 @@ import {
   cachedProductReviewsPage,
   invalidateCatalogForProductIds,
 } from '../cache/catalog.js';
-import { isStorefrontHiddenCategory, storefrontHiddenCategoryFilter } from '../services/categories.js';
+import {
+  buildProductListFilter,
+  isStorefrontHiddenCategory,
+  storefrontHiddenCategoryFilter,
+} from '../services/categories.js';
 
 const router = Router();
 
@@ -22,20 +26,6 @@ const createReviewSchema = z.object({
   title: z.string().trim().max(200).optional(),
   body: z.string().trim().min(10).max(4000),
 });
-
-function productListFilter(categoryRaw: string, subcategoryRaw: string): Record<string, unknown> {
-  const filter: Record<string, unknown> = { isActive: true };
-  if (categoryRaw) {
-    filter.category = new RegExp(`^${categoryRaw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
-  }
-  if (subcategoryRaw) {
-    filter.subcategory = new RegExp(
-      `^${subcategoryRaw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`,
-      'i',
-    );
-  }
-  return filter;
-}
 
 type ProductPublicCache = {
   base: ReturnType<typeof productToJson>;
@@ -60,11 +50,11 @@ router.get('/', publicCatalogLimiter, async (req, res) => {
     [categoryRaw, subcategoryRaw],
     async () => {
       const hidden = await storefrontHiddenCategoryFilter();
-      const base = productListFilter(categoryRaw, subcategoryRaw);
+      const base = buildProductListFilter(categoryRaw, subcategoryRaw);
       const filter = hidden ? { $and: [base, hidden] } : base;
       const list = await ProductModel.find(filter).sort({ createdAt: -1 }).lean();
       return {
-        products: list.map((p) => productToJson(p)),
+        products: list.map((p) => productToListJson(p)),
       };
     },
   );

@@ -1,18 +1,28 @@
 import rateLimit, { type RateLimitRequestHandler } from 'express-rate-limit';
 import type { RequestHandler } from 'express';
+import { KEY_PREFIX } from '../cache/constants.js';
+import { canUseRedisRateLimitStore, RedisRateLimitStore } from './redisRateLimitStore.js';
 
 type LimiterConfig = {
   windowMs: number;
   max: number;
 };
 
-/** In-memory only — Upstash read-only tokens cannot run INCR (required for Redis rate stores). */
-function buildLimiter(_name: string, config: LimiterConfig): RateLimitRequestHandler {
+function buildLimiter(name: string, config: LimiterConfig): RateLimitRequestHandler {
+  const useRedis = canUseRedisRateLimitStore();
   return rateLimit({
     windowMs: config.windowMs,
     max: config.max,
     standardHeaders: true,
     legacyHeaders: false,
+    ...(useRedis
+      ? {
+          store: new RedisRateLimitStore({
+            prefix: `${KEY_PREFIX}:rl:${name}:`,
+            windowMs: config.windowMs,
+          }),
+        }
+      : {}),
   });
 }
 
@@ -36,11 +46,12 @@ function delegate(getHandler: () => RateLimitRequestHandler | null): RequestHand
 
 /** Call once after connectRedis() and before accepting traffic. */
 export function initRateLimiters(): void {
+  const useRedis = canUseRedisRateLimitStore();
   limiters.api = buildLimiter('api', { windowMs: 15 * 60 * 1000, max: 400 });
   limiters.publicCatalog = buildLimiter('public-catalog', { windowMs: 60 * 1000, max: 120 });
   limiters.checkout = buildLimiter('checkout', { windowMs: 15 * 60 * 1000, max: 60 });
   limiters.auth = buildLimiter('auth', { windowMs: 15 * 60 * 1000, max: 100 });
-  console.log('[rate-limit] ready (in-memory)');
+  console.log(`[rate-limit] ready (${useRedis ? 'redis' : 'in-memory'})`);
 }
 
 export const apiLimiter = delegate(() => limiters.api);

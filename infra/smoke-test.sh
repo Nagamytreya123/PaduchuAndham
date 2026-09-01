@@ -10,9 +10,15 @@ BASE_URL="${1:-https://www.paduchuandham.com}"
 
 echo "Testing $BASE_URL"
 
+bench_one() {
+  local path="$1"
+  curl -fsSL -o /dev/null -w "${path}: %{http_code} %{time_total}s\n" "$BASE_URL$path"
+}
+
 curl -fsSL "$BASE_URL/api/health" | jq .
-curl -fsSL -o /dev/null -w "SPA index: %{http_code}\n" "$BASE_URL/"
-curl -fsSL -o /dev/null -w "Products API: %{http_code}\n" "$BASE_URL/api/products?limit=1"
-curl -fsSL -o /dev/null -w "Categories API: %{http_code}\n" "$BASE_URL/api/categories"
+bench_one "/"
+bench_one "/api/products?limit=1"
+bench_one "/api/categories"
+bench_one "/api/site-settings"
 
 echo "Smoke tests passed (HTTP 200). Manually verify login, checkout, admin upload."

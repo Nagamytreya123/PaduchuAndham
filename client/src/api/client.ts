@@ -1,5 +1,3 @@
-const AWS_API_ORIGIN = 'https://4cntwh9o4m.execute-api.ap-south-1.amazonaws.com';
-
 const SAME_ORIGIN_API_HOSTS = new Set(['paduchuandham.com', 'www.paduchuandham.com']);
 
 /**
@@ -13,7 +11,8 @@ function resolveApiBase(): string {
     if (SAME_ORIGIN_API_HOSTS.has(host)) return '';
     if (host === 'localhost' || host === '127.0.0.1') {
       const raw = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
-      return raw || AWS_API_ORIGIN;
+      // Prefer Vite proxy (/api → :4000) unless VITE_API_URL is explicitly set.
+      return raw || '';
     }
   }
 

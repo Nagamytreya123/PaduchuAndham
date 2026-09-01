@@ -89,6 +89,10 @@ Resources:
           AttributeType: S
         - AttributeName: gsi1sk
           AttributeType: S
+        - AttributeName: gsi2pk
+          AttributeType: S
+        - AttributeName: gsi2sk
+          AttributeType: S
       KeySchema:
         - AttributeName: pk
           KeyType: HASH
@@ -103,6 +107,27 @@ Resources:
               KeyType: RANGE
           Projection:
             ProjectionType: ALL
+        - IndexName: GSI2
+          KeySchema:
+            - AttributeName: gsi2pk
+              KeyType: HASH
+            - AttributeName: gsi2sk
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  EmailDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      MessageRetentionPeriod: 1209600
+
+  EmailQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 120
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt EmailDLQ.Arn
+        maxReceiveCount: 3
 
   ApiFunction:
     Type: AWS::Serverless::Function
@@ -117,6 +142,10 @@ Resources:
             TableName: !Ref MainTable
         - S3CrudPolicy:
             BucketName: !Ref UploadsBucketName
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt EmailQueue.QueueName
+        - SQSPollerPolicy:
+            QueueName: !GetAtt EmailQueue.QueueName
       Environment:
         Variables:
           NODE_ENV: production
@@ -142,6 +171,7 @@ Resources:
           SMTP_PASS: !Ref SmtpPass
           SMTP_FROM: !Ref SmtpFrom
           REDIS_URL: !Ref RedisUrl
+          EMAIL_QUEUE_URL: !Ref EmailQueue
       Events:
         HttpApiProxy:
           Type: HttpApi
@@ -155,6 +185,13 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /
             Method: ANY
+        EmailQueueEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt EmailQueue.Arn
+            BatchSize: 1
+            FunctionResponseTypes:
+              - ReportBatchItemFailures
 
   HttpApi:
     Type: AWS::Serverless::HttpApi
@@ -188,3 +225,6 @@ Outputs:
     Value: !Ref UploadsBucketName
   FrontendBucketName:
     Value: !Ref FrontendBucketName
+  EmailQueueUrl:
+    Description: SQS queue URL for async order-paid emails
+    Value: !Ref EmailQueue

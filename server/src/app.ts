@@ -15,6 +15,7 @@ import {
   isRedisWriteEnabled,
 } from './redis/client.js';
 import { readCatalogVersion } from './cache/catalog.js';
+import { isEmailQueueEnabled } from './queue/emailQueue.js';
 import { isDynamoDbEnabled } from './db/dynamo/client.js';
 import authRoutes from './routes/auth.js';
 import productsRoutes from './routes/products.js';
@@ -98,19 +99,27 @@ export function createApp(): express.Express {
   app.use('/api', apiLimiter);
 
   app.get('/api/health', async (_req, res) => {
+    const redisEnabled = isRedisEnabled();
+    const cacheEnabled = isRedisCacheEnabled();
     res.json({
       ok: true,
       database: isDynamoDbEnabled() ? 'dynamodb' : 'mongodb',
       dynamoTable: env.DYNAMODB_TABLE ?? null,
-      redis: isRedisEnabled()
+      emailQueue: isEmailQueueEnabled(),
+      redis: redisEnabled
         ? {
             enabled: true,
             connected: isRedisConnected(),
             writeEnabled: isRedisWriteEnabled(),
-            cacheEnabled: isRedisCacheEnabled(),
+            cacheEnabled,
             catalogVersion: await readCatalogVersion(),
+            status: cacheEnabled
+              ? 'read-write'
+              : isRedisConnected()
+                ? 'read-only'
+                : 'disconnected',
           }
-        : { enabled: false },
+        : { enabled: false, status: 'not-configured' },
     });
   });
 

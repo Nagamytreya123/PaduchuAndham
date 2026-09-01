@@ -9,3 +9,5 @@ server/uploads/
 infra/.state/
 infra/config.env
 infra/.env.production
+infra/sam/.deploy-params.yaml
+infra/sam/.aws-sam/

@@ -278,16 +278,36 @@ function mergeSubcategoryLists(...lists: string[][]): string[] {
   return merged.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
 }
 
-function categoryNamesForFilter(slug: string, label: string): string[] {
+export function categoryNamesForFilter(slug: string, label: string): string[] {
   return [...new Set([slug, label].map((s) => s.trim()).filter(Boolean))];
 }
 
-function productCategoryFilter(names: string[]): Record<string, unknown> {
+export function productCategoryFilter(names: string[]): Record<string, unknown> {
   return {
     $or: names.map((name) => ({
       category: new RegExp(`^${escapeRegex(name)}$`, 'i'),
     })),
   };
+}
+
+/** Public product list filter — case-insensitive category and subcategory match. */
+export function buildProductListFilter(
+  categoryRaw: string,
+  subcategoryRaw: string,
+): Record<string, unknown> {
+  const filter: Record<string, unknown> = { isActive: true };
+  const category = categoryRaw.trim();
+  const subcategory = subcategoryRaw.trim();
+
+  if (category) {
+    filter.category = new RegExp(`^${escapeRegex(category)}$`, 'i');
+  }
+
+  if (subcategory) {
+    filter.subcategory = new RegExp(`^${escapeRegex(subcategory)}$`, 'i');
+  }
+
+  return filter;
 }
 
 /** Exclude products whose category is switched off for the storefront. */

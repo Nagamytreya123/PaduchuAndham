@@ -38,6 +38,115 @@ function normalizeId(doc: EntityDoc): EntityDoc {
   return { ...doc, _id: id };
 }
 
+function stripForStorage(doc: EntityDoc): EntityDoc {
+  const out = { ...doc };
+  delete (out as { save?: unknown }).save;
+  delete (out as { set?: unknown }).set;
+  if (Array.isArray(out.savedAddresses)) {
+    out.savedAddresses = (out.savedAddresses as EntityDoc[]).map((addr) => {
+      const clean = { ...addr };
+      delete (clean as { set?: unknown }).set;
+      delete (clean as { deleteOne?: unknown }).deleteOne;
+      return clean;
+    });
+  }
+  return out;
+}
+
+function buildPutItem(entityType: string, id: string, doc: EntityDoc): Record<string, unknown> {
+  const normalized = stripForStorage(normalizeId(doc));
+  const item: Record<string, unknown> = {
+    pk: entityPk(entityType),
+    sk: entitySk(id),
+    entityType,
+    data: normalized,
+  };
+  if (entityType === 'User' && normalized.email) {
+    item.gsi1pk = `USER#EMAIL#${String(normalized.email).toLowerCase()}`;
+    item.gsi1sk = 'PROFILE';
+  }
+  if (normalized.slug) {
+    item.gsi1pk = `${entityType.toUpperCase()}#SLUG#${String(normalized.slug).toLowerCase()}`;
+    item.gsi1sk = 'PROFILE';
+  }
+  if (entityType === 'Order') {
+    if (normalized.user) {
+      item.gsi1pk = `ORDER#USER#${String(normalized.user)}`;
+      const createdAt = normalized.createdAt
+        ? new Date(normalized.createdAt as string | number | Date).toISOString()
+        : new Date().toISOString();
+      item.gsi1sk = `CREATED#${createdAt}#${id}`;
+    }
+    if (normalized.razorpayOrderId) {
+      item.gsi2pk = `ORDER#RAZORPAY#${String(normalized.razorpayOrderId)}`;
+      item.gsi2sk = 'PROFILE';
+    }
+  }
+  return item;
+}
+
+function hydrateSubdoc(sub: EntityDoc, removeFromParent: () => void): EntityDoc & {
+  set: (key: string, value: unknown) => void;
+  deleteOne: () => void;
+} {
+  const row = sub as EntityDoc & {
+    set: (key: string, value: unknown) => void;
+    deleteOne: () => void;
+  };
+  row.set = (key, value) => {
+    row[key] = value;
+  };
+  row.deleteOne = () => {
+    removeFromParent();
+  };
+  return row;
+}
+
+function matchesFieldValue(actual: unknown, expected: unknown): boolean {
+  if (expected instanceof RegExp) {
+    return expected.test(String(actual ?? ''));
+  }
+  if (expected && typeof expected === 'object' && !Array.isArray(expected)) {
+    const op = expected as Record<string, unknown>;
+    const hasOperator = ['$in', '$nin', '$exists', '$ne', '$not', '$size'].some((key) => key in op);
+    if (hasOperator) {
+      if ('$in' in op) {
+        const list = op.$in as unknown[];
+        const cmp = Array.isArray(actual) ? actual : [actual];
+        if (!list.some((v) => cmp.some((a) => String(a) === String(v)))) return false;
+      }
+      if ('$nin' in op) {
+        const list = op.$nin as unknown[];
+        const cmp = Array.isArray(actual) ? actual : [actual];
+        if (list.some((v) => cmp.some((a) => String(a) === String(v)))) return false;
+      }
+      if ('$exists' in op) {
+        const exists = Boolean(op.$exists);
+        const has = actual !== undefined && actual !== null;
+        if (exists !== has) return false;
+      }
+      if ('$ne' in op) {
+        if (String(actual) === String(op.$ne)) return false;
+      }
+      if ('$not' in op) {
+        if (matchesFieldValue(actual, op.$not)) return false;
+      }
+      if ('$size' in op) {
+        const size = Array.isArray(actual) ? actual.length : 0;
+        if (size !== Number(op.$size)) return false;
+      }
+      return true;
+    }
+  }
+  if (Array.isArray(actual) && Array.isArray(expected)) {
+    return JSON.stringify(actual) === JSON.stringify(expected);
+  }
+  if (expected && typeof expected === 'object') {
+    return String(actual) === String(expected);
+  }
+  return String(actual) === String(expected);
+}
+
 function matchesFilter(doc: EntityDoc, filter: Record<string, unknown>): boolean {
   for (const [key, expected] of Object.entries(filter)) {
     if (key === '$or') {
@@ -45,48 +154,42 @@ function matchesFilter(doc: EntityDoc, filter: Record<string, unknown>): boolean
       if (!clauses.some((c) => matchesFilter(doc, c))) return false;
       continue;
     }
-    const actual = doc[key];
-    if (expected && typeof expected === 'object' && !Array.isArray(expected)) {
-      const op = expected as Record<string, unknown>;
-      if ('$in' in op) {
-        const list = op.$in as unknown[];
-        const cmp = Array.isArray(actual) ? actual : [actual];
-        if (!list.some((v) => cmp.some((a) => String(a) === String(v)))) return false;
-        continue;
-      }
-      if ('$exists' in op) {
-        const exists = Boolean(op.$exists);
-        const has = actual !== undefined && actual !== null;
-        if (exists !== has) return false;
-        continue;
-      }
-      if ('$ne' in op) {
-        if (String(actual) === String(op.$ne)) return false;
-        continue;
-      }
+    if (key === '$and') {
+      const clauses = expected as Record<string, unknown>[];
+      if (!clauses.every((c) => matchesFilter(doc, c))) return false;
+      continue;
     }
-    if (Array.isArray(actual) && Array.isArray(expected)) {
-      if (JSON.stringify(actual) !== JSON.stringify(expected)) return false;
-    } else if (String(actual) !== String(expected)) {
-      return false;
+    if (key === '$nor') {
+      const clauses = expected as Record<string, unknown>[];
+      if (clauses.some((c) => matchesFilter(doc, c))) return false;
+      continue;
     }
+    if (!matchesFieldValue(doc[key], expected)) return false;
   }
   return true;
 }
 
 class DynamoQuery<T extends EntityDoc> {
   private sortSpec: Record<string, 1 | -1> | null = null;
+  private skipN: number | null = null;
   private limitN: number | null = null;
   private selectFields: string[] | null = null;
   private populateSpecs: { path: string; select?: string }[] = [];
+  private leanMode = false;
 
   constructor(
     private readonly entityType: string,
     private readonly filter: Record<string, unknown> = {},
+    private readonly hydrateDoc?: (doc: T) => T,
   ) {}
 
   sort(spec: Record<string, 1 | -1>): this {
     this.sortSpec = spec;
+    return this;
+  }
+
+  skip(n: number): this {
+    this.skipN = n;
     return this;
   }
 
@@ -106,6 +209,7 @@ class DynamoQuery<T extends EntityDoc> {
   }
 
   lean(): this {
+    this.leanMode = true;
     return this;
   }
 
@@ -164,6 +268,55 @@ class DynamoQuery<T extends EntityDoc> {
       return this.finish(rows);
     }
 
+    if (this.entityType === 'Order' && this.filter.razorpayOrderId) {
+      const razorpayId = String(this.filter.razorpayOrderId);
+      const extraKeys = Object.keys(this.filter).filter((k) => k !== 'razorpayOrderId');
+      if (extraKeys.length <= 1) {
+        const res = await getDynamoDoc().send(
+          new QueryCommand({
+            TableName: table,
+            IndexName: 'GSI2',
+            KeyConditionExpression: 'gsi2pk = :pk AND gsi2sk = :sk',
+            ExpressionAttributeValues: {
+              ':pk': `ORDER#RAZORPAY#${razorpayId}`,
+              ':sk': 'PROFILE',
+            },
+          }),
+        );
+        let rows = (res.Items ?? []).map((i) => i.data as T);
+        if (rows.length > 0) {
+          rows = rows.filter((d) => matchesFilter(d, this.filter));
+          rows = await this.applyPopulate(rows);
+          return this.finish(rows);
+        }
+      }
+    }
+
+    if (
+      this.entityType === 'Order' &&
+      this.filter.user &&
+      !this.filter.razorpayOrderId &&
+      !this.filter._id
+    ) {
+      const userId = String(this.filter.user);
+      const res = await getDynamoDoc().send(
+        new QueryCommand({
+          TableName: table,
+          IndexName: 'GSI1',
+          KeyConditionExpression: 'gsi1pk = :pk',
+          ExpressionAttributeValues: {
+            ':pk': `ORDER#USER#${userId}`,
+          },
+        }),
+      );
+      let rows = (res.Items ?? []).map((i) => i.data as T);
+      if (rows.length > 0) {
+        rows = rows.filter((d) => matchesFilter(d, this.filter));
+        rows = await this.applyPopulate(rows);
+        return this.finish(rows);
+      }
+    }
+
     const res = await getDynamoDoc().send(
       new QueryCommand({
         TableName: table,
@@ -188,6 +341,8 @@ class DynamoQuery<T extends EntityDoc> {
         return dir === -1 ? -cmp : cmp;
       });
     }
+    if (this.skipN !== null) rows = rows.slice(this.skipN);
+    if (this.limitN !== null) rows = rows.slice(0, this.limitN);
     if (this.selectFields) {
       rows = rows.map((r) => {
         const out: Partial<T> = {};
@@ -199,7 +354,9 @@ class DynamoQuery<T extends EntityDoc> {
         return out as T;
       });
     }
-    if (this.limitN !== null) rows = rows.slice(0, this.limitN);
+    if (!this.leanMode && this.hydrateDoc) {
+      rows = rows.map((r) => this.hydrateDoc!(r));
+    }
     return rows;
   }
 
@@ -236,53 +393,148 @@ class DynamoQuery<T extends EntityDoc> {
   }
 }
 
+class DynamoOneQuery<T extends EntityDoc> {
+  private readonly query: DynamoQuery<T>;
+
+  constructor(
+    entityType: string,
+    filter: Record<string, unknown>,
+    hydrateDoc?: (doc: T) => T,
+  ) {
+    this.query = new DynamoQuery<T>(entityType, filter, hydrateDoc).limit(1);
+  }
+
+  select(fields: string): this {
+    this.query.select(fields);
+    return this;
+  }
+
+  lean(): this {
+    this.query.lean();
+    return this;
+  }
+
+  populate(path: string, select?: string): this {
+    this.query.populate(path, select);
+    return this;
+  }
+
+  async exec(): Promise<T | null> {
+    const rows = await this.query.exec();
+    return rows[0] ?? null;
+  }
+
+  then<TResult1 = T | null, TResult2 = never>(
+    onfulfilled?: ((value: T | null) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): Promise<TResult1 | TResult2> {
+    return this.exec().then(onfulfilled, onrejected);
+  }
+}
+
+class DynamoFindByIdQuery<T extends EntityDoc> {
+  private leanMode = false;
+
+  constructor(
+    private readonly entityType: string,
+    private readonly id: string,
+    private readonly hydrateDoc?: (doc: T) => T,
+  ) {}
+
+  lean(): this {
+    this.leanMode = true;
+    return this;
+  }
+
+  async exec(): Promise<T | null> {
+    const res = await getDynamoDoc().send(
+      new GetCommand({
+        TableName: env.DYNAMODB_TABLE!,
+        Key: { pk: entityPk(this.entityType), sk: entitySk(this.id) },
+      }),
+    );
+    const raw = (res.Item?.data as T) ?? null;
+    if (!raw) return null;
+    return this.leanMode || !this.hydrateDoc ? raw : this.hydrateDoc(raw);
+  }
+
+  then<TResult1 = T | null, TResult2 = never>(
+    onfulfilled?: ((value: T | null) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): Promise<TResult1 | TResult2> {
+    return this.exec().then(onfulfilled, onrejected);
+  }
+}
+
 export class DynamoEntityModel<T extends EntityDoc = EntityDoc> {
   constructor(private readonly entityType: string) {}
 
   find(filter: Record<string, unknown> = {}): DynamoQuery<T> {
-    return new DynamoQuery<T>(this.entityType, filter);
+    return new DynamoQuery<T>(this.entityType, filter, (doc) => this.hydrate(doc));
   }
 
-  async findById(id: string): Promise<T | null> {
-    const res = await getDynamoDoc().send(
-      new GetCommand({
-        TableName: env.DYNAMODB_TABLE!,
-        Key: { pk: entityPk(this.entityType), sk: entitySk(id) },
-      }),
-    );
-    const raw = (res.Item?.data as T) ?? null;
-    return raw ? this.hydrate(raw) : null;
+  findById(id: string): DynamoFindByIdQuery<T> {
+    return new DynamoFindByIdQuery<T>(this.entityType, id, (doc) => this.hydrate(doc));
   }
 
-  async findOne(filter: Record<string, unknown>): Promise<T | null> {
-    const rows = await this.find(filter).limit(1).exec();
-    const raw = rows[0] ?? null;
-    return raw ? this.hydrate(raw) : null;
+  findOne(filter: Record<string, unknown>): DynamoOneQuery<T> {
+    return new DynamoOneQuery<T>(this.entityType, filter, (doc) => this.hydrate(doc));
   }
 
   private hydrate(doc: T): T {
     const self = this;
-    const wrapped = doc as T & { save: () => Promise<T> };
+    const wrapped = doc as T & {
+      save: () => Promise<T>;
+      set: (key: string, value: unknown) => void;
+    };
+    wrapped.set = (key, value) => {
+      (doc as EntityDoc)[key] = value;
+    };
     wrapped.save = async () => {
       await self.replace(String((doc as EntityDoc)._id), doc);
       return wrapped;
     };
-    if (this.entityType === 'User' && Array.isArray((doc as EntityDoc).savedAddresses)) {
-      const addrs = [...((doc as EntityDoc).savedAddresses as EntityDoc[])];
-      const list = addrs as EntityDoc[] & {
-        id: (oid: { toString: () => string }) => EntityDoc | undefined;
-        push: (a: EntityDoc) => void;
+    if (this.entityType === 'User') {
+      const rawAddrs = Array.isArray((doc as EntityDoc).savedAddresses)
+        ? [...((doc as EntityDoc).savedAddresses as EntityDoc[])]
+        : [];
+      const hydratedAddrs: Array<EntityDoc & { set: (key: string, value: unknown) => void; deleteOne: () => void }> = [];
+
+      const syncAddresses = () => {
+        (doc as EntityDoc).savedAddresses = list;
       };
-      list.id = (oid) => addrs.find((a) => String(a._id) === oid.toString());
+
+      const hydrateAddress = (addr: EntityDoc) => {
+        const normalized = { ...addr };
+        if (!normalized._id) normalized._id = newEntityId();
+        return hydrateSubdoc(normalized, () => {
+          const rawIdx = rawAddrs.findIndex((a) => String(a._id) === String(normalized._id));
+          if (rawIdx >= 0) rawAddrs.splice(rawIdx, 1);
+          const hydratedIdx = hydratedAddrs.findIndex((a) => String(a._id) === String(normalized._id));
+          if (hydratedIdx >= 0) hydratedAddrs.splice(hydratedIdx, 1);
+          syncAddresses();
+        });
+      };
+
+      for (const addr of rawAddrs) {
+        hydratedAddrs.push(hydrateAddress(addr));
+      }
+
+      const list = hydratedAddrs as unknown as EntityDoc[] & {
+        id: (oid: { toString: () => string }) => EntityDoc | undefined;
+        push: (...items: EntityDoc[]) => number;
+      };
+      list.id = (oid) => hydratedAddrs.find((a) => String(a._id) === oid.toString());
       list.push = (...items: EntityDoc[]) => {
         for (const a of items) {
-          if (!a._id) a._id = newEntityId();
-          addrs.push(a);
+          const row = hydrateAddress(a);
+          rawAddrs.push(row);
+          hydratedAddrs.push(row);
         }
-        (doc as EntityDoc).savedAddresses = addrs;
-        return addrs.length;
+        syncAddresses();
+        return rawAddrs.length;
       };
-      (wrapped as EntityDoc).savedAddresses = list;
+      syncAddresses();
     }
     return wrapped;
   }
@@ -290,22 +542,8 @@ export class DynamoEntityModel<T extends EntityDoc = EntityDoc> {
   async create(doc: Partial<T>): Promise<T> {
     const normalized = normalizeId(doc as EntityDoc) as T;
     const id = String((normalized as EntityDoc)._id);
-    const item: Record<string, unknown> = {
-      pk: entityPk(this.entityType),
-      sk: entitySk(id),
-      entityType: this.entityType,
-      data: normalized,
-    };
-    if (this.entityType === 'User' && (normalized as EntityDoc).email) {
-      item.gsi1pk = `USER#EMAIL#${String((normalized as EntityDoc).email).toLowerCase()}`;
-      item.gsi1sk = 'PROFILE';
-    }
-    if ((normalized as EntityDoc).slug) {
-      item.gsi1pk = `${this.entityType.toUpperCase()}#SLUG#${String((normalized as EntityDoc).slug).toLowerCase()}`;
-      item.gsi1sk = 'PROFILE';
-    }
     await getDynamoDoc().send(
-      new PutCommand({ TableName: env.DYNAMODB_TABLE!, Item: item }),
+      new PutCommand({ TableName: env.DYNAMODB_TABLE!, Item: buildPutItem(this.entityType, id, normalized as EntityDoc) }),
     );
     return this.hydrate(normalized);
   }
@@ -345,22 +583,16 @@ export class DynamoEntityModel<T extends EntityDoc = EntityDoc> {
   }
 
   async replace(id: string, doc: T): Promise<void> {
-    const normalized = normalizeId(doc as EntityDoc) as T;
     await getDynamoDoc().send(
       new PutCommand({
         TableName: env.DYNAMODB_TABLE!,
-        Item: {
-          pk: entityPk(this.entityType),
-          sk: entitySk(id),
-          entityType: this.entityType,
-          data: normalized,
-        },
+        Item: buildPutItem(this.entityType, id, doc as EntityDoc),
       }),
     );
   }
 
   async findByIdAndDelete(id: string): Promise<T | null> {
-    const existing = await this.findById(id);
+    const existing = await this.findById(id).exec();
     if (!existing) return null;
     await getDynamoDoc().send(
       new DeleteCommand({
@@ -435,7 +667,7 @@ export class DynamoEntityModel<T extends EntityDoc = EntityDoc> {
       return null;
     }
     await this.updateOne(filter, update);
-    return this.findOne(filter);
+    return this.findOne(filter).exec();
   }
 
   async aggregate<R>(pipeline: Record<string, unknown>[]): Promise<R[]> {
@@ -448,21 +680,53 @@ export class DynamoEntityModel<T extends EntityDoc = EntityDoc> {
       if (stage.$group) {
         const groups = new Map<string, EntityDoc>();
         const spec = stage.$group as Record<string, unknown>;
-        const idSpec = spec._id as Record<string, unknown>;
         for (const row of result as EntityDoc[]) {
           let key = 'all';
-          if (idSpec?.$toString) key = String(row._id);
-          if (typeof spec._id === 'string' && spec._id.startsWith('$')) {
+          if (spec._id === null) {
+            key = 'all';
+          } else if (typeof spec._id === 'string' && spec._id.startsWith('$')) {
             const field = spec._id.slice(1);
             key = String(row[field] ?? '');
+          } else if (spec._id && typeof spec._id === 'object') {
+            const idSpec = spec._id as Record<string, unknown>;
+            if (idSpec.$toString) key = String(row._id);
           }
-          const g = groups.get(key) ?? { _id: key };
+          const g: EntityDoc = groups.get(key) ?? { _id: spec._id === null ? undefined : key };
+          for (const [field, expr] of Object.entries(spec)) {
+            if (field === '_id') continue;
+            if (!expr || typeof expr !== 'object') continue;
+            const op = expr as Record<string, unknown>;
+            if ('$sum' in op) {
+              const sumVal = op.$sum;
+              if (sumVal === 1) {
+                g[field] = Number(g[field] ?? 0) + 1;
+              } else {
+                g[field] = Number(g[field] ?? 0) + Number(sumVal ?? 0);
+              }
+              continue;
+            }
+            if ('$avg' in op && typeof op.$avg === 'string' && op.$avg.startsWith('$')) {
+              const rowField = op.$avg.slice(1);
+              const metaKey = `__avg__${field}`;
+              const meta = (g[metaKey] as { sum: number; count: number } | undefined) ?? { sum: 0, count: 0 };
+              meta.sum += Number(row[rowField] ?? 0);
+              meta.count += 1;
+              g[metaKey] = meta;
+              g[field] = meta.count > 0 ? meta.sum / meta.count : null;
+            }
+          }
           if (spec.units && typeof spec.units === 'object' && '$sum' in (spec.units as object)) {
             g.units = Number(g.units ?? 0) + Number(row.qty ?? row.units ?? 1);
           }
           groups.set(key, g);
         }
-        result = [...groups.values()];
+        result = [...groups.values()].map((g) => {
+          const out = { ...g } as EntityDoc;
+          for (const key of Object.keys(out)) {
+            if (key.startsWith('__avg__')) delete out[key];
+          }
+          return out;
+        });
       }
     }
     return result as R[];

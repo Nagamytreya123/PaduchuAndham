@@ -131,3 +131,31 @@ export function productToJson(p: ProductLike) {
     comboProductIds: comboIds,
   };
 }
+
+/** Lighter payload for shop/home lists — omits embedded base64 images (can be multi-MB each). */
+export function productToListJson(p: ProductLike) {
+  const full = productToJson(p);
+  const images = full.images.filter((url) => !url.startsWith('data:')).slice(0, 1);
+  return {
+    id: full.id,
+    name: full.name,
+    description: full.description,
+    price: full.price,
+    compareAtPrice: full.compareAtPrice,
+    images,
+    stock: full.stock,
+    isActive: full.isActive,
+    category: full.category,
+    subcategory: full.subcategory,
+    sku: full.sku,
+    slug: full.slug,
+    materials: full.materials,
+    tags: full.tags,
+    dimensions: full.dimensions,
+    weightGrams: full.weightGrams,
+    careInstructions: full.careInstructions,
+    watchDetails: full.watchDetails,
+    jewelryDetails: full.jewelryDetails,
+    watchBraceletBundlePrice: full.watchBraceletBundlePrice,
+  };
+}

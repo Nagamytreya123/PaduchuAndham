@@ -29,7 +29,12 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
 export async function cacheSet(key: string, value: unknown, ttlSeconds: number): Promise<void> {
   if (!isRedisCacheEnabled()) return;
   try {
-    await getRedis().setex(key, ttlSeconds, JSON.stringify(value));
+    const serialized = JSON.stringify(value);
+    if (serialized.length > 2_000_000) {
+      console.warn('[cache] skip set — payload too large', key, `${Math.round(serialized.length / 1024)} KB`);
+      return;
+    }
+    await getRedis().setex(key, ttlSeconds, serialized);
   } catch (err) {
     console.error('[cache] set failed', key, err);
   }
@@ -53,7 +58,7 @@ function memorySet(key: string, value: unknown, ttlSeconds: number): void {
   });
 }
 
-/** Read-through cache; falls back to in-memory when Redis is disabled. */
+/** Read-through cache; falls back to in-memory when Redis is disabled or errors. */
 export async function getOrSet<T>(
   key: string,
   ttlSeconds: number,

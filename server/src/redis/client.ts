@@ -32,6 +32,17 @@ export function isRedisConnected(): boolean {
   return connected && client?.status === 'ready';
 }
 
+function disableRedis(reason: string, err?: unknown): void {
+  connected = false;
+  writeEnabled = false;
+  const detail = err instanceof Error ? err.message : err != null ? String(err) : '';
+  console.warn(`[redis] disabled — ${reason}${detail ? `: ${detail}` : ''}`);
+  if (client) {
+    client.disconnect(false);
+    client = null;
+  }
+}
+
 async function probeWriteAccess(): Promise<boolean> {
   if (!client) return false;
   const key = `${KEY_PREFIX}:write-probe`;
@@ -51,7 +62,7 @@ async function probeWriteAccess(): Promise<boolean> {
   }
 }
 
-/** Connect when REDIS_URL is set; no-op otherwise. */
+/** Connect when REDIS_URL is set; continues without cache if Upstash is unreachable. */
 export async function connectRedis(): Promise<void> {
   const url = env.REDIS_URL?.trim();
   if (!url) {
@@ -60,12 +71,18 @@ export async function connectRedis(): Promise<void> {
   }
 
   client = new Redis(url, {
-    maxRetriesPerRequest: 2,
+    maxRetriesPerRequest: 1,
     enableReadyCheck: false,
+    connectTimeout: 8_000,
+    commandTimeout: 8_000,
+    retryStrategy: () => null,
+    lazyConnect: true,
   });
 
   client.on('error', (err: Error) => {
-    console.error('[redis] connection error:', err.message);
+    if (connected || writeEnabled) {
+      console.error('[redis] connection error:', err.message);
+    }
     connected = false;
     writeEnabled = false;
   });
@@ -74,9 +91,18 @@ export async function connectRedis(): Promise<void> {
     connected = true;
   });
 
-  await client.ping();
-  connected = true;
-  writeEnabled = await probeWriteAccess();
+  try {
+    await client.connect();
+    await client.ping();
+    connected = true;
+    writeEnabled = await probeWriteAccess();
+  } catch (err) {
+    disableRedis(
+      'could not reach Upstash (check region, TCP URL, or network/firewall on port 6379)',
+      err,
+    );
+    return;
+  }
 
   if (writeEnabled) {
     console.log('[redis] connected (read-write — catalog cache enabled)');
@@ -87,7 +113,11 @@ export async function connectRedis(): Promise<void> {
 
 export async function disconnectRedis(): Promise<void> {
   if (client) {
-    await client.quit();
+    try {
+      await client.quit();
+    } catch {
+      client.disconnect(false);
+    }
     client = null;
     connected = false;
     writeEnabled = false;

@@ -38,6 +38,7 @@ for (const key of [
   'S3_UPLOADS_BUCKET',
   'DYNAMODB_TABLE',
   'SERVER_PUBLIC_URL',
+  'EMAIL_QUEUE_URL',
 ] as const) {
   const v = process.env[key];
   if (v !== undefined && v.trim() === '') Reflect.deleteProperty(process.env, key);
@@ -74,6 +75,8 @@ const schema = z.object({
   S3_UPLOADS_BUCKET: z.string().min(1).optional(),
   /** AWS region for S3 (App Runner IAM role provides credentials). */
   AWS_REGION: z.string().default('ap-south-1'),
+  /** SQS queue URL for async order-paid emails (Lambda consumer). Falls back to inline SMTP when unset. */
+  EMAIL_QUEUE_URL: z.string().url().optional(),
 });
 
 export type Env = z.infer<typeof schema>;

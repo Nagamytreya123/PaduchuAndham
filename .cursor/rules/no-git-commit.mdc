@@ -1,0 +1,15 @@
+---
+description: Never create git commits from Cursor in this project
+alwaysApply: true
+---
+
+# No git commits from Cursor
+
+Do **not** run `git commit`, `git commit --amend`, or any other command that creates or rewrites commits in this repository.
+
+- Do not commit changes unless the user explicitly asks you to commit in that specific message.
+- If the user asks to "save" or "apply" work, stage or edit files only — do not commit.
+- If a workflow would normally end with a commit (e.g. after a feature is done), stop after the code changes and tell the user they can commit manually.
+- You may still run read-only git commands (`git status`, `git diff`, `git log`) when needed for context.
+
+This rule applies only to the PaduchuAndham project.

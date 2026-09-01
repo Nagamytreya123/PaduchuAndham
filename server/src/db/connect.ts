@@ -8,6 +8,9 @@ export async function connectDb(): Promise<void> {
     console.log(`[db] DynamoDB table ${env.DYNAMODB_TABLE}`);
     return;
   }
-  await mongoose.connect(env.MONGODB_URI!);
+  await mongoose.connect(env.MONGODB_URI!, {
+    serverSelectionTimeoutMS: 10_000,
+    connectTimeoutMS: 10_000,
+  });
   console.log('[db] MongoDB connected');
 }

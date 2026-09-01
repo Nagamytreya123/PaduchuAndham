@@ -1,0 +1,21 @@
+# Generated at deploy time by infra/sam/gen-deploy-params.py — do not commit.
+# Copy from infra/.env.production via: python infra/sam/gen-deploy-params.py
+ClientUrl: PLACEHOLDER
+JwtSecret: PLACEHOLDER
+MongoDbUri: ''
+GoogleClientId: PLACEHOLDER
+GoogleClientSecret: PLACEHOLDER
+AdminEmails: PLACEHOLDER
+AdminOrderNotifyEmail: PLACEHOLDER
+RazorpayKeyId: PLACEHOLDER
+RazorpayKeySecret: PLACEHOLDER
+RazorpayWebhookSecret: ''
+SmtpHost: PLACEHOLDER
+SmtpPort: 587
+SmtpSecure: false
+SmtpUser: PLACEHOLDER
+SmtpPass: PLACEHOLDER
+SmtpFrom: PLACEHOLDER
+RedisUrl: PLACEHOLDER
+UploadsBucketName: paduchuandham-uploads-474476202047
+FrontendBucketName: paduchuandham-frontend-474476202047
