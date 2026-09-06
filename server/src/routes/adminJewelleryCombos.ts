@@ -3,7 +3,6 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import mongoose from 'mongoose';
 import { z } from 'zod';
 import { JewelleryComboModel } from '../models/JewelleryCombo.js';
 import { ProductModel } from '../models/Product.js';
@@ -116,13 +115,13 @@ router.post('/', upload.single('image'), async (req, res) => {
   const doc = await JewelleryComboModel.create({
     name: body.name.trim(),
     images,
-    productIds: body.productIds.map((id) => new mongoose.Types.ObjectId(id)),
+    productIds: body.productIds,
     price: body.price,
     isActive: body.isActive ?? true,
     createdBy: req.user!.id,
   });
   await invalidateCatalogCache();
-  res.status(201).json({ combo: jewelleryComboToJson(doc.toObject()) });
+  res.status(201).json({ combo: jewelleryComboToJson(doc) });
 });
 
 const updateSchema = createSchema.partial().extend({
@@ -162,7 +161,7 @@ router.patch('/:id', upload.single('image'), async (req, res) => {
   if (patch.name !== undefined) doc.name = patch.name.trim();
   if (patch.images !== undefined) doc.images = patch.images;
   if (patch.productIds !== undefined) {
-    doc.productIds = patch.productIds.map((id) => new mongoose.Types.ObjectId(id));
+    doc.productIds = patch.productIds;
   }
   if (patch.price !== undefined) doc.price = patch.price;
   if (patch.isActive !== undefined) doc.isActive = patch.isActive;
@@ -180,7 +179,7 @@ router.patch('/:id', upload.single('image'), async (req, res) => {
   }
   await doc.save();
   await invalidateCatalogCache();
-  res.json({ combo: jewelleryComboToJson(doc.toObject()) });
+  res.json({ combo: jewelleryComboToJson(doc) });
 });
 
 router.delete('/:id', async (req, res) => {

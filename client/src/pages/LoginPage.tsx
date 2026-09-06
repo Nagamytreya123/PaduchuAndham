@@ -21,6 +21,7 @@ import { useAuth } from '../context/AuthContext';
 import { authSurface as S } from '../constants/authSurface';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { trackLogin, trackSignUp } from '../analytics';
+import { scheduleIdleTask } from '../utils/scheduleIdleTask';
 import ambientVideoUrl from '../assets/auth-ambient.mp4?url';
 
 function useTabFromMode(searchParams: URLSearchParams) {
@@ -155,17 +156,23 @@ export function LoginPage() {
   useEffect(() => {
     const el = videoRef.current;
     if (!el || reducedMotion) return;
-    el.defaultMuted = true;
-    el.muted = true;
-    el.loop = false;
-    videoPhaseRef.current = 'intro';
-    try {
-      el.currentTime = 0;
-    } catch {
-      /* ignore */
-    }
-    const p = el.play();
-    if (p !== undefined) void p.catch(() => {});
+    scheduleIdleTask(() => {
+      const video = videoRef.current;
+      if (!video) return;
+      video.preload = 'auto';
+      video.defaultMuted = true;
+      video.muted = true;
+      video.loop = false;
+      videoPhaseRef.current = 'intro';
+      try {
+        video.currentTime = 0;
+      } catch {
+        /* ignore */
+      }
+      video.load();
+      const p = video.play();
+      if (p !== undefined) void p.catch(() => {});
+    });
   }, [reducedMotion, loading]);
 
   useEffect(() => {
@@ -381,7 +388,7 @@ export function LoginPage() {
           muted
           loop={false}
           playsInline
-          preload="auto"
+          preload="none"
           disablePictureInPicture
           style={{
             position: 'absolute',

@@ -1,5 +1,4 @@
-import mongoose from 'mongoose';
-import { env } from '../config/env.js';
+import { connectDb } from '../db/connect.js';
 import { ProductModel } from '../models/Product.js';
 import { JewelleryComboModel } from '../models/JewelleryCombo.js';
 import { CartModel } from '../models/Cart.js';
@@ -7,7 +6,7 @@ import { ReviewModel } from '../models/Review.js';
 import { invalidateCatalogCache } from '../cache/catalog.js';
 
 async function clearProducts() {
-  await mongoose.connect(env.MONGODB_URI!);
+  await connectDb();
 
   const products = await ProductModel.deleteMany({});
   const combos = await JewelleryComboModel.deleteMany({});
@@ -21,7 +20,6 @@ async function clearProducts() {
   console.log(`Cleared items from ${carts.modifiedCount} cart(s).`);
   console.log(`Removed ${reviews.deletedCount} review(s).`);
 
-  await mongoose.disconnect();
 }
 
 clearProducts().catch((e) => {

@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { apiFetch } from '../api/client';
 import { trackAddToCart } from '../analytics';
+import { scheduleIdleTask } from '../utils/scheduleIdleTask';
 import { useAuth } from './AuthContext';
 import { useCategories } from './CategoriesContext';
 
@@ -193,28 +194,30 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
 
     setLines([]);
-    void (async () => {
-      try {
-        const data = await apiFetch<{ items: CartLine[] }>('/api/cart');
-        if (gen !== hydrateGen.current) return;
-        const serverItems = Array.isArray(data.items) ? data.items : [];
-        const guest = loadGuestCart();
-        const merged = guest.length ? mergeCartLines(serverItems, guest) : serverItems;
-        setLines(merged);
-        if (guest.length) {
-          localStorage.removeItem(GUEST_STORAGE_KEY);
-          await persistCart(merged);
+    scheduleIdleTask(() => {
+      void (async () => {
+        try {
+          const data = await apiFetch<{ items: CartLine[] }>('/api/cart');
+          if (gen !== hydrateGen.current) return;
+          const serverItems = Array.isArray(data.items) ? data.items : [];
+          const guest = loadGuestCart();
+          const merged = guest.length ? mergeCartLines(serverItems, guest) : serverItems;
+          setLines(merged);
+          if (guest.length) {
+            localStorage.removeItem(GUEST_STORAGE_KEY);
+            await persistCart(merged);
+          }
+        } catch {
+          if (gen !== hydrateGen.current) return;
+          setLines([]);
+        } finally {
+          if (gen === hydrateGen.current) {
+            setHydrated(true);
+            suppressPersistRef.current = false;
+          }
         }
-      } catch {
-        if (gen !== hydrateGen.current) return;
-        setLines([]);
-      } finally {
-        if (gen === hydrateGen.current) {
-          setHydrated(true);
-          suppressPersistRef.current = false;
-        }
-      }
-    })();
+      })();
+    });
   }, [loading, user?.id]);
 
   useEffect(() => {

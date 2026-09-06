@@ -1,14 +1,11 @@
 import { UserModel } from '../models/User.js';
 import { getCachedUser, setCachedUser, type CachedUser } from './session.js';
-import { isDynamoDbEnabled } from '../db/dynamo/client.js';
 
 export async function loadUserById(userId: string): Promise<CachedUser | null> {
   const cached = await getCachedUser(userId);
   if (cached) return cached;
 
-  const user = isDynamoDbEnabled()
-    ? await UserModel.findById(userId)
-    : await UserModel.findById(userId).lean();
+  const user = await UserModel.findById(userId);
   if (!user) return null;
 
   const row: CachedUser = {

@@ -6,7 +6,7 @@ import { CustomerShell } from './layouts/CustomerShell';
 import { AccountLayout } from './layouts/AccountLayout';
 import { AdminShell } from './layouts/AdminShell';
 import { AnalyticsListener } from './components/AnalyticsListener';
-import { ScrollToTop } from './components/ScrollToTop';
+import { ScrollRestoration } from './components/ScrollRestoration';
 
 const HomePage = lazy(() => import('./pages/HomePage').then((m) => ({ default: m.HomePage })));
 const ShopPage = lazy(() => import('./pages/ShopPage').then((m) => ({ default: m.ShopPage })));
@@ -49,6 +49,9 @@ const AdminSettingsPage = lazy(() =>
 const AdminCategoriesPage = lazy(() =>
   import('./pages/admin/AdminCategoriesPage').then((m) => ({ default: m.AdminCategoriesPage })),
 );
+const ContactUsPage = lazy(() =>
+  import('./pages/ContactUsPage').then((m) => ({ default: m.ContactUsPage })),
+);
 
 function RouteFallback({ tone = 'light' }: { tone?: 'light' | 'dark' }) {
   return <LuxuryShowcaseLoader variant="fullscreen" tone={tone} aria-label="Loading page" />;
@@ -81,7 +84,7 @@ export function App() {
   return (
     <>
       <AnalyticsListener />
-      <ScrollToTop />
+      <ScrollRestoration />
       <Suspense fallback={<RouteFallback />}>
         <Routes>
           <Route element={<CustomerShell />}>
@@ -107,6 +110,7 @@ export function App() {
               }
             />
             <Route path="login" element={<LoginPage />} />
+            <Route path="contact" element={<ContactUsPage />} />
             <Route
               path="account/*"
               element={

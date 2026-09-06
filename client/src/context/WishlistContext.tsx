@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { apiFetch } from '../api/client';
 import type { ProductSummary } from '../types/product';
+import { scheduleIdleTask } from '../utils/scheduleIdleTask';
 import { useAuth } from './AuthContext';
 import { useCategories } from './CategoriesContext';
 
@@ -159,36 +160,38 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
     }
 
     setItems([]);
-    void (async () => {
-      try {
-        const data = await apiFetch<{ items: WishlistItem[] }>('/api/wishlist');
-        if (gen !== hydrateGen.current) return;
-        const serverItems = Array.isArray(data.items) ? data.items : [];
-        const guest = loadGuestWishlist();
-        setItems((current) => {
-          const merged = mergeWishlistItems(
-            mergeWishlistItems(serverItems, guest),
-            current,
-          );
-          if (guest.length) {
-            localStorage.removeItem(GUEST_STORAGE_KEY);
-            void persistWishlist(merged).catch((err) => {
-              console.warn('[wishlist] failed to sync merged guest items', err);
-            });
+    scheduleIdleTask(() => {
+      void (async () => {
+        try {
+          const data = await apiFetch<{ items: WishlistItem[] }>('/api/wishlist');
+          if (gen !== hydrateGen.current) return;
+          const serverItems = Array.isArray(data.items) ? data.items : [];
+          const guest = loadGuestWishlist();
+          setItems((current) => {
+            const merged = mergeWishlistItems(
+              mergeWishlistItems(serverItems, guest),
+              current,
+            );
+            if (guest.length) {
+              localStorage.removeItem(GUEST_STORAGE_KEY);
+              void persistWishlist(merged).catch((err) => {
+                console.warn('[wishlist] failed to sync merged guest items', err);
+              });
+            }
+            return merged;
+          });
+        } catch (err) {
+          if (gen !== hydrateGen.current) return;
+          console.warn('[wishlist] failed to load from server', err);
+          setItems([]);
+        } finally {
+          if (gen === hydrateGen.current) {
+            setHydrated(true);
+            suppressPersistRef.current = false;
           }
-          return merged;
-        });
-      } catch (err) {
-        if (gen !== hydrateGen.current) return;
-        console.warn('[wishlist] failed to load from server', err);
-        setItems([]);
-      } finally {
-        if (gen === hydrateGen.current) {
-          setHydrated(true);
-          suppressPersistRef.current = false;
         }
-      }
-    })();
+      })();
+    });
   }, [loading, user?.id]);
 
   useEffect(() => {

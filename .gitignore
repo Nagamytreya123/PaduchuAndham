@@ -11,3 +11,5 @@ infra/config.env
 infra/.env.production
 infra/sam/.deploy-params.yaml
 infra/sam/.aws-sam/
+psi-page-*.png
+lighthouse-current.json

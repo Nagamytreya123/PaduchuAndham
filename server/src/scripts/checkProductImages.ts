@@ -1,4 +1,4 @@
-import mongoose from 'mongoose';
+import { connectDb } from '../db/connect.js';
 import { env } from '../config/env.js';
 import { ProductModel } from '../models/Product.js';
 import { normalizeStoredImageUrl } from '../utils/mediaUrl.js';
@@ -18,7 +18,7 @@ async function checkUrl(url: string): Promise<{ url: string; status: number | st
 }
 
 async function main() {
-  await mongoose.connect(env.MONGODB_URI!);
+  await connectDb();
 
   const products = await ProductModel.find({ 'images.0': { $exists: true } })
     .select('name images')
@@ -38,7 +38,6 @@ async function main() {
       console.log(`  ${result.status}  ${result.url}`);
     }
   }
-  await mongoose.disconnect();
 }
 
 main().catch((e) => {

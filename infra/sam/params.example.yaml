@@ -1,7 +1,6 @@
 Parameters:
   ClientUrl: https://www.paduchuandham.com
   JwtSecret: PLACEHOLDER
-  MongoDbUri: PLACEHOLDER
   GoogleClientId: PLACEHOLDER
   GoogleClientSecret: PLACEHOLDER
   AdminEmails: PLACEHOLDER

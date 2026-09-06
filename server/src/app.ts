@@ -1,4 +1,5 @@
 import express from 'express';
+import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -16,7 +17,6 @@ import {
 } from './redis/client.js';
 import { readCatalogVersion } from './cache/catalog.js';
 import { isEmailQueueEnabled } from './queue/emailQueue.js';
-import { isDynamoDbEnabled } from './db/dynamo/client.js';
 import authRoutes from './routes/auth.js';
 import productsRoutes from './routes/products.js';
 import adminProductsRoutes from './routes/adminProducts.js';
@@ -68,6 +68,16 @@ export function createApp(): express.Express {
   app.set('trust proxy', 1);
 
   app.use(
+    compression({
+      threshold: 1024,
+      filter: (req, res) => {
+        if (req.headers['x-no-compression']) return false;
+        return compression.filter(req, res);
+      },
+    }),
+  );
+
+  app.use(
     helmet({
       crossOriginResourcePolicy: { policy: 'cross-origin' },
     }),
@@ -103,7 +113,7 @@ export function createApp(): express.Express {
     const cacheEnabled = isRedisCacheEnabled();
     res.json({
       ok: true,
-      database: isDynamoDbEnabled() ? 'dynamodb' : 'mongodb',
+      database: 'dynamodb',
       dynamoTable: env.DYNAMODB_TABLE ?? null,
       emailQueue: isEmailQueueEnabled(),
       redis: redisEnabled

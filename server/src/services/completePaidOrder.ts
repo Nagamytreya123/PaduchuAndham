@@ -1,13 +1,14 @@
-import type { HydratedDocument } from 'mongoose';
+import type { OrderDoc } from '../models/Order.js';
+type PaidOrderDoc = OrderDoc & { save: () => Promise<PaidOrderDoc> };
 import { acquirePaymentIdempotency, releasePaymentIdempotency } from '../cache/idempotency.js';
 import { ProductModel } from '../models/Product.js';
 import { OrderModel } from '../models/Order.js';
-import type { OrderDoc } from '../models/Order.js';
 import { invalidateCatalogForProductIds } from '../cache/catalog.js';
 import { enqueueOrderPaidEmails } from '../queue/emailQueue.js';
 
+
 export async function completePaidOrder(
-  order: HydratedDocument<OrderDoc>,
+  order: PaidOrderDoc,
   paymentId: string,
 ): Promise<void> {
   if (order.status === 'paid') {

@@ -1,10 +1,9 @@
-import mongoose from 'mongoose';
-import { env } from '../config/env.js';
+import { connectDb } from '../db/connect.js';
 import { OrderModel } from '../models/Order.js';
 import { ReviewModel } from '../models/Review.js';
 
 async function clearOrders() {
-  await mongoose.connect(env.MONGODB_URI!);
+  await connectDb();
 
   const orders = await OrderModel.deleteMany({});
   const reviews = await ReviewModel.deleteMany({});
@@ -12,7 +11,6 @@ async function clearOrders() {
   console.log(`Removed ${orders.deletedCount} order(s).`);
   console.log(`Removed ${reviews.deletedCount} review(s) linked to orders.`);
 
-  await mongoose.disconnect();
 }
 
 clearOrders().catch((e) => {

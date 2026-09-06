@@ -38,7 +38,7 @@ router.patch('/:id/status', async (req, res) => {
     req.params.id,
     { status: body.status },
     { new: true },
-  ).lean();
+  );
   if (!order) {
     res.status(404).json({ error: 'Not found' });
     return;

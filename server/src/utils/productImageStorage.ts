@@ -7,9 +7,10 @@ export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 /** Target max binary size per image after compression (before base64 overhead). */
 const MAX_STORED_IMAGE_BYTES = 1.2 * 1024 * 1024;
 
-const MAX_DIMENSION = 1600;
+/** ~2× retina for largest storefront frame (~600px wide). */
+const MAX_DIMENSION = 1200;
 
-/** Leave headroom under MongoDB's 16 MB document cap for other product fields. */
+/** Leave headroom under DynamoDB item size cap for other product fields. */
 export const MAX_PRODUCT_IMAGES_BYTES = 14 * 1024 * 1024;
 
 function bufferToDataUri(buffer: Buffer, mimetype: string): string {
@@ -27,7 +28,7 @@ export function assertProductImagesFitDocument(images: string[]): void {
   if (total > MAX_PRODUCT_IMAGES_BYTES) {
     const mb = (MAX_PRODUCT_IMAGES_BYTES / (1024 * 1024)).toFixed(0);
     throw new Error(
-      `Total uploaded image data exceeds ${mb} MB for one product (MongoDB limit). Use fewer images.`,
+      `Total uploaded image data exceeds ${mb} MB for one product (DynamoDB item limit). Use fewer images.`,
     );
   }
 }
@@ -95,30 +96,26 @@ async function compressImageBuffer(buffer: Buffer): Promise<{ buffer: Buffer; mi
     throw new Error('File is not a valid image');
   }
 
-  const buildJpeg = async (quality: number) =>
-    resizedPipeline(buffer, meta).jpeg({ quality, mozjpeg: true }).toBuffer();
+  const buildWebp = async (quality: number) =>
+    resizedPipeline(buffer, meta).webp({ quality, effort: 4 }).toBuffer();
 
-  if (meta.hasAlpha) {
-    let out = await resizedPipeline(buffer, meta)
-      .png({ compressionLevel: 9, palette: (meta.width ?? 0) <= 512 })
-      .toBuffer();
-    if (out.length > MAX_STORED_IMAGE_BYTES * 1.5) {
-      out = await buildJpeg(82);
-      return { buffer: out, mimetype: 'image/jpeg' };
-    }
-    return { buffer: out, mimetype: 'image/png' };
-  }
-
-  let quality = 82;
-  let out = await buildJpeg(quality);
-  while (out.length > MAX_STORED_IMAGE_BYTES && quality > 45) {
+  let quality = 80;
+  let out = await buildWebp(quality);
+  while (out.length > MAX_STORED_IMAGE_BYTES && quality > 40) {
     quality -= 10;
-    out = await buildJpeg(quality);
+    out = await buildWebp(quality);
   }
-  return { buffer: out, mimetype: 'image/jpeg' };
+  return { buffer: out, mimetype: 'image/webp' };
 }
 
-/** Compress, then convert to base64 data URI for MongoDB storage. */
+/** Compress and resize for storage or CDN upload (WebP). */
+export async function compressImageForStorage(
+  buffer: Buffer,
+): Promise<{ buffer: Buffer; mimetype: string }> {
+  return compressImageBuffer(buffer);
+}
+
+/** Compress, then convert to base64 data URI for DynamoDB storage. */
 export async function persistUploadedBuffer(buffer: Buffer, _mimetype: string): Promise<string> {
   if (!buffer?.length) {
     throw new Error('Uploaded image data was empty');
@@ -168,9 +165,12 @@ export function imageUrlValidationError(rawUrls: string[]): string | null {
   return 'No valid image URLs — use direct https:// image links or a public Google Drive share link';
 }
 
-export function mongoErrorMessage(err: unknown): string | null {
+export function duplicateFieldErrorMessage(err: unknown): string | null {
   if (err && typeof err === 'object' && 'code' in err && (err as { code: number }).code === 11000) {
     return 'Duplicate SKU or slug — use a unique value';
   }
   return null;
 }
+
+/** @deprecated Use duplicateFieldErrorMessage */
+export const mongoErrorMessage = duplicateFieldErrorMessage;

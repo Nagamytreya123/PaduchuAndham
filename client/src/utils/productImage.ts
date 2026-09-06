@@ -67,6 +67,9 @@ export function getCategoryPlaceholderImage(category: string, subcategory?: stri
   return PRODUCT_IMAGE_FALLBACK;
 }
 
+/** Editorial 4:5 frame — default responsive hint for storefront product images. */
+export const EDITORIAL_IMAGE_SIZES = '(max-width: 600px) 92vw, (max-width: 960px) 45vw, 480px';
+
 /** Primary storefront image: product upload first, then category placeholder. */
 export function getProductDisplayImage(
   product: Pick<ProductSummary, 'images' | 'category' | 'subcategory'>,

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -25,13 +25,23 @@ import { productToWishlistItem } from '../context/WishlistContext';
 import type { ProductSummary } from '../types/product';
 import { formatInrFromPaise } from '../utils/format';
 import { allocateWatchBraceletBundle, allocateListRatioBundle } from '../utils/bundlePricing';
-import { ProductReviewsSection } from '../components/ProductReviewsSection';
 import { ProductDetailGallery } from '../components/product/ProductDetailGallery';
-import { ExploreCategoryRows } from '../components/product/ExploreCategoryRows';
 import { StorefrontHeader } from '../components/StorefrontHeader';
 import { shopSurface } from '../constants/shopSurface';
 import { trackViewItem } from '../analytics';
-import { cacheProduct, getCachedProduct, seedCatalog } from '../utils/catalogCache';
+import { cacheProduct, getCachedProduct } from '../utils/catalogCache';
+import { getProductDisplayImage } from '../utils/productImage';
+import { preloadLcpImage } from '../utils/preloadLcpImage';
+import { useLcpImagePreload } from '../hooks/useLcpImagePreload';
+
+const ExploreCategoryRows = lazy(() =>
+  import('../components/product/ExploreCategoryRows').then((m) => ({ default: m.ExploreCategoryRows })),
+);
+const ProductReviewsSection = lazy(() =>
+  import('../components/ProductReviewsSection').then((m) => ({ default: m.ProductReviewsSection })),
+);
+
+const PRODUCT_ID_RE = /^[a-fA-F0-9]{24}$/;
 
 const pdpTypography = shopSurface.pdpTypography;
 
@@ -49,15 +59,32 @@ export function ProductDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { add, addBundle, remove } = useCart();
-  const [product, setProduct] = useState<ProductSummary | null>(null);
-  const [catalog, setCatalog] = useState<ProductSummary[]>([]);
+  const [product, setProduct] = useState<ProductSummary | null>(() =>
+    id && PRODUCT_ID_RE.test(id) ? getCachedProduct(id) ?? null : null,
+  );
   const [qty, setQty] = useState(1);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => {
+    if (!id || !PRODUCT_ID_RE.test(id)) return false;
+    return !getCachedProduct(id);
+  });
   const [notFound, setNotFound] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [bundleBraceletId, setBundleBraceletId] = useState<string | null>(null);
   const fetchAbortRef = useRef<AbortController | null>(null);
   const viewItemTracked = useRef<string | null>(null);
+  const lcpImageUrl = useMemo(
+    () => (product ? getProductDisplayImage(product) : undefined),
+    [product],
+  );
+  useLcpImagePreload(lcpImageUrl);
+
+  useLayoutEffect(() => {
+    if (!id || !PRODUCT_ID_RE.test(id)) return;
+    const cached = getCachedProduct(id);
+    if (cached) {
+      preloadLcpImage(getProductDisplayImage(cached));
+    }
+  }, [id]);
 
   useEffect(() => {
     if (!product?.id || viewItemTracked.current === product.id) return;
@@ -75,33 +102,34 @@ export function ProductDetailPage() {
   }, [id]);
 
   useEffect(() => {
-    void (async () => {
-      try {
-        const data = await apiFetch<{ products: ProductSummary[] }>('/api/products');
-        const active = data.products.filter((p) => p.isActive !== false);
-        seedCatalog(active);
-        setCatalog(active);
-      } catch {
-        setCatalog([]);
-      }
-    })();
-  }, []);
-
-  useEffect(() => {
     if (!id) return;
+    if (!PRODUCT_ID_RE.test(id)) {
+      setLoading(false);
+      setNotFound(true);
+      setProduct(null);
+      setFetchError(null);
+      return;
+    }
     fetchAbortRef.current?.abort();
     const ac = new AbortController();
     fetchAbortRef.current = ac;
 
-    setLoading(true);
+    const cached = getCachedProduct(id);
+    if (cached) {
+      setProduct(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+      setProduct(null);
+    }
     setNotFound(false);
     setFetchError(null);
-    setProduct(null);
 
     void (async () => {
       try {
         const data = await apiFetch<{ product: ProductSummary }>(`/api/products/${id}`, { signal: ac.signal });
         if (ac.signal.aborted) return;
+        preloadLcpImage(getProductDisplayImage(data.product));
         cacheProduct(data.product);
         setProduct(data.product);
       } catch (e) {
@@ -112,9 +140,11 @@ export function ProductDetailPage() {
         if (cached) {
           setProduct(cached);
           setNotFound(false);
-        } else if (/not found/i.test(msg)) {
+          setFetchError(null);
+        } else if (/not found|invalid product id/i.test(msg)) {
           setProduct(null);
           setNotFound(true);
+          setFetchError(null);
         } else {
           setProduct(null);
           setNotFound(false);
@@ -130,11 +160,6 @@ export function ProductDetailPage() {
       ac.abort();
     };
   }, [id]);
-
-  useEffect(() => {
-    if (!id || catalog.length === 0) return;
-    seedCatalog(catalog);
-  }, [catalog, id]);
 
   useEffect(() => {
     setQty(1);
@@ -583,10 +608,14 @@ export function ProductDetailPage() {
         )}
       </Box>
 
-      <ExploreCategoryRows catalog={catalog} excludeProductId={product.id} />
+      <Suspense fallback={null}>
+        <ExploreCategoryRows excludeProductId={product.id} priorityCategory={product.category} />
+      </Suspense>
 
       <Box sx={{ px: 2, maxWidth: 720, mx: 'auto' }}>
-        <ProductReviewsSection productId={product.id} />
+        <Suspense fallback={null}>
+          <ProductReviewsSection productId={product.id} />
+        </Suspense>
       </Box>
     </Box>
   );

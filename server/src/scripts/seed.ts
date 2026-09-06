@@ -1,5 +1,4 @@
-import mongoose from 'mongoose';
-import { env } from '../config/env.js';
+import { connectDb } from '../db/connect.js';
 import { UserModel } from '../models/User.js';
 
 const adminEmail = process.env.SEED_ADMIN_EMAIL?.toLowerCase() || 'admin@example.com';
@@ -23,7 +22,7 @@ async function upsertSeedUser(
 }
 
 async function seed() {
-  await mongoose.connect(env.MONGODB_URI!);
+  await connectDb();
 
   await upsertSeedUser(adminEmail, {
     name: 'Seed Admin',
@@ -39,7 +38,6 @@ async function seed() {
 
   console.log(`Seeded users: ${adminEmail} (admin), ${customerEmail} (customer)`);
   console.log('Use POST /api/auth/dev-login with { "email": "..." } in development.');
-  await mongoose.disconnect();
 }
 
 seed().catch((e) => {

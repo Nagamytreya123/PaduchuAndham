@@ -102,6 +102,8 @@ export function ProductDetailGallery({ images, productName }: ProductDetailGalle
               src={src}
               alt={displaySlides.length > 1 ? `${productName} — image ${i + 1}` : productName}
               inset
+              loading={i === 0 ? 'eager' : 'lazy'}
+              fetchPriority={i === 0 ? 'high' : undefined}
             />
           </Box>
         ))}

@@ -1,6 +1,5 @@
 import 'dotenv/config';
-import mongoose from 'mongoose';
-import { env } from '../config/env.js';
+import { connectDb } from '../db/connect.js';
 import { UserModel } from '../models/User.js';
 import { ProductModel } from '../models/Product.js';
 import { SAMPLE_CATALOG } from './sampleCatalog.js';
@@ -8,7 +7,7 @@ import { SAMPLE_CATALOG } from './sampleCatalog.js';
 const adminEmail = process.env.SEED_ADMIN_EMAIL?.toLowerCase() || 'admin@example.com';
 
 async function seedProducts() {
-  await mongoose.connect(env.MONGODB_URI!);
+  await connectDb();
 
   const admin = await UserModel.findOne({ email: adminEmail, role: 'admin' }).exec();
   if (!admin) {
@@ -25,7 +24,7 @@ async function seedProducts() {
       ...row,
       materials: row.materials ?? [],
       tags: row.tags ?? [],
-      matchingBraceletIds: row.matchingBraceletIds?.map((id) => new mongoose.Types.ObjectId(id)),
+      matchingBraceletIds: row.matchingBraceletIds,
       createdBy: admin._id,
       isActive: true,
     });
@@ -33,7 +32,6 @@ async function seedProducts() {
   }
 
   console.log(`Seeded ${inserted} product(s) from sample catalog (${SAMPLE_CATALOG.length} rows).`);
-  await mongoose.disconnect();
 }
 
 seedProducts().catch((e) => {

@@ -25,7 +25,6 @@ for (const key of ['RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET', 'RAZORPAY_WEBHOOK_S
 
 for (const key of [
   'REDIS_URL',
-  'MONGODB_URI',
   'GOOGLE_CLIENT_ID',
   'GOOGLE_CLIENT_SECRET',
   'ADMIN_EMAILS',
@@ -39,6 +38,7 @@ for (const key of [
   'DYNAMODB_TABLE',
   'SERVER_PUBLIC_URL',
   'EMAIL_QUEUE_URL',
+  'SUPPORT_WHATSAPP_MOBILE',
 ] as const) {
   const v = process.env[key];
   if (v !== undefined && v.trim() === '') Reflect.deleteProperty(process.env, key);
@@ -47,10 +47,8 @@ for (const key of [
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.coerce.number().default(4000),
-  /** MongoDB — optional when DYNAMODB_TABLE is set */
-  MONGODB_URI: z.string().min(1).optional(),
-  /** DynamoDB table name (serverless stack). When set, replaces MongoDB. */
-  DYNAMODB_TABLE: z.string().min(1).optional(),
+  /** DynamoDB table name (local + serverless). */
+  DYNAMODB_TABLE: z.string().min(1),
   JWT_SECRET: z.string().min(16),
   JWT_COOKIE_NAME: z.string().default('token'),
   CLIENT_URL: z.string().url(),
@@ -77,6 +75,8 @@ const schema = z.object({
   AWS_REGION: z.string().default('ap-south-1'),
   /** SQS queue URL for async order-paid emails (Lambda consumer). Falls back to inline SMTP when unset. */
   EMAIL_QUEUE_URL: z.string().url().optional(),
+  /** Default WhatsApp support number (10-digit Indian mobile, no +91). Overridable in admin settings. */
+  SUPPORT_WHATSAPP_MOBILE: z.string().optional(),
 });
 
 export type Env = z.infer<typeof schema>;
@@ -89,11 +89,7 @@ function load(): Env {
       `Invalid environment: ${JSON.stringify(msg)}. Copy .env.example to .env in the project root or to server/.env and set the required variables.`,
     );
   }
-  const data = parsed.data;
-  if (!data.DYNAMODB_TABLE?.trim() && !data.MONGODB_URI?.trim()) {
-    throw new Error('Set MONGODB_URI or DYNAMODB_TABLE');
-  }
-  return data;
+  return parsed.data;
 }
 
 export const env = load();

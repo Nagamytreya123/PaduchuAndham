@@ -1,5 +1,4 @@
-import mongoose from 'mongoose';
-import { env } from '../config/env.js';
+import { connectDb } from '../db/connect.js';
 import { UserModel } from '../models/User.js';
 import { ProductModel } from '../models/Product.js';
 import { SAMPLE_CATALOG, type SampleProductInput } from './sampleCatalog.js';
@@ -32,7 +31,7 @@ function pickStarterProducts(): SampleProductInput[] {
 const adminEmail = process.env.SEED_ADMIN_EMAIL?.toLowerCase() || 'admin@example.com';
 
 async function seedStarterProducts() {
-  await mongoose.connect(env.MONGODB_URI!);
+  await connectDb();
 
   const admin = await UserModel.findOne({ email: adminEmail, role: 'admin' }).exec();
   if (!admin) {
@@ -54,7 +53,7 @@ async function seedStarterProducts() {
       ...row,
       materials: row.materials ?? [],
       tags: row.tags ?? [],
-      matchingBraceletIds: row.matchingBraceletIds?.map((id) => new mongoose.Types.ObjectId(id)),
+      matchingBraceletIds: row.matchingBraceletIds,
       createdBy: admin._id,
       isActive: true,
     });
@@ -64,7 +63,6 @@ async function seedStarterProducts() {
 
   await invalidateCatalogCache();
   console.log(`Inserted ${inserted} starter product(s). Skipped ${skipped} (SKU already exists).`);
-  await mongoose.disconnect();
 }
 
 seedStarterProducts().catch((e) => {

@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Serif:ital,wght@0,400;0,700;1,400&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -54,8 +52,7 @@
 .jewelry-hero-landing {
   box-sizing: border-box;
   font-family:
-    'Neue Haas Grotesk Display Pro 55 Roman',
-    'Neue Haas Grotesk Text Pro',
+    'Inter',
     'Playfair Display',
     'Cormorant Garamond',
     'Helvetica Neue',

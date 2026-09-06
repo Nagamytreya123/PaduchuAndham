@@ -1,14 +1,26 @@
 import { Router } from 'express';
-import { Types } from 'mongoose';
 import { ReviewModel } from '../models/Review.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
+import { isValidEntityId } from '../utils/entityId.js';
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
 
-type LeanUser = { _id: Types.ObjectId; email?: string; name?: string };
-type LeanProduct = { _id: Types.ObjectId; name?: string; category?: string };
-type LeanOrder = { _id: Types.ObjectId; status?: string };
+type LeanUser = { _id: string; email?: string; name?: string };
+type LeanProduct = { _id: string; name?: string; category?: string };
+type LeanOrder = { _id: string; status?: string };
+
+function isPopulatedUser(value: unknown): value is LeanUser {
+  return value != null && typeof value === 'object' && 'email' in value;
+}
+
+function isPopulatedProduct(value: unknown): value is LeanProduct {
+  return value != null && typeof value === 'object' && '_id' in value && 'name' in value;
+}
+
+function isPopulatedOrder(value: unknown): value is LeanOrder {
+  return value != null && typeof value === 'object' && '_id' in value;
+}
 
 router.get('/', async (req, res) => {
   const limitRaw = parseInt(String(req.query.limit), 10);
@@ -17,21 +29,21 @@ router.get('/', async (req, res) => {
 
   const productIdRaw = typeof req.query.productId === 'string' ? req.query.productId.trim() : '';
   const match: Record<string, unknown> = {};
-  if (productIdRaw && Types.ObjectId.isValid(productIdRaw)) {
-    match.product = new Types.ObjectId(productIdRaw);
+  if (productIdRaw && isValidEntityId(productIdRaw)) {
+    match.product = productIdRaw;
   }
 
   const [total, avgRow, distrib, rows] = await Promise.all([
     ReviewModel.countDocuments(match),
-    ReviewModel.aggregate<{ avg: number | null }>([
+    ReviewModel.aggregate([
       { $match: match },
       { $group: { _id: null as null, avg: { $avg: '$rating' } } },
-    ]),
-    ReviewModel.aggregate<{ _id: number; count: number }>([
+    ]) as Promise<{ avg: number | null }[]>,
+    ReviewModel.aggregate([
       { $match: match },
       { $group: { _id: '$rating', count: { $sum: 1 } } },
       { $sort: { _id: 1 } },
-    ]),
+    ]) as Promise<{ _id: number; count: number }[]>,
     limit === 0
       ? Promise.resolve([])
       : ReviewModel.find(match)
@@ -66,9 +78,9 @@ router.get('/', async (req, res) => {
   res.json({
     summary,
     reviews: rows.map((r) => {
-      const u = r.user as LeanUser | Types.ObjectId | undefined;
-      const p = r.product as LeanProduct | Types.ObjectId | undefined;
-      const o = r.order as LeanOrder | Types.ObjectId | undefined;
+      const u = r.user;
+      const p = r.product;
+      const o = r.order;
       return {
         id: r._id.toString(),
         rating: r.rating,
@@ -76,25 +88,20 @@ router.get('/', async (req, res) => {
         body: r.body,
         reviewerName: r.reviewerName,
         createdAt: r.createdAt,
-        user:
-          u && typeof u === 'object' && !(u instanceof Types.ObjectId) && 'email' in u
-            ? { email: (u as LeanUser).email ?? '', name: (u as LeanUser).name ?? '' }
-            : null,
-        product:
-          p && typeof p === 'object' && !(p instanceof Types.ObjectId) && '_id' in p
-            ? {
-                id: String((p as LeanProduct)._id),
-                name: (p as LeanProduct).name ?? '—',
-                category: (p as LeanProduct).category ?? '',
-              }
-            : null,
-        order:
-          o && typeof o === 'object' && !(o instanceof Types.ObjectId) && '_id' in o
-            ? {
-                id: String((o as LeanOrder)._id),
-                status: (o as LeanOrder).status ?? '',
-              }
-            : null,
+        user: isPopulatedUser(u) ? { email: u.email ?? '', name: u.name ?? '' } : null,
+        product: isPopulatedProduct(p)
+          ? {
+              id: String(p._id),
+              name: p.name ?? '—',
+              category: p.category ?? '',
+            }
+          : null,
+        order: isPopulatedOrder(o)
+          ? {
+              id: String(o._id),
+              status: o.status ?? '',
+            }
+          : null,
       };
     }),
     hasMore: limit > 0 && skip + rows.length < total,

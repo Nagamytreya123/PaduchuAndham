@@ -16,10 +16,6 @@ Parameters:
   JwtSecret:
     Type: String
     NoEcho: true
-  MongoDbUri:
-    Type: String
-    NoEcho: true
-    Default: ''
   GoogleClientId:
     Type: String
     Default: ''
@@ -156,7 +152,6 @@ Resources:
           CROSS_ORIGIN_COOKIES: 'true'
           JWT_SECRET: !Ref JwtSecret
           JWT_COOKIE_NAME: token
-          MONGODB_URI: !Ref MongoDbUri
           GOOGLE_CLIENT_ID: !Ref GoogleClientId
           GOOGLE_CLIENT_SECRET: !Ref GoogleClientSecret
           ADMIN_EMAILS: !Ref AdminEmails

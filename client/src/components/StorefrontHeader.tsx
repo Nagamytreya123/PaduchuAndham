@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
+import { useMemo, useState } from 'react';
+import { Link as RouterLink, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
@@ -9,11 +9,15 @@ import List from '@mui/material/List';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemText from '@mui/material/ListItemText';
 import Divider from '@mui/material/Divider';
+import Collapse from '@mui/material/Collapse';
 import { shopSurface } from '../constants/shopSurface';
-import { IconBag, IconClose, IconMenu } from '../icons';
+import { BrandLogo } from './BrandLogo';
+import { IconBag, IconChevronDown, IconClose, IconMenu } from '../icons';
 import { cartBadgeCount, useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { useWishlist } from '../context/WishlistContext';
+import { useCategories } from '../context/CategoriesContext';
+import { parseCollectionFilterParam } from '../utils/catalogCategory';
 
 const NAV_LINKS = [
   { label: 'Home', to: '/' },
@@ -28,15 +32,41 @@ function isNavActive(pathname: string, to: string): boolean {
   return pathname === to || pathname.startsWith(`${to}/`);
 }
 
+const listItemSx = {
+  py: 1.25,
+  '&.Mui-selected': {
+    bgcolor: 'rgba(5, 11, 24, 0.08)',
+    '&:hover': { bgcolor: 'rgba(5, 11, 24, 0.12)' },
+  },
+} as const;
+
+const listTextSx = {
+  fontFamily: shopSurface.font.body,
+  fontSize: '1rem',
+} as const;
+
 /** Cream bar + centred serif logotype — shared on Home and Shop. */
 export function StorefrontHeader() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [categoriesOpen, setCategoriesOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user, logout } = useAuth();
   const { lines } = useCart();
   const { count: wishlistCount } = useWishlist();
+  const { categories, loading: categoriesLoading } = useCategories();
   const cartCount = cartBadgeCount(lines);
+
+  const shopCategories = useMemo(
+    () => categories.filter((c) => c.isActive).sort((a, b) => a.sortOrder - b.sortOrder),
+    [categories],
+  );
+
+  const activeShopCategory =
+    location.pathname === '/shop'
+      ? parseCollectionFilterParam(searchParams.get('category') ?? '', categories)
+      : 'all';
 
   function closeMenu() {
     setMenuOpen(false);
@@ -45,6 +75,15 @@ export function StorefrontHeader() {
   function go(to: string) {
     closeMenu();
     navigate(to);
+  }
+
+  function goToShopCategory(slug: 'all' | string) {
+    closeMenu();
+    if (slug === 'all') {
+      navigate('/shop#collections');
+      return;
+    }
+    navigate(`/shop?category=${encodeURIComponent(slug)}#collections`);
   }
 
   async function handleLogout() {
@@ -62,8 +101,9 @@ export function StorefrontHeader() {
         top: 0,
         zIndex: theme => theme.zIndex.appBar + 1,
         display: 'grid',
-        gridTemplateColumns: '48px 1fr 48px',
+        gridTemplateColumns: '1fr auto 1fr',
         alignItems: 'center',
+        columnGap: 1,
         px: 1.5,
         py: 1.25,
         bgcolor: shopSurface.cream,
@@ -76,25 +116,37 @@ export function StorefrontHeader() {
         aria-expanded={menuOpen}
         aria-controls="storefront-nav-drawer"
         onClick={() => setMenuOpen(true)}
-        sx={{ color: shopSurface.ink, justifySelf: 'start' }}
+        sx={{ color: shopSurface.ink, justifySelf: 'start', ml: -0.5 }}
       >
         <IconMenu />
       </IconButton>
 
-      <Typography
+      <Box
         component={RouterLink}
         to="/"
         sx={{
-          ...shopSurface.logo,
           justifySelf: 'center',
-          gridColumn: 2,
-          textAlign: 'center',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: { xs: 0.75, sm: 1 },
           textDecoration: 'none',
           color: shopSurface.ink,
+          minWidth: 0,
+          maxWidth: '100%',
         }}
       >
-        Paduchuandham
-      </Typography>
+        <BrandLogo height={44} to={null} />
+        <Typography
+          component="h1"
+          sx={{
+            ...shopSurface.logo,
+            m: 0,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          Paduchuandham
+        </Typography>
+      </Box>
 
       <IconButton
         component={RouterLink}
@@ -103,7 +155,6 @@ export function StorefrontHeader() {
         sx={{
           color: shopSurface.ink,
           justifySelf: 'end',
-          gridColumn: 3,
         }}
       >
         <Badge
@@ -144,21 +195,25 @@ export function StorefrontHeader() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
+          gap: 1.5,
           px: 2,
           py: 1.5,
           borderBottom: '1px solid rgba(5, 11, 24, 0.08)',
         }}
       >
-        <Typography
-          sx={{
-            fontFamily: shopSurface.font.display,
-            fontSize: '1.35rem',
-            fontWeight: 600,
-            letterSpacing: '0.04em',
-          }}
-        >
-          Menu
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, minWidth: 0 }}>
+          <BrandLogo height={36} to={null} />
+          <Typography
+            sx={{
+              fontFamily: shopSurface.font.display,
+              fontSize: '1.35rem',
+              fontWeight: 600,
+              letterSpacing: '0.04em',
+            }}
+          >
+            Menu
+          </Typography>
+        </Box>
         <IconButton aria-label="Close menu" onClick={closeMenu} sx={{ color: shopSurface.ink }}>
           <IconClose />
         </IconButton>
@@ -178,20 +233,13 @@ export function StorefrontHeader() {
               key={to}
               selected={selected}
               onClick={() => go(to)}
-              sx={{
-                py: 1.25,
-                '&.Mui-selected': {
-                  bgcolor: 'rgba(5, 11, 24, 0.08)',
-                  '&:hover': { bgcolor: 'rgba(5, 11, 24, 0.12)' },
-                },
-              }}
+              sx={listItemSx}
             >
               <ListItemText
                 primary={label}
                 primaryTypographyProps={{
                   fontWeight: selected ? 700 : 500,
-                  fontFamily: shopSurface.font.body,
-                  fontSize: '1rem',
+                  ...listTextSx,
                 }}
               />
               {badge != null ? (
@@ -218,8 +266,91 @@ export function StorefrontHeader() {
             </ListItemButton>
           );
         })}
+
+        <ListItemButton
+          onClick={() => setCategoriesOpen((open) => !open)}
+          aria-expanded={categoriesOpen}
+          selected={location.pathname === '/shop' && activeShopCategory !== 'all'}
+          sx={listItemSx}
+        >
+          <ListItemText
+            primary="Categories"
+            primaryTypographyProps={{
+              fontWeight: categoriesOpen || activeShopCategory !== 'all' ? 700 : 500,
+              ...listTextSx,
+            }}
+          />
+          <IconChevronDown
+            fontSize="small"
+            sx={{
+              color: shopSurface.ink,
+              transition: 'transform 0.2s ease',
+              transform: categoriesOpen ? 'rotate(180deg)' : 'none',
+            }}
+          />
+        </ListItemButton>
+
+        <Collapse in={categoriesOpen} timeout="auto" unmountOnExit>
+          <List dense disablePadding sx={{ pb: 0.5 }}>
+            <ListItemButton
+              selected={location.pathname === '/shop' && activeShopCategory === 'all'}
+              onClick={() => goToShopCategory('all')}
+              sx={{ ...listItemSx, pl: 3.5, py: 1 }}
+            >
+              <ListItemText
+                primary="All categories"
+                primaryTypographyProps={{
+                  fontWeight: activeShopCategory === 'all' ? 600 : 500,
+                  ...listTextSx,
+                  fontSize: '0.95rem',
+                }}
+              />
+            </ListItemButton>
+            {categoriesLoading ? (
+              <ListItemButton disabled sx={{ pl: 3.5, py: 1 }}>
+                <ListItemText
+                  primary="Loading categories…"
+                  primaryTypographyProps={{ ...listTextSx, fontSize: '0.95rem', color: shopSurface.inkMuted }}
+                />
+              </ListItemButton>
+            ) : (
+              shopCategories.map((category) => {
+                const selected =
+                  location.pathname === '/shop' && activeShopCategory === category.slug;
+                return (
+                  <ListItemButton
+                    key={category.slug}
+                    selected={selected}
+                    onClick={() => goToShopCategory(category.slug)}
+                    sx={{ ...listItemSx, pl: 3.5, py: 1 }}
+                  >
+                    <ListItemText
+                      primary={category.label}
+                      secondary={
+                        category.productCount > 0
+                          ? `${category.productCount} products`
+                          : undefined
+                      }
+                      primaryTypographyProps={{
+                        fontWeight: selected ? 600 : 500,
+                        ...listTextSx,
+                        fontSize: '0.95rem',
+                      }}
+                      secondaryTypographyProps={{
+                        fontFamily: shopSurface.font.body,
+                        fontSize: '0.75rem',
+                        color: shopSurface.inkMuted,
+                      }}
+                    />
+                  </ListItemButton>
+                );
+              })
+            )}
+          </List>
+        </Collapse>
+
         {user?.role === 'admin' ? (
-          <ListItemButton selected={location.pathname.startsWith('/admin')} onClick={() => go('/admin')}>
+          <ListItemButton selected={location.pathname.startsWith('/admin')} onClick={() => go('/admin')} sx={listItemSx}>
             <ListItemText
               primary="Admin"
               primaryTypographyProps={{ fontWeight: 600, fontFamily: shopSurface.font.body }}

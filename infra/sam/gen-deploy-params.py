@@ -18,7 +18,6 @@ def g(key: str, default: str = "") -> str:
 params = {
     "ClientUrl": g("CLIENT_URL", "https://www.paduchuandham.com"),
     "JwtSecret": g("JWT_SECRET"),
-    "MongoDbUri": g("MONGODB_URI"),
     "GoogleClientId": g("GOOGLE_CLIENT_ID"),
     "GoogleClientSecret": g("GOOGLE_CLIENT_SECRET"),
     "AdminEmails": g("ADMIN_EMAILS"),

@@ -1,252 +1,211 @@
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
+import Grid from '@mui/material/Grid';
+import IconButton from '@mui/material/IconButton';
 import { StorefrontHeader } from '../components/StorefrontHeader';
-import { editorialSurface, editorialUnderlineSx } from '../constants/editorialSurface';
+import { editorialSurface } from '../constants/editorialSurface';
+import { shopSurface } from '../constants/shopSurface';
 import { useWishlist, isComboWishlistId, type WishlistItem } from '../context/WishlistContext';
 import { useCart } from '../context/CartContext';
+import { useCategories } from '../context/CategoriesContext';
+import { apiFetch } from '../api/client';
+import type { ProductSummary } from '../types/product';
 import { formatInrFromPaise } from '../utils/format';
+import { handleProductImageError, PRODUCT_IMAGE_FALLBACK } from '../utils/productImage';
 import { IconClose } from '../icons';
-import IconButton from '@mui/material/IconButton';
 
-const LAYOUT_SLOTS = [
-  { gridColumn: { md: '1 / span 7' }, aspectRatio: '1 / 1', mt: 0 },
-  { gridColumn: { md: '9 / span 4' }, aspectRatio: '1 / 1', mt: { md: 12 } },
-  { gridColumn: { md: '1 / span 5' }, aspectRatio: '4 / 5', mt: { md: -16 } },
-  { gridColumn: { md: '7 / span 6' }, aspectRatio: '1 / 1', mt: 0 },
-] as const;
-
-function WishlistProductBlock({
+function WishlistCard({
   item,
-  layoutIndex,
+  inStock,
   onRemove,
   onMoveToBag,
 }: {
   item: WishlistItem;
-  layoutIndex: number;
+  inStock: boolean;
   onRemove: () => void;
   onMoveToBag: () => void;
 }) {
-  const slot = LAYOUT_SLOTS[layoutIndex % LAYOUT_SLOTS.length]!;
-  const isWideFooter = layoutIndex % 4 === 3;
-  const isCompact = layoutIndex % 4 === 1;
-
   return (
     <Box
       sx={{
-        gridColumn: { xs: '1 / -1', ...slot.gridColumn },
-        mt: slot.mt,
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        bgcolor: 'rgba(255, 255, 255, 0.55)',
+        border: '1px solid rgba(5, 11, 24, 0.08)',
+        opacity: inStock ? 1 : 0.58,
+        transition: 'opacity 0.25s ease',
       }}
     >
       <Box
         sx={{
           position: 'relative',
-          mb: 4,
-          bgcolor: editorialSurface.surfaceDim,
-          aspectRatio: slot.aspectRatio,
+          aspectRatio: '4 / 5',
           overflow: 'hidden',
-          '&:hover img': { transform: 'scale(1.05)' },
+          bgcolor: shopSurface.creamDeep,
+          ...(inStock && { '&:hover img': { transform: 'scale(1.03)' } }),
         }}
       >
-        {item.image ? (
+        <Box
+          component={RouterLink}
+          to={item.href}
+          sx={{ display: 'block', width: '100%', height: '100%' }}
+        >
           <Box
             component="img"
-            src={item.image}
-            alt=""
+            src={item.image || PRODUCT_IMAGE_FALLBACK}
+            alt={item.name}
+            onError={handleProductImageError}
             sx={{
               width: '100%',
               height: '100%',
               objectFit: 'cover',
               display: 'block',
-              transition: 'transform 0.7s ease',
+              transition: 'transform 0.45s ease',
+              filter: inStock ? 'none' : 'grayscale(35%)',
             }}
           />
-        ) : (
-          <Box sx={{ width: '100%', height: '100%', bgcolor: editorialSurface.surfaceDim }} />
-        )}
+        </Box>
+        {!inStock ? (
+          <Box
+            sx={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              bgcolor: 'rgba(255, 255, 255, 0.42)',
+              pointerEvents: 'none',
+            }}
+          >
+            <Typography
+              sx={{
+                ...editorialSurface.label,
+                fontSize: '0.65rem',
+                letterSpacing: '0.16em',
+                bgcolor: 'rgba(15, 15, 16, 0.88)',
+                color: '#F5F0E6',
+                px: 1.75,
+                py: 0.9,
+              }}
+            >
+              Out of stock
+            </Typography>
+          </Box>
+        ) : null}
         <IconButton
           aria-label="Remove from wishlist"
           onClick={onRemove}
+          size="small"
           sx={{
             position: 'absolute',
-            top: { xs: 16, md: 24 },
-            right: { xs: 16, md: 24 },
-            bgcolor: 'rgba(255,255,255,0.82)',
-            backdropFilter: 'blur(8px)',
+            top: 8,
+            right: 8,
+            bgcolor: 'rgba(255, 255, 255, 0.9)',
             color: editorialSurface.onSurface,
-            '&:hover': { bgcolor: 'rgba(255,255,255,0.95)' },
+            boxShadow: '0 2px 8px rgba(5, 11, 24, 0.12)',
+            '&:hover': { bgcolor: '#ffffff' },
           }}
         >
           <IconClose fontSize="small" />
         </IconButton>
       </Box>
 
-      {isWideFooter ? (
-        <Box
-          sx={{
-            display: 'flex',
-            flexDirection: { xs: 'column', sm: 'row' },
-            justifyContent: 'space-between',
-            alignItems: { sm: 'flex-end' },
-            gap: 3,
-            borderTop: '1px solid rgba(198, 198, 198, 0.2)',
-            pt: 4,
-          }}
-        >
-          <Box>
+      <Box
+        sx={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 1.25,
+          p: 1.5,
+        }}
+      >
+        <Box sx={{ flex: 1, minHeight: 0 }}>
+          <Typography
+            component={RouterLink}
+            to={item.href}
+            sx={{
+              fontFamily: editorialSurface.font.headline,
+              fontSize: { xs: '0.95rem', sm: '1.05rem' },
+              lineHeight: 1.3,
+              color: editorialSurface.onSurface,
+              textDecoration: 'none',
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+              '&:hover': { color: shopSurface.inkMuted },
+            }}
+          >
+            {item.name}
+          </Typography>
+          {item.subtitle ? (
             <Typography
-              component={RouterLink}
-              to={item.href}
               sx={{
-                fontFamily: editorialSurface.font.headline,
-                fontSize: { xs: '1.75rem', md: '2rem' },
-                color: editorialSurface.onSurface,
-                textDecoration: 'none',
-              }}
-            >
-              {item.name}
-            </Typography>
-            {item.subtitle ? (
-              <Typography sx={{ ...editorialSurface.label, color: editorialSurface.outline, mt: 1 }}>
-                {item.subtitle}
-              </Typography>
-            ) : null}
-          </Box>
-          <Box sx={{ textAlign: { sm: 'right' } }}>
-            <Typography sx={{ fontSize: '1.35rem', fontWeight: 300, mb: 2 }}>
-              {formatInrFromPaise(item.price)}
-            </Typography>
-            <Button
-              onClick={onMoveToBag}
-              sx={{
-                bgcolor: editorialSurface.primary,
-                color: editorialSurface.onPrimary,
-                borderRadius: 0,
-                px: 5,
-                py: 1.75,
                 ...editorialSurface.label,
-                fontSize: '0.75rem',
-                '&:hover': { bgcolor: '#3b3b3b' },
+                color: editorialSurface.onSurfaceVariant,
+                mt: 0.5,
+                fontSize: '0.62rem',
+                letterSpacing: '0.14em',
               }}
             >
-              Move to Bag
-            </Button>
-          </Box>
+              {item.subtitle}
+            </Typography>
+          ) : null}
+          <Typography
+            sx={{
+              ...shopSurface.amount,
+              fontSize: { xs: '0.95rem', sm: '1rem' },
+              color: shopSurface.ink,
+              mt: 1,
+            }}
+          >
+            {formatInrFromPaise(item.price)}
+          </Typography>
         </Box>
-      ) : isCompact ? (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <Box>
-            <Typography
-              component={RouterLink}
-              to={item.href}
-              sx={{
-                fontFamily: editorialSurface.font.headline,
-                fontSize: '1.35rem',
-                color: editorialSurface.onSurface,
-                textDecoration: 'none',
-              }}
-            >
-              {item.name}
-            </Typography>
-            <Typography sx={{ fontSize: '1rem', fontWeight: 300, mt: 0.5 }}>
-              {formatInrFromPaise(item.price)}
-            </Typography>
-          </Box>
+
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, mt: 'auto' }}>
           <Button
+            fullWidth
+            disabled={!inStock}
             onClick={onMoveToBag}
             sx={{
-              justifyContent: 'space-between',
-              borderBottom: `1px solid ${editorialSurface.outlineVariant}`,
+              bgcolor: editorialSurface.primary,
+              color: editorialSurface.onPrimary,
               borderRadius: 0,
-              py: 2,
-              color: editorialSurface.onSurface,
+              py: 1.1,
               ...editorialSurface.label,
-              fontSize: '0.75rem',
+              fontSize: '0.68rem',
+              letterSpacing: '0.14em',
+              '&:hover': { bgcolor: '#3b3b3b' },
+              '&.Mui-disabled': {
+                bgcolor: 'rgba(5, 11, 24, 0.1)',
+                color: 'rgba(5, 11, 24, 0.38)',
+              },
             }}
-            endIcon={<span aria-hidden>→</span>}
           >
             Move to Bag
           </Button>
-        </Box>
-      ) : (
-        <Box
-          sx={{
-            display: 'flex',
-            flexDirection: { xs: 'column', sm: 'row' },
-            justifyContent: 'space-between',
-            alignItems: { sm: 'flex-start' },
-            gap: 3,
-          }}
-        >
-          <Box>
-            <Typography
-              component={RouterLink}
-              to={item.href}
-              sx={{
-                fontFamily: editorialSurface.font.headline,
-                fontSize: { xs: '1.5rem', md: '1.75rem' },
-                color: editorialSurface.onSurface,
-                textDecoration: 'none',
-              }}
-            >
-              {item.name}
-            </Typography>
-            {item.subtitle ? (
-              <Typography
-                sx={{
-                  ...editorialSurface.label,
-                  color: editorialSurface.onSurfaceVariant,
-                  mt: 0.5,
-                  letterSpacing: '0.14em',
-                }}
-              >
-                {item.subtitle}
-              </Typography>
-            ) : null}
-            <Typography sx={{ fontSize: '1.1rem', fontWeight: 300, mt: 2 }}>
-              {formatInrFromPaise(item.price)}
-            </Typography>
-          </Box>
-          <Box
+          <Button
+            fullWidth
+            onClick={onRemove}
             sx={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: { xs: 'flex-start', sm: 'flex-end' },
-              gap: 3,
+              ...editorialSurface.label,
+              fontSize: '0.62rem',
+              letterSpacing: '0.12em',
+              color: editorialSurface.onSurfaceVariant,
+              minWidth: 0,
+              py: 0.5,
+              '&:hover': { bgcolor: 'transparent', color: editorialSurface.onSurface },
             }}
           >
-            <Button
-              onClick={onMoveToBag}
-              sx={{
-                bgcolor: editorialSurface.primary,
-                color: editorialSurface.onPrimary,
-                borderRadius: 0,
-                px: 4,
-                py: 1.5,
-                ...editorialSurface.label,
-                fontSize: '0.75rem',
-                '&:hover': { bgcolor: '#3b3b3b' },
-              }}
-            >
-              Move to Bag
-            </Button>
-            <Button
-              onClick={onRemove}
-              sx={{
-                ...editorialSurface.label,
-                fontSize: '0.6875rem',
-                color: editorialSurface.onSurface,
-                minWidth: 0,
-                p: 0,
-                ...editorialUnderlineSx,
-              }}
-            >
-              Remove
-            </Button>
-          </Box>
+            Remove
+          </Button>
         </Box>
-      )}
+      </Box>
     </Box>
   );
 }
@@ -254,9 +213,34 @@ function WishlistProductBlock({
 export function WishlistPage() {
   const { items, remove } = useWishlist();
   const { add } = useCart();
+  const { catalogRevision } = useCategories();
   const navigate = useNavigate();
+  const [availability, setAvailability] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const data = await apiFetch<{ products: ProductSummary[] }>('/api/products');
+        const next: Record<string, boolean> = {};
+        for (const product of data.products) {
+          next[product.id] = (product.stock ?? 0) > 0 && product.isActive !== false;
+        }
+        setAvailability(next);
+      } catch {
+        setAvailability({});
+      }
+    })();
+  }, [items, catalogRevision]);
+
+  const inStockForItem = useMemo(() => {
+    return (item: WishlistItem) => {
+      if (isComboWishlistId(item.id)) return true;
+      return availability[item.id] === true;
+    };
+  }, [availability]);
 
   function moveToBag(item: WishlistItem) {
+    if (!inStockForItem(item)) return;
     if (isComboWishlistId(item.id)) {
       navigate(item.href);
       return;
@@ -283,9 +267,9 @@ export function WishlistPage() {
     >
       <StorefrontHeader />
 
-      <Box component="main" sx={{ px: { xs: 2, sm: 3 }, pt: 3, pb: 4, maxWidth: 1280, mx: 'auto' }}>
-        <Box component="header" sx={{ mb: { xs: 6, md: 8 } }}>
-          <Typography sx={{ ...editorialSurface.label, color: editorialSurface.outline, mb: 2 }}>
+      <Box component="main" sx={{ px: { xs: 2, sm: 3 }, pt: 3, pb: 4, maxWidth: 960, mx: 'auto' }}>
+        <Box component="header" sx={{ mb: { xs: 3, md: 4 } }}>
+          <Typography sx={{ ...editorialSurface.label, color: editorialSurface.outline, mb: 1 }}>
             Curated Selection
           </Typography>
           <Typography
@@ -294,14 +278,14 @@ export function WishlistPage() {
               fontFamily: editorialSurface.font.headline,
               fontStyle: 'italic',
               fontWeight: 400,
-              fontSize: { xs: '2.75rem', md: '3.5rem' },
+              fontSize: { xs: '2.25rem', md: '3rem' },
               lineHeight: 1.1,
             }}
           >
             Wishlist
           </Typography>
           {items.length > 0 ? (
-            <Typography sx={{ ...editorialSurface.label, color: editorialSurface.outline, mt: 2 }}>
+            <Typography sx={{ ...editorialSurface.label, color: editorialSurface.outline, mt: 1.5 }}>
               {items.length} {items.length === 1 ? 'item' : 'items'} saved
             </Typography>
           ) : null}
@@ -340,40 +324,27 @@ export function WishlistPage() {
           </Box>
         ) : (
           <>
-            <Box
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: { xs: '1fr', md: 'repeat(12, 1fr)' },
-                columnGap: { md: 6 },
-                rowGap: { xs: 8, md: 12 },
-              }}
-            >
-              {items.map((item, index) => (
-                <WishlistProductBlock
-                  key={item.id}
-                  item={item}
-                  layoutIndex={index}
-                  onRemove={() => remove(item.id)}
-                  onMoveToBag={() => moveToBag(item)}
-                />
+            <Grid container spacing={{ xs: 1.5, sm: 2 }}>
+              {items.map((item) => (
+                <Grid item xs={6} sm={6} md={6} key={item.id}>
+                  <WishlistCard
+                    item={item}
+                    inStock={inStockForItem(item)}
+                    onRemove={() => remove(item.id)}
+                    onMoveToBag={() => moveToBag(item)}
+                  />
+                </Grid>
               ))}
-            </Box>
+            </Grid>
 
             <Box
               sx={{
-                mt: { xs: 8, md: 16 },
-                pt: 4,
+                mt: { xs: 5, md: 6 },
+                pt: 3,
                 borderTop: '1px solid rgba(198, 198, 198, 0.15)',
-                display: 'flex',
-                flexDirection: { xs: 'column', md: 'row' },
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                gap: 3,
+                textAlign: 'center',
               }}
             >
-              <Typography sx={{ ...editorialSurface.label, color: editorialSurface.outline, letterSpacing: '0.3em' }}>
-                Viewing {items.length} saved {items.length === 1 ? 'item' : 'items'}
-              </Typography>
               <Button
                 component={RouterLink}
                 to="/shop"
@@ -381,9 +352,9 @@ export function WishlistPage() {
                   ...editorialSurface.label,
                   fontSize: '0.75rem',
                   color: editorialSurface.onSurface,
-                  minWidth: 0,
-                  p: 0,
-                  ...editorialUnderlineSx,
+                  letterSpacing: '0.2em',
+                  textDecoration: 'underline',
+                  textUnderlineOffset: 4,
                 }}
               >
                 Continue shopping

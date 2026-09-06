@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import mongoose from 'mongoose';
 import { ProductModel } from '../models/Product.js';
 import { OrderModel } from '../models/Order.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
@@ -9,7 +8,7 @@ import {
   assertProductImagesFitDocument,
   filterValidImageUrls,
   imageUrlValidationError,
-  mongoErrorMessage,
+  duplicateFieldErrorMessage,
   persistUploadedMulterFiles,
 } from '../utils/productImageStorage.js';
 import { invalidateCatalogCache } from '../cache/catalog.js';
@@ -178,15 +177,15 @@ router.post('/', productImageUpload, async (req, res) => {
       compareAtPrice: body.compareAtPrice,
       watchDetails: body.watchDetails,
       jewelryDetails: body.jewelryDetails,
-      matchingBraceletIds: body.matchingBraceletIds?.map((id) => new mongoose.Types.ObjectId(id)),
+      matchingBraceletIds: body.matchingBraceletIds,
       watchBraceletBundlePrice: body.watchBraceletBundlePrice ?? undefined,
-      comboProductIds: comboProductIds?.map((id) => new mongoose.Types.ObjectId(id)),
+      comboProductIds: comboProductIds,
       createdBy: req.user!.id,
     });
     await invalidateCatalogCache();
-    res.status(201).json({ product: productToJson(product.toObject()) });
+    res.status(201).json({ product: productToJson(product) });
   } catch (err) {
-    const dup = mongoErrorMessage(err);
+    const dup = duplicateFieldErrorMessage(err);
     if (dup) {
       res.status(400).json({ error: dup });
       return;
@@ -207,7 +206,7 @@ const updateSchema = createSchema.partial().extend({
 const COUNTED_SALE_STATUSES = ['paid', 'processing', 'shipped', 'delivered'] as const;
 
 async function loadSalesAggregates() {
-  const perProduct = await OrderModel.aggregate<{ _id: mongoose.Types.ObjectId; units: number }>([
+  const perProduct = (await OrderModel.aggregate([
     { $match: { status: { $in: [...COUNTED_SALE_STATUSES] } } },
     { $unwind: '$items' },
     {
@@ -216,7 +215,7 @@ async function loadSalesAggregates() {
         units: { $sum: '$items.qty' },
       },
     },
-  ]);
+  ])) as { _id: string; units: number }[];
 
   const byProductId = new Map<string, number>();
   let totalUnitsSold = 0;
@@ -226,7 +225,7 @@ async function loadSalesAggregates() {
     totalUnitsSold += row.units;
   }
 
-  const bySubRows = await OrderModel.aggregate<{ _id: string | null; units: number }>([
+  const bySubRows = (await OrderModel.aggregate([
     { $match: { status: { $in: [...COUNTED_SALE_STATUSES] } } },
     { $unwind: '$items' },
     {
@@ -244,7 +243,7 @@ async function loadSalesAggregates() {
         units: { $sum: '$items.qty' },
       },
     },
-  ]);
+  ])) as { _id: string | null; units: number }[];
 
   const bySubcategory: Record<string, number> = {};
   for (const row of bySubRows) {
@@ -322,7 +321,7 @@ router.patch('/:id', productImageUpload, async (req, res) => {
     if (patch.jewelryDetails === null) doc.set('jewelryDetails', undefined);
     else if (patch.jewelryDetails !== undefined) doc.jewelryDetails = patch.jewelryDetails;
     if (patch.matchingBraceletIds !== undefined) {
-      doc.matchingBraceletIds = patch.matchingBraceletIds.map((id) => new mongoose.Types.ObjectId(id));
+      doc.matchingBraceletIds = patch.matchingBraceletIds;
     }
     if (patch.watchBraceletBundlePrice !== undefined) {
       if (patch.watchBraceletBundlePrice === null) {
@@ -339,7 +338,7 @@ router.patch('/:id', productImageUpload, async (req, res) => {
           : (doc.comboProductIds ?? []).map((id) => String(id));
       try {
         const validated = await validateComboProductIds(nextComboIds, categorySlug, String(doc._id));
-        doc.comboProductIds = validated?.map((id) => new mongoose.Types.ObjectId(id)) ?? [];
+        doc.comboProductIds = validated ?? [];
       } catch (e) {
         res.status(400).json({ error: e instanceof Error ? e.message : 'Invalid combo products' });
         return;
@@ -356,9 +355,9 @@ router.patch('/:id', productImageUpload, async (req, res) => {
     assertProductImagesFitDocument(doc.images ?? []);
     await doc.save();
     await invalidateCatalogCache();
-    res.json({ product: productToJson(doc.toObject()) });
+    res.json({ product: productToJson(doc) });
   } catch (err) {
-    const dup = mongoErrorMessage(err);
+    const dup = duplicateFieldErrorMessage(err);
     if (dup) {
       res.status(400).json({ error: dup });
       return;

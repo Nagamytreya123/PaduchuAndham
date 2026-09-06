@@ -3,12 +3,12 @@ import { Router } from 'express';
 import { checkoutLimiter } from '../middleware/rateLimit.js';
 import { z } from 'zod';
 import Razorpay from 'razorpay';
-import { Types } from 'mongoose';
 import { OrderModel } from '../models/Order.js';
-import { ProductModel } from '../models/Product.js';
+import { ProductModel, type ProductDoc } from '../models/Product.js';
 import { ReviewModel } from '../models/Review.js';
 import { requireAuth } from '../middleware/auth.js';
 import { env } from '../config/env.js';
+import { isValidEntityId } from '../utils/entityId.js';
 import { completePaidOrder } from '../services/completePaidOrder.js';
 import { validateOrderItemsWithBundles, type JewelleryComboDefinition } from '../utils/watchBraceletBundle.js';
 
@@ -34,7 +34,7 @@ type OrderLean = { status: string; items: OrderItemLean[] };
 
 /** Per-product review state for line items on delivered orders */
 async function reviewFlagsForDeliveredOrders(
-  userId: Types.ObjectId,
+  userId: string,
   orders: OrderLean[],
 ): Promise<Map<string, { canSubmit: boolean; alreadyReviewed: boolean; myRating?: number }>> {
   const productIds = new Set<string>();
@@ -46,9 +46,7 @@ async function reviewFlagsForDeliveredOrders(
   }
   if (productIds.size === 0) return new Map();
 
-  const oidList = [...productIds]
-    .filter((id) => Types.ObjectId.isValid(id))
-    .map((id) => new Types.ObjectId(id));
+  const oidList = [...productIds].filter((id) => isValidEntityId(id));
   if (oidList.length === 0) return new Map();
 
   const existing = await ReviewModel.find({
@@ -140,8 +138,8 @@ router.post('/', checkoutLimiter, async (req, res) => {
   }
 
   const uniqueIds = [...new Set(body.items.map((i) => i.productId))];
-  const products = await ProductModel.find({ _id: { $in: uniqueIds } }).lean();
-  const productMap = new Map(products.map((p) => [String(p._id), p]));
+  const products = (await ProductModel.find({ _id: { $in: uniqueIds } }).lean()) as ProductDoc[];
+  const productMap = new Map<string, ProductDoc>(products.map((p) => [String(p._id), p]));
 
   for (const line of body.items) {
     const product = productMap.get(line.productId);
@@ -177,7 +175,7 @@ router.post('/', checkoutLimiter, async (req, res) => {
   }
 
   let lineItems: {
-    productId: Types.ObjectId;
+    productId: string;
     name: string;
     price: number;
     qty: number;
@@ -292,9 +290,8 @@ router.get('/mine', async (req, res) => {
     }
   }
   const imageMap = await buildProductImageMap(allProductIds);
-  const userOid = new Types.ObjectId(req.user!.id);
   const reviewMap = await reviewFlagsForDeliveredOrders(
-    userOid,
+    req.user!.id,
     orders.map((o) => ({ status: o.status, items: o.items })),
   );
 
@@ -319,8 +316,7 @@ router.get('/mine/:id', async (req, res) => {
     return;
   }
   const imageMap = await buildProductImageMap(o.items.map((it) => String(it.productId)));
-  const userOid = new Types.ObjectId(req.user!.id);
-  const reviewMap = await reviewFlagsForDeliveredOrders(userOid, [{ status: o.status, items: o.items }]);
+  const reviewMap = await reviewFlagsForDeliveredOrders(req.user!.id, [{ status: o.status, items: o.items }]);
   res.json({
     order: {
       id: o._id.toString(),

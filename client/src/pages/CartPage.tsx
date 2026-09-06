@@ -16,7 +16,15 @@ import { StorefrontHeader } from '../components/StorefrontHeader';
 import { editorialSurface } from '../constants/editorialSurface';
 import { shopSurface } from '../constants/shopSurface';
 
-function CartLineImage({ src, alt }: { src?: string; alt: string }) {
+function CartLineImage({
+  src,
+  alt,
+  size = { xs: 72, sm: 80 },
+}: {
+  src?: string;
+  alt: string;
+  size?: { xs: number; sm: number };
+}) {
   return (
     <Box
       component="img"
@@ -24,8 +32,8 @@ function CartLineImage({ src, alt }: { src?: string; alt: string }) {
       alt={alt}
       onError={handleProductImageError}
       sx={{
-        width: { xs: 72, sm: 80 },
-        height: { xs: 72, sm: 80 },
+        width: size,
+        height: size,
         flexShrink: 0,
         borderRadius: 1,
         objectFit: 'cover',
@@ -36,9 +44,119 @@ function CartLineImage({ src, alt }: { src?: string; alt: string }) {
   );
 }
 
+type BundleComponent = { productId: string; image?: string };
+
+function bundleComponentsForGroup(lines: CartLine[], groupId: string): BundleComponent[] {
+  const seen = new Set<string>();
+  const components: BundleComponent[] = [];
+
+  for (const line of lines.filter((entry) => entry.bundleGroupId === groupId)) {
+    if (seen.has(line.productId)) continue;
+    seen.add(line.productId);
+    components.push({
+      productId: line.productId,
+      image: line.image?.trim() || line.bundleImage?.trim(),
+    });
+  }
+
+  return components;
+}
+
+function productDetailPath(productId: string) {
+  return `/products/${productId}`;
+}
+
+/** Best storefront page for a collapsed bundle row (combo listing, watch PDP, etc.). */
+function bundlePrimaryPath(groupId: string, components: BundleComponent[]): string {
+  const comboMatch = groupId.match(/^product-combo-([a-f\d]{24})$/i);
+  if (comboMatch) return productDetailPath(comboMatch[1]);
+
+  const watchMatch = groupId.match(/^watch-bracelet-([a-f\d]{24})-[a-f\d]{24}$/i);
+  if (watchMatch) return productDetailPath(watchMatch[1]);
+
+  const jewelleryMatch = groupId.match(/^jewellery-combo-([a-f\d]{24})$/i);
+  if (jewelleryMatch && components[0]) return productDetailPath(components[0].productId);
+
+  return components[0] ? productDetailPath(components[0].productId) : '/shop';
+}
+
+const cartItemLinkSx = {
+  display: 'flex',
+  flex: 1,
+  minWidth: 0,
+  alignItems: 'center',
+  gap: 2,
+  textDecoration: 'none',
+  color: 'inherit',
+  borderRadius: 1,
+  transition: 'opacity 0.15s ease',
+  '&:hover': { opacity: 0.88 },
+  '&:focus-visible': {
+    outline: '2px solid',
+    outlineColor: shopSurface.ink,
+    outlineOffset: 2,
+  },
+};
+
+function CartLineImageLink({
+  to,
+  src,
+  alt,
+  size = { xs: 72, sm: 80 },
+}: {
+  to: string;
+  src?: string;
+  alt: string;
+  size?: { xs: number; sm: number };
+}) {
+  return (
+    <Box component={RouterLink} to={to} sx={{ display: 'block', flexShrink: 0 }} aria-label={`View ${alt}`}>
+      <CartLineImage src={src} alt={alt} size={size} />
+    </Box>
+  );
+}
+
+function CartBundleImages({
+  components,
+  alt,
+  groupHref,
+}: {
+  components: BundleComponent[];
+  alt: string;
+  groupHref: string;
+}) {
+  if (components.length <= 1) {
+    const component = components[0];
+    const href = component ? productDetailPath(component.productId) : groupHref;
+    return <CartLineImageLink to={href} src={component?.image} alt={alt} />;
+  }
+
+  return (
+    <Stack direction="row" spacing={0.75} sx={{ flexShrink: 0 }}>
+      {components.map((component) => (
+        <CartLineImageLink
+          key={component.productId}
+          to={productDetailPath(component.productId)}
+          src={component.image}
+          alt={`${alt} — item`}
+          size={{ xs: 64, sm: 72 }}
+        />
+      ))}
+    </Stack>
+  );
+}
+
 type CartDisplayRow =
-  | { kind: 'bundle'; groupId: string; title: string; unitTotalPaise: number; qty: number; image?: string }
-  | { kind: 'single'; line: CartLine };
+  | {
+      kind: 'bundle';
+      groupId: string;
+      title: string;
+      unitTotalPaise: number;
+      qty: number;
+      components: BundleComponent[];
+      href: string;
+    }
+  | { kind: 'single'; line: CartLine; href: string };
 
 function toDisplayRows(lines: CartLine[]): CartDisplayRow[] {
   const seenBundle = new Set<string>();
@@ -47,16 +165,22 @@ function toDisplayRows(lines: CartLine[]): CartDisplayRow[] {
     if (l.bundleGroupId) {
       if (seenBundle.has(l.bundleGroupId)) continue;
       seenBundle.add(l.bundleGroupId);
+      const components = bundleComponentsForGroup(lines, l.bundleGroupId);
       rows.push({
         kind: 'bundle',
         groupId: l.bundleGroupId,
         title: l.bundleDisplayName ?? 'Bundle',
         unitTotalPaise: l.bundleUnitTotalPaise ?? l.price,
         qty: l.qty,
-        image: l.bundleImage ?? l.image,
+        components,
+        href: bundlePrimaryPath(l.bundleGroupId, components),
       });
     } else {
-      rows.push({ kind: 'single', line: l });
+      rows.push({
+        kind: 'single',
+        line: l,
+        href: productDetailPath(l.productId),
+      });
     }
   }
   return rows;
@@ -111,8 +235,25 @@ export function CartPage() {
                 alignItems={{ sm: 'center' }}
               >
                 <Stack direction="row" spacing={2} sx={{ flex: 1, minWidth: 0 }} alignItems="center">
-                  <CartLineImage src={row.image} alt={row.title} />
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <CartBundleImages components={row.components} alt={row.title} groupHref={row.href} />
+                  <Box
+                    component={RouterLink}
+                    to={row.href}
+                    sx={{
+                      flex: 1,
+                      minWidth: 0,
+                      textDecoration: 'none',
+                      color: 'inherit',
+                      borderRadius: 1,
+                      transition: 'opacity 0.15s ease',
+                      '&:hover': { opacity: 0.88 },
+                      '&:focus-visible': {
+                        outline: '2px solid',
+                        outlineColor: shopSurface.ink,
+                        outlineOffset: 2,
+                      },
+                    }}
+                  >
                     <Typography sx={{ fontFamily: shopSurface.font.display, fontWeight: 600, fontSize: '1.05rem', color: shopSurface.ink }}>
                       {row.title}
                     </Typography>
@@ -163,7 +304,7 @@ export function CartPage() {
                 justifyContent="space-between"
                 alignItems={{ sm: 'center' }}
               >
-                <Stack direction="row" spacing={2} sx={{ flex: 1, minWidth: 0 }} alignItems="center">
+                <Box component={RouterLink} to={row.href} sx={cartItemLinkSx}>
                   <CartLineImage src={row.line.image} alt={row.line.name} />
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography sx={{ fontFamily: shopSurface.font.display, fontWeight: 600, fontSize: '1.05rem', color: shopSurface.ink }}>
@@ -176,7 +317,7 @@ export function CartPage() {
                       each
                     </Typography>
                   </Box>
-                </Stack>
+                </Box>
                 <Stack direction="row" spacing={1} alignItems="center">
                   <IconButton
                     size="small"

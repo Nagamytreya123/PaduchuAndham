@@ -72,7 +72,15 @@ export function JewelleryComboDetailPage() {
         }}
       >
         {hero ? (
-          <Box component="img" src={hero} alt="" sx={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
+          <Box
+            component="img"
+            src={hero}
+            alt=""
+            loading="eager"
+            fetchPriority="high"
+            decoding="async"
+            sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          />
         ) : (
           <Box sx={{ height: '100%', minHeight: 200 }} />
         )}

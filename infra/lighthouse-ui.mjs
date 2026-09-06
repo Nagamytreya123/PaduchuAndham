@@ -12,7 +12,7 @@ import * as chromeLauncher from 'chrome-launcher';
 
 const baseUrl = (process.argv[2] ?? 'http://localhost:5173').replace(/\/$/, '');
 
-const routes = ['/', '/shop', '/login'];
+const routes = ['/', '/shop', '/login', '/products/6a8fe4b18123ca1b583d195f'];
 
 async function runLighthouse(url) {
   const chrome = await chromeLauncher.launch({ chromeFlags: ['--headless', '--no-sandbox'] });

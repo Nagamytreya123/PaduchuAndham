@@ -2,7 +2,6 @@
 # Copy from infra/.env.production via: python infra/sam/gen-deploy-params.py
 ClientUrl: PLACEHOLDER
 JwtSecret: PLACEHOLDER
-MongoDbUri: ''
 GoogleClientId: PLACEHOLDER
 GoogleClientSecret: PLACEHOLDER
 AdminEmails: PLACEHOLDER

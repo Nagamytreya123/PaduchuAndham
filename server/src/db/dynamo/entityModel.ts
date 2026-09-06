@@ -42,6 +42,7 @@ function stripForStorage(doc: EntityDoc): EntityDoc {
   const out = { ...doc };
   delete (out as { save?: unknown }).save;
   delete (out as { set?: unknown }).set;
+  delete (out as { toObject?: unknown }).toObject;
   if (Array.isArray(out.savedAddresses)) {
     out.savedAddresses = (out.savedAddresses as EntityDoc[]).map((addr) => {
       const clean = { ...addr };
@@ -100,6 +101,100 @@ function hydrateSubdoc(sub: EntityDoc, removeFromParent: () => void): EntityDoc 
     removeFromParent();
   };
   return row;
+}
+
+function getNestedValue(obj: unknown, path: string): unknown {
+  if (!path) return obj;
+  const [head, ...rest] = path.split('.');
+  if (obj == null || typeof obj !== 'object') return undefined;
+  const record = obj as Record<string, unknown>;
+  if (rest.length === 0) return record[head];
+  return getNestedValue(record[head], rest.join('.'));
+}
+
+function getFilterFieldValues(doc: EntityDoc, key: string): unknown[] {
+  if (!key.includes('.')) {
+    const val = doc[key];
+    if (val === undefined) return [];
+    return Array.isArray(val) ? val : [val];
+  }
+
+  const [root, ...rest] = key.split('.');
+  const subPath = rest.join('.');
+  const rootVal = doc[root];
+
+  if (Array.isArray(rootVal)) {
+    return rootVal
+      .map((item) => getNestedValue(item, subPath))
+      .filter((v) => v !== undefined);
+  }
+
+  const nested = getNestedValue(rootVal, subPath);
+  if (nested === undefined) return [];
+  return Array.isArray(nested) ? nested : [nested];
+}
+
+function matchesDocField(doc: EntityDoc, key: string, expected: unknown): boolean {
+  if (!key.includes('.')) {
+    return matchesFieldValue(doc[key], expected);
+  }
+  const values = getFilterFieldValues(doc, key);
+  if (values.length === 0) {
+    return matchesFieldValue(undefined, expected);
+  }
+  return values.some((v) => matchesFieldValue(v, expected));
+}
+
+/** Wrap plain `{ field: value }` updates as `$set` (Mongoose-style shorthand). */
+function normalizeUpdate(update: Record<string, unknown>): Record<string, unknown> {
+  const hasOperator = Object.keys(update).some((k) => k.startsWith('$'));
+  if (hasOperator) return update;
+  return { $set: update };
+}
+
+function cloneEntityData(doc: EntityDoc): EntityDoc {
+  const withToObject = doc as EntityDoc & { toObject?: () => EntityDoc };
+  if (typeof withToObject.toObject === 'function') {
+    return withToObject.toObject();
+  }
+  const out = { ...doc };
+  delete (out as { save?: unknown }).save;
+  delete (out as { set?: unknown }).set;
+  delete (out as { toObject?: unknown }).toObject;
+  return out;
+}
+
+function pullValuesFromArray(current: unknown, pullSpec: unknown): unknown[] {
+  if (!Array.isArray(current)) return [];
+  const remove = new Set<string>();
+  if (pullSpec && typeof pullSpec === 'object' && '$in' in pullSpec) {
+    for (const v of (pullSpec as { $in: unknown[] }).$in) {
+      remove.add(String(v));
+    }
+  } else {
+    remove.add(String(pullSpec));
+  }
+  return current.filter((item) => !remove.has(String(item)));
+}
+
+function applyUpdateOperators(merged: EntityDoc, update: Record<string, unknown>): void {
+  const normalized = normalizeUpdate(update);
+  if (normalized.$set) Object.assign(merged, normalized.$set as EntityDoc);
+  if (normalized.$inc) {
+    for (const [k, v] of Object.entries(normalized.$inc as Record<string, number>)) {
+      merged[k] = Number(merged[k] ?? 0) + Number(v);
+    }
+  }
+  if (normalized.$pull) {
+    for (const [field, pullSpec] of Object.entries(normalized.$pull as Record<string, unknown>)) {
+      merged[field] = pullValuesFromArray(merged[field], pullSpec);
+    }
+  }
+  if (normalized.$unset) {
+    for (const field of Object.keys(normalized.$unset as Record<string, unknown>)) {
+      delete merged[field];
+    }
+  }
 }
 
 function matchesFieldValue(actual: unknown, expected: unknown): boolean {
@@ -164,7 +259,7 @@ function matchesFilter(doc: EntityDoc, filter: Record<string, unknown>): boolean
       if (clauses.some((c) => matchesFilter(doc, c))) return false;
       continue;
     }
-    if (!matchesFieldValue(doc[key], expected)) return false;
+    if (!matchesDocField(doc, key, expected)) return false;
   }
   return true;
 }
@@ -344,13 +439,15 @@ class DynamoQuery<T extends EntityDoc> {
     if (this.skipN !== null) rows = rows.slice(this.skipN);
     if (this.limitN !== null) rows = rows.slice(0, this.limitN);
     if (this.selectFields) {
+      const excludeId = this.selectFields.includes('-_id');
       rows = rows.map((r) => {
         const out: Partial<T> = {};
         for (const f of this.selectFields!) {
           if (f.startsWith('-')) continue;
           (out as Record<string, unknown>)[f] = r[f as keyof T];
         }
-        if (this.selectFields!.includes('_id')) (out as EntityDoc)._id = r._id;
+        // Match Mongoose: _id is included unless explicitly excluded with -_id.
+        if (!excludeId) (out as EntityDoc)._id = r._id;
         return out as T;
       });
     }
@@ -486,9 +583,17 @@ export class DynamoEntityModel<T extends EntityDoc = EntityDoc> {
     const wrapped = doc as T & {
       save: () => Promise<T>;
       set: (key: string, value: unknown) => void;
+      toObject: () => T;
     };
     wrapped.set = (key, value) => {
       (doc as EntityDoc)[key] = value;
+    };
+    wrapped.toObject = () => {
+      const out = { ...(doc as EntityDoc) } as T;
+      delete (out as EntityDoc & { save?: unknown }).save;
+      delete (out as EntityDoc & { set?: unknown }).set;
+      delete (out as EntityDoc & { toObject?: unknown }).toObject;
+      return out;
     };
     wrapped.save = async () => {
       await self.replace(String((doc as EntityDoc)._id), doc);
@@ -565,13 +670,8 @@ export class DynamoEntityModel<T extends EntityDoc = EntityDoc> {
       return;
     }
     const id = String((doc as EntityDoc)._id);
-    const merged = { ...doc } as EntityDoc;
-    if (update.$set) Object.assign(merged, update.$set);
-    if (update.$inc) {
-      for (const [k, v] of Object.entries(update.$inc as Record<string, number>)) {
-        merged[k] = Number(merged[k] ?? 0) + Number(v);
-      }
-    }
+    const merged = cloneEntityData(doc as EntityDoc);
+    applyUpdateOperators(merged, update);
     await this.replace(id, merged as T);
   }
 
@@ -589,6 +689,14 @@ export class DynamoEntityModel<T extends EntityDoc = EntityDoc> {
         Item: buildPutItem(this.entityType, id, doc as EntityDoc),
       }),
     );
+  }
+
+  async findByIdAndUpdate(
+    id: string,
+    update: Record<string, unknown>,
+    opts?: Record<string, unknown>,
+  ): Promise<T | null> {
+    return this.findOneAndUpdate({ _id: id }, update, opts);
   }
 
   async findByIdAndDelete(id: string): Promise<T | null> {

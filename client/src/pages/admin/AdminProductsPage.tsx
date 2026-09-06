@@ -32,6 +32,7 @@ import { findCatalogCategory, isComboCategory, productMatchesCategory } from '..
 import { CategoryFilterGroup } from '../../components/CategoryFilterGroup';
 import { CategorySelectField } from '../../components/admin/CategorySelectField';
 import { SubcategorySelectField } from '../../components/admin/SubcategorySelectField';
+import { ComboProductsPicker } from '../../components/admin/ComboProductsPicker';
 import { apiUrl } from '../../api/client';
 
 const formGrid2Sx = {
@@ -163,85 +164,6 @@ function braceletPickerOptions(
     if (p && (excludeProductId == null || p.id !== excludeProductId)) map.set(id, p);
   }
   return [...map.values()];
-}
-
-function ComboProductsPicker({
-  products,
-  selectedIds,
-  onSelectedIdsChange,
-  excludeProductId,
-  disabled,
-}: {
-  products: AdminProductRow[];
-  selectedIds: string[];
-  onSelectedIdsChange: (ids: string[]) => void;
-  excludeProductId: string | null;
-  disabled?: boolean;
-}) {
-  const options = useMemo(() => {
-    return products.filter((p) => excludeProductId == null || p.id !== excludeProductId);
-  }, [products, excludeProductId]);
-
-  const value = useMemo(() => {
-    const optById = new Map(options.map((p) => [p.id, p]));
-    return selectedIds.map((id) => optById.get(id)).filter((p): p is AdminProductRow => p != null);
-  }, [selectedIds, options]);
-
-  return (
-    <Autocomplete
-      multiple
-      disabled={disabled}
-      options={options}
-      value={value}
-      onChange={(_, next) => onSelectedIdsChange(next.map((p) => p.id))}
-      getOptionLabel={(p) => p.name}
-      isOptionEqualToValue={(a, b) => a.id === b.id}
-      filterOptions={(opts, state) => {
-        const q = state.inputValue.trim().toLowerCase();
-        if (!q) return opts;
-        return opts.filter(
-          (p) =>
-            p.name.toLowerCase().includes(q) ||
-            (p.sku?.toLowerCase().includes(q) ?? false) ||
-            p.category.toLowerCase().includes(q),
-        );
-      }}
-      renderOption={(props, option) => {
-        const thumb = option.images[0];
-        return (
-          <li {...props} key={option.id} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <Box
-              component={thumb ? 'img' : 'div'}
-              src={thumb || undefined}
-              alt=""
-              sx={{ width: 40, height: 40, flexShrink: 0, borderRadius: 1, objectFit: 'cover', bgcolor: 'grey.200' }}
-            />
-            <Stack sx={{ minWidth: 0, flex: 1 }}>
-              <Typography variant="body2" fontWeight={600} noWrap>
-                {option.name}
-              </Typography>
-              <Typography variant="caption" color="text.secondary" noWrap>
-                {[option.category, option.subcategory, option.sku].filter(Boolean).join(' · ')}
-              </Typography>
-            </Stack>
-          </li>
-        );
-      }}
-      renderTags={(tagValue, getTagProps) =>
-        tagValue.map((option, index) => (
-          <Chip {...getTagProps({ index })} key={option.id} size="small" label={option.name} />
-        ))
-      }
-      renderInput={(params) => (
-        <TextField
-          {...params}
-          label="Products in this combo"
-          placeholder="Search products to include in the set…"
-          helperText="Pick at least two products. Customers get all of them when they add this combo to cart."
-        />
-      )}
-    />
-  );
 }
 
 function MatchingBraceletsPicker({

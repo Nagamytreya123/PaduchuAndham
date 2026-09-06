@@ -34,7 +34,6 @@ if ($LASTEXITCODE -ne 0) { throw 'sam build failed' }
 $overrides = @(
   "ClientUrl=$(Get-Var 'CLIENT_URL' 'https://www.paduchuandham.com')"
   "JwtSecret=$(Get-Var 'JWT_SECRET')"
-  "MongoDbUri=$(Get-Var 'MONGODB_URI')"
   "GoogleClientId=$(Get-Var 'GOOGLE_CLIENT_ID')"
   "GoogleClientSecret=$(Get-Var 'GOOGLE_CLIENT_SECRET')"
   "AdminEmails=$(Get-Var 'ADMIN_EMAILS')"

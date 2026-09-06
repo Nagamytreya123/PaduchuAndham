@@ -32,6 +32,7 @@ import { adminRouteMotion } from '../motion/adminMotion';
 import { PREMIUM_EASE } from '../motion/variants';
 import { AdminAmbientBackground } from '../components/admin/premium/AdminAmbientBackground';
 import { ADMIN_CONTENT_PX, ADMIN_MOBILE_APPBAR_PX } from '../constants/adminLayout';
+import { BrandLogo } from '../components/BrandLogo';
 
 const DRAWER_EXPANDED = 276;
 const DRAWER_COLLAPSED = 88;
@@ -247,18 +248,21 @@ export function AdminShell() {
             backdropFilter: reduced ? 'none' : 'blur(18px)',
           }}
         >
-          <Toolbar sx={{ minHeight: { xs: 56 }, px: ADMIN_CONTENT_PX }}>
+          <Toolbar sx={{ minHeight: { xs: 56 }, px: ADMIN_CONTENT_PX, gap: 1 }}>
             <IconButton
               edge="start"
               onClick={() => setMobileOpen(true)}
               aria-label="Open menu"
-              sx={{ cursor: 'pointer', mr: 1, color: 'text.primary' }}
+              sx={{ cursor: 'pointer', mr: 0.5, color: 'text.primary' }}
             >
               <IconMenu />
             </IconButton>
-            <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 700, fontFamily: theme.typography.h5.fontFamily }}>
-              Admin
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexGrow: 1, minWidth: 0 }}>
+              <BrandLogo height={30} to={null} />
+              <Typography variant="h6" sx={{ fontWeight: 700, fontFamily: theme.typography.h5.fontFamily }}>
+                Admin
+              </Typography>
+            </Box>
           </Toolbar>
         </AppBar>
       )}
@@ -318,13 +322,14 @@ export function AdminShell() {
           }}
         >
           {!sidebarCollapsed ? (
-            <Typography variant="h6" fontWeight={800} sx={{ fontFamily: theme.typography.h5.fontFamily, letterSpacing: '-0.02em' }}>
-              Paduchu Admin
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+              <BrandLogo height={28} to={null} />
+              <Typography variant="h6" fontWeight={800} sx={{ fontFamily: theme.typography.h5.fontFamily, letterSpacing: '-0.02em' }}>
+                Paduchu Admin
+              </Typography>
+            </Box>
           ) : (
-            <Typography variant="subtitle1" fontWeight={800} sx={{ letterSpacing: '0.04em', color: 'primary.main' }}>
-              PC
-            </Typography>
+            <BrandLogo height={28} variant="mark" to={null} />
           )}
           <Tooltip title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
             <IconButton

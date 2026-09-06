@@ -1,7 +1,5 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { Types } from 'mongoose';
-import { isDynamoDbEnabled } from '../db/dynamo/client.js';
 import { WishlistModel } from '../models/Wishlist.js';
 import { requireAuth } from '../middleware/auth.js';
 
@@ -33,10 +31,7 @@ router.use(requireAuth);
 
 router.get('/', async (req, res) => {
   const userId = req.user!.id;
-  const userRef = isDynamoDbEnabled() ? userId : new Types.ObjectId(userId);
-  const doc = isDynamoDbEnabled()
-    ? await WishlistModel.findOne({ user: userRef })
-    : await WishlistModel.findOne({ user: userRef }).lean();
+  const doc = await WishlistModel.findOne({ user: userId });
   const items = (doc?.items ?? []).map((it) => ({
     id: it.id,
     name: it.name,
@@ -60,7 +55,6 @@ router.put('/', async (req, res) => {
   }
 
   const userId = req.user!.id;
-  const userRef = isDynamoDbEnabled() ? userId : new Types.ObjectId(userId);
   const items = body.items.map((it) => ({
     id: it.id,
     name: it.name,
@@ -72,8 +66,8 @@ router.put('/', async (req, res) => {
   }));
 
   await WishlistModel.findOneAndUpdate(
-    { user: userRef },
-    { $set: { items }, $setOnInsert: { user: userRef } },
+    { user: userId },
+    { $set: { items }, $setOnInsert: { user: userId } },
     { upsert: true, new: true },
   );
 

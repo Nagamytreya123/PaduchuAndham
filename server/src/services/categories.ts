@@ -1,11 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { Types } from 'mongoose';
 import { CategoryModel, type CategoryKind } from '../models/Category.js';
 import { ProductModel } from '../models/Product.js';
 import { ReviewModel } from '../models/Review.js';
 import { JewelleryComboModel } from '../models/JewelleryCombo.js';
 import { CartModel } from '../models/Cart.js';
-import { isDynamoDbEnabled } from '../db/dynamo/client.js';
 
 const WATCH_TILE =
   'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=640&q=80&auto=format';
@@ -119,52 +117,16 @@ async function listCategories(activeOnly: boolean): Promise<PublicCategory[]> {
   let countByKey = new Map<string, number>();
   let subsByCat = new Map<string, string[]>();
 
-  if (isDynamoDbEnabled()) {
-    const products = await ProductModel.find({ isActive: true }).lean();
-    for (const p of products) {
-      const cat = String(p.category ?? '').trim().toLowerCase();
-      if (!cat) continue;
-      countByKey.set(cat, (countByKey.get(cat) ?? 0) + 1);
-      const sub = String(p.subcategory ?? '').trim();
-      if (!sub) continue;
-      const list = subsByCat.get(cat) ?? [];
-      if (!list.some((s) => s.toLowerCase() === sub.toLowerCase())) list.push(sub);
-      subsByCat.set(cat, list);
-    }
-  } else {
-    const [counts, subRows] = await Promise.all([
-      ProductModel.aggregate<{ _id: string; n: number }>([
-        { $match: { isActive: true } },
-        { $group: { _id: { $toLower: { $ifNull: ['$category', ''] } }, n: { $sum: 1 } } },
-      ]),
-      ProductModel.aggregate<{ _id: { cat: string; sub: string } }>([
-        {
-          $match: {
-            isActive: true,
-            subcategory: { $exists: true, $nin: [null, ''] },
-          },
-        },
-        {
-          $group: {
-            _id: {
-              cat: { $toLower: { $ifNull: ['$category', ''] } },
-              sub: '$subcategory',
-            },
-          },
-        },
-      ]),
-    ]);
-    countByKey = new Map(counts.map((row) => [row._id, row.n]));
-    subsByCat = new Map<string, string[]>();
-    for (const row of subRows) {
-      const id = row._id as { cat?: string; sub?: string };
-      const catKey = String(id.cat ?? '').trim();
-      const sub = String(id.sub ?? '').trim();
-      if (!catKey || !sub) continue;
-      const list = subsByCat.get(catKey) ?? [];
-      if (!list.some((s) => s.toLowerCase() === sub.toLowerCase())) list.push(sub);
-      subsByCat.set(catKey, list);
-    }
+  const products = await ProductModel.find({ isActive: true }).lean();
+  for (const p of products) {
+    const cat = String(p.category ?? '').trim().toLowerCase();
+    if (!cat) continue;
+    countByKey.set(cat, (countByKey.get(cat) ?? 0) + 1);
+    const sub = String(p.subcategory ?? '').trim();
+    if (!sub) continue;
+    const list = subsByCat.get(cat) ?? [];
+    if (!list.some((s) => s.toLowerCase() === sub.toLowerCase())) list.push(sub);
+    subsByCat.set(cat, list);
   }
 
   const mapped = docs.map((d) => {
@@ -315,10 +277,10 @@ export async function storefrontHiddenCategoryFilter(): Promise<Record<string, u
   const hidden = await CategoryModel.find({ isActive: false }).select('slug label').lean();
   if (hidden.length === 0) return null;
   const names = [
-    ...new Set(hidden.flatMap((d) => [d.slug, d.label].map((s) => s.trim()).filter(Boolean))),
-  ];
+    ...new Set(hidden.flatMap((d) => [String(d.slug), String(d.label)].map((s) => s.trim()).filter(Boolean))),
+  ] as string[];
   return {
-    $nor: names.map((name) => ({ category: new RegExp(`^${escapeRegex(name)}$`, 'i') })),
+    $nor: names.map((name: string) => ({ category: new RegExp(`^${escapeRegex(name)}$`, 'i') })),
   };
 }
 
@@ -534,21 +496,21 @@ export async function deleteCategory(slugRaw: string): Promise<{
   };
 
   const products = await ProductModel.find(categoryFilter).select('_id').lean();
-  const objectIds = products.map((p) => p._id as Types.ObjectId);
-  const deletedProductIds = objectIds.map((id) => String(id));
+  const productIds = products.map((p) => String(p._id));
+  const deletedProductIds = productIds;
 
   let deletedCombos = 0;
-  if (objectIds.length > 0) {
-    const comboDel = await JewelleryComboModel.deleteMany({ productIds: { $in: objectIds } });
+  if (productIds.length > 0) {
+    const comboDel = await JewelleryComboModel.deleteMany({ productIds: { $in: productIds } });
     deletedCombos = comboDel.deletedCount ?? 0;
 
-    await ReviewModel.deleteMany({ product: { $in: objectIds } });
+    await ReviewModel.deleteMany({ product: { $in: productIds } });
     await ProductModel.updateMany(
-      { matchingBraceletIds: { $in: objectIds } },
-      { $pull: { matchingBraceletIds: { $in: objectIds } } },
+      { matchingBraceletIds: { $in: productIds } },
+      { $pull: { matchingBraceletIds: { $in: productIds } } },
     );
 
-    const carts = await CartModel.find({ 'items.productId': { $in: objectIds } });
+    const carts = await CartModel.find({ 'items.productId': { $in: productIds } });
     const idSet = new Set(deletedProductIds);
     for (const cart of carts) {
       const brokenGroups = new Set(
@@ -568,14 +530,14 @@ export async function deleteCategory(slugRaw: string): Promise<{
       await cart.save();
     }
 
-    await ProductModel.deleteMany({ _id: { $in: objectIds } });
+    await ProductModel.deleteMany({ _id: { $in: productIds } });
   }
 
   await CategoryModel.deleteOne({ _id: doc._id });
 
   return {
     deletedProductIds,
-    deletedProducts: objectIds.length,
+    deletedProducts: productIds.length,
     deletedCombos,
   };
 }

@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { Types } from 'mongoose';
-import type { HydratedDocument } from 'mongoose';
 import { requireAuth } from '../middleware/auth.js';
-import { UserModel, type UserDoc } from '../models/User.js';
+import { UserModel, type SavedAddressDoc } from '../models/User.js';
+import type { UserDoc } from '../models/User.js';
+import { entityIdRef, isValidEntityId } from '../utils/entityId.js';
 
 const MAX_SAVED_ADDRESSES = 10;
 
@@ -29,10 +29,23 @@ const addressBodySchema = z.object({
 
 const addressPatchSchema = addressBodySchema.partial();
 
-type AddrSub = UserDoc['savedAddresses'] extends (infer U)[] | undefined ? U : never;
+type AddrSub = SavedAddressDoc;
+
+type UserWithAddresses = UserDoc & {
+  save: () => Promise<UserWithAddresses>;
+  savedAddresses: Array<
+    SavedAddressDoc & {
+      set: (key: string, value: unknown) => void;
+      deleteOne: () => void;
+    }
+  > & {
+    id: (oid: { toString: () => string }) => (SavedAddressDoc & { set: (key: string, value: unknown) => void; deleteOne: () => void }) | undefined;
+    push: (...items: SavedAddressDoc[]) => number;
+  };
+};
 
 function serializeAddress(a: {
-  _id: Types.ObjectId;
+  _id?: string;
   label: string;
   recipientName?: string | null;
   recipientMobile?: string | null;
@@ -47,7 +60,7 @@ function serializeAddress(a: {
   updatedAt?: Date;
 }) {
   return {
-    id: a._id.toString(),
+    id: String(a._id ?? ''),
     label: a.label,
     recipientName: (a.recipientName ?? '').trim(),
     recipientMobile: (a.recipientMobile ?? '').trim(),
@@ -63,7 +76,7 @@ function serializeAddress(a: {
   };
 }
 
-function clearAllDefaults(user: HydratedDocument<UserDoc>) {
+function clearAllDefaults(user: UserWithAddresses) {
   for (const a of user.savedAddresses) {
     a.set('isDefault', false);
   }
@@ -79,7 +92,7 @@ router.get('/addresses', async (req, res) => {
     return;
   }
   const raw = user.savedAddresses ?? [];
-  const list = raw.map((a) => serializeAddress(a as AddrSub & { _id: Types.ObjectId }));
+  const list = raw.map((a) => serializeAddress(a as AddrSub));
   list.sort((a, b) => Number(b.isDefault) - Number(a.isDefault));
   res.json({ addresses: list });
 });
@@ -92,7 +105,7 @@ router.post('/addresses', async (req, res) => {
     res.status(400).json({ error: 'Invalid body' });
     return;
   }
-  const user = await UserModel.findById(req.user!.id);
+  const user = (await UserModel.findById(req.user!.id)) as UserWithAddresses | null;
   if (!user) {
     res.status(404).json({ error: 'Not found' });
     return;
@@ -123,7 +136,7 @@ router.post('/addresses', async (req, res) => {
 
 router.patch('/addresses/:addressId', async (req, res) => {
   const id = req.params.addressId;
-  if (!Types.ObjectId.isValid(id)) {
+  if (!isValidEntityId(id)) {
     res.status(400).json({ error: 'Invalid address id' });
     return;
   }
@@ -134,12 +147,12 @@ router.patch('/addresses/:addressId', async (req, res) => {
     res.status(400).json({ error: 'Invalid body' });
     return;
   }
-  const user = await UserModel.findById(req.user!.id);
+  const user = (await UserModel.findById(req.user!.id)) as UserWithAddresses | null;
   if (!user) {
     res.status(404).json({ error: 'Not found' });
     return;
   }
-  const sub = user.savedAddresses.id(new Types.ObjectId(id));
+  const sub = user.savedAddresses.id(entityIdRef(id)) as UserWithAddresses['savedAddresses'][number] | undefined;
   if (!sub) {
     res.status(404).json({ error: 'Address not found' });
     return;
@@ -161,7 +174,7 @@ router.patch('/addresses/:addressId', async (req, res) => {
     if (others.length > 0) {
       clearAllDefaults(user);
       sub.set('isDefault', false);
-      others[0]!.set('isDefault', true);
+      (others[0] as SavedAddressDoc & { set: (key: string, value: unknown) => void }).set('isDefault', true);
     }
   }
   await user.save();
@@ -170,17 +183,16 @@ router.patch('/addresses/:addressId', async (req, res) => {
 
 router.delete('/addresses/:addressId', async (req, res) => {
   const id = req.params.addressId;
-  if (!Types.ObjectId.isValid(id)) {
+  if (!isValidEntityId(id)) {
     res.status(400).json({ error: 'Invalid address id' });
     return;
   }
-  const oid = new Types.ObjectId(id);
-  const user = await UserModel.findById(req.user!.id);
+  const user = (await UserModel.findById(req.user!.id)) as UserWithAddresses | null;
   if (!user) {
     res.status(404).json({ error: 'Not found' });
     return;
   }
-  const sub = user.savedAddresses.id(oid);
+  const sub = user.savedAddresses.id(entityIdRef(id)) as UserWithAddresses['savedAddresses'][number] | undefined;
   if (!sub) {
     res.status(404).json({ error: 'Address not found' });
     return;
@@ -198,16 +210,16 @@ router.delete('/addresses/:addressId', async (req, res) => {
 
 router.post('/addresses/:addressId/set-default', async (req, res) => {
   const id = req.params.addressId;
-  if (!Types.ObjectId.isValid(id)) {
+  if (!isValidEntityId(id)) {
     res.status(400).json({ error: 'Invalid address id' });
     return;
   }
-  const user = await UserModel.findById(req.user!.id);
+  const user = (await UserModel.findById(req.user!.id)) as UserWithAddresses | null;
   if (!user) {
     res.status(404).json({ error: 'Not found' });
     return;
   }
-  const sub = user.savedAddresses.id(new Types.ObjectId(id));
+  const sub = user.savedAddresses.id(entityIdRef(id)) as UserWithAddresses['savedAddresses'][number] | undefined;
   if (!sub) {
     res.status(404).json({ error: 'Address not found' });
     return;

@@ -4,7 +4,6 @@ import {
   Box,
   Typography,
   Grid,
-  Button,
   Stack,
   IconButton,
   Drawer,
@@ -13,10 +12,12 @@ import { apiFetch } from '../api/client';
 import { ProductCard } from '../components/ProductCard';
 import type { ProductSummary } from '../types/product';
 import { apiCategoryForFilter, parseCollectionFilterParam, priceFiltersForSelection, productMatchesPriceFilter, resolvePriceFilterParam, resolveSubcategoryParam, subcategoriesForFilter } from '../utils/catalogCategory';
-import { shopSurface, SHOP_HERO_IMAGE } from '../constants/shopSurface';
+import { shopSurface } from '../constants/shopSurface';
 import { LuxuryShowcaseLoader } from '../components/loading';
 import { seedCatalog } from '../utils/catalogCache';
 import { StorefrontHeader } from '../components/StorefrontHeader';
+import { StorefrontSearchBar } from '../components/StorefrontSearchBar';
+import { ShopFeaturedCarousel } from '../components/ShopFeaturedCarousel';
 import { CategoryFilterGroup } from '../components/CategoryFilterGroup';
 import { SubcategoryFilterGroup } from '../components/SubcategoryFilterGroup';
 import { PriceFilterGroup } from '../components/PriceFilterGroup';
@@ -36,6 +37,7 @@ export function ShopPage() {
   const categoryParam = searchParams.get('category') ?? '';
   const subcategoryParam = searchParams.get('subcategory') ?? '';
   const priceFilterParam = searchParams.get('priceFilter') ?? '';
+  const searchQuery = searchParams.get('q') ?? '';
   const activeFilterKey = parseCollectionFilterParam(categoryParam, categories);
   const apiCategory = apiCategoryForFilter(activeFilterKey);
   const subcategoryOptions = subcategoriesForFilter(categories, activeFilterKey);
@@ -54,6 +56,7 @@ export function ShopPage() {
     const params = new URLSearchParams();
     if (apiCategory) params.set('category', apiCategory);
     if (apiSubcategory) params.set('subcategory', apiSubcategory);
+    if (searchQuery.trim()) params.set('q', searchQuery.trim());
     const q = params.toString() ? `?${params}` : '';
     void (async () => {
       try {
@@ -67,16 +70,28 @@ export function ShopPage() {
         setLoading(false);
       }
     })();
-  }, [apiCategory, apiSubcategory, catalogRevision]);
+  }, [apiCategory, apiSubcategory, searchQuery, catalogRevision]);
+
+  function setSearchQuery(next: string) {
+    setSearchParams(
+      (prev) => {
+        const params = new URLSearchParams(prev);
+        const trimmed = next.trim();
+        if (!trimmed) params.delete('q');
+        else params.set('q', trimmed);
+        return params;
+      },
+      { replace: true },
+    );
+  }
 
   const visibleProducts = useMemo(
     () => products.filter((p) => productMatchesPriceFilter(p.price, activePriceFilter)),
     [products, activePriceFilter],
   );
 
-  function scrollToCollections() {
-    document.getElementById('collections')?.scrollIntoView({ behavior: 'smooth' });
-  }
+  const bannerProducts =
+    !apiCategory && !apiSubcategory && !searchQuery.trim() && !loading ? products : undefined;
 
   return (
     <Box
@@ -89,81 +104,38 @@ export function ShopPage() {
     >
       <StorefrontHeader />
 
-      {/* Hero */}
-      <Box component="section" sx={{ position: 'relative' }}>
-        <Box sx={{ height: 10, bgcolor: shopSurface.bandTop }} />
-        <Box
-          sx={{
-            position: 'relative',
-            width: '100%',
-            aspectRatio: { xs: '3/4', sm: '4/5' },
-            maxHeight: { sm: 640 },
-            overflow: 'hidden',
-            bgcolor: '#e8e2d8',
-          }}
-        >
-          <Box
-            component="img"
-            src={SHOP_HERO_IMAGE}
-            alt="Winter collection editorial"
+      {/* Featured product carousel */}
+      <ShopFeaturedCarousel products={bannerProducts} />
+
+      <Box
+        component="section"
+        aria-label="Search products"
+        sx={{
+          px: { xs: 2, sm: 3 },
+          pt: 2.5,
+          pb: 1,
+          bgcolor: shopSurface.creamDeep,
+        }}
+      >
+        <Box sx={{ maxWidth: 760, mx: 'auto' }}>
+          <Typography
             sx={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              objectPosition: 'center 20%',
-              display: 'block',
-            }}
-          />
-          <Box
-            sx={{
-              position: 'absolute',
-              inset: 0,
-              background:
-                'linear-gradient(to top, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.15) 40%, transparent 70%)',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'flex-end',
-              pb: { xs: 5, sm: 6 },
-              px: 2,
+              fontFamily: shopSurface.font.display,
+              fontSize: { xs: '1.35rem', sm: '1.55rem' },
+              color: shopSurface.ink,
+              textAlign: 'center',
+              mb: 2,
             }}
           >
-            <Typography
-              component="h1"
-              sx={{
-                fontFamily: shopSurface.font.display,
-                fontWeight: 400,
-                fontSize: { xs: '2.25rem', sm: '2.75rem' },
-                color: shopSurface.white,
-                textAlign: 'center',
-                mb: 2.5,
-                lineHeight: 1.15,
-                textShadow: '0 2px 24px rgba(0,0,0,0.25)',
-              }}
-            >
-              The Winter Anthology
-            </Typography>
-            <Button
-              onClick={scrollToCollections}
-              sx={{
-                bgcolor: shopSurface.ink,
-                color: shopSurface.white,
-                fontFamily: shopSurface.font.body,
-                fontSize: '0.68rem',
-                fontWeight: 600,
-                letterSpacing: '0.22em',
-                px: 3.5,
-                py: 1.35,
-                borderRadius: 0,
-                minWidth: 200,
-                '&:hover': { bgcolor: '#333' },
-              }}
-            >
-              SHOP THE LOOK
-            </Button>
-          </Box>
+            What are you looking for today?
+          </Typography>
+          <StorefrontSearchBar
+            value={searchQuery}
+            onChange={setSearchQuery}
+            onSubmit={setSearchQuery}
+            scrollTargetId="collections"
+          />
         </Box>
-        <Box sx={{ height: 14, bgcolor: shopSurface.bandBottom }} />
       </Box>
 
       {/* Collections */}
@@ -315,7 +287,9 @@ export function ShopPage() {
           </Typography>
         ) : visibleProducts.length === 0 ? (
           <Typography sx={{ color: shopSurface.inkMuted }} align="center">
-            No products found.
+            {searchQuery.trim()
+              ? `No products match “${searchQuery.trim()}”. Try another keyword or clear search.`
+              : 'No products found.'}
           </Typography>
         ) : (
           <Grid container spacing={2}>

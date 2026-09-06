@@ -3,6 +3,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { Request, Response, NextFunction } from 'express';
 import { env } from '../config/env.js';
 import { uploadPublicPath } from './mediaUrl.js';
+import { compressImageForStorage } from './productImageStorage.js';
 
 let client: S3Client | null = null;
 
@@ -45,14 +46,15 @@ export async function uploadBufferToS3(
   return uploadPublicPath(safe);
 }
 
-/** Upload combo image bytes to S3; returns `/uploads/...` path served via CloudFront. */
+/** Upload combo image bytes to S3 as WebP; returns `/uploads/...` path served via CDN. */
 export async function uploadComboImageToS3(
   buffer: Buffer,
   originalName: string,
-  mimetype: string,
+  _mimetype: string,
 ): Promise<string> {
-  const safe = originalName.replace(/[^a-zA-Z0-9._-]/g, '_');
-  return uploadBufferToS3(buffer, `combo-${Date.now()}-${safe}`, mimetype);
+  const { buffer: compressed, mimetype } = await compressImageForStorage(buffer);
+  const base = originalName.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9._-]/g, '_');
+  return uploadBufferToS3(compressed, `combo-${Date.now()}-${base}.webp`, mimetype);
 }
 
 /** Serve GET /uploads/* from S3 when local disk has no file (Lambda). */

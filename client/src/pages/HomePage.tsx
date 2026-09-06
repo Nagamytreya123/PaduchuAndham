@@ -9,6 +9,7 @@ import {
   Container,
   Card,
   CardActionArea,
+  Skeleton,
 } from '@mui/material';
 import { motion, useScroll, useTransform, useSpring, MotionValue } from 'framer-motion';
 import Lenis from 'lenis';
@@ -25,10 +26,11 @@ import {
   subcategoriesForFilter,
 } from '../utils/catalogCategory';
 import { PRODUCT_IMAGE_FALLBACK } from '../utils/productImage';
-import { LuxuryShowcaseLoader } from '../components/loading';
 import { seedCatalog } from '../utils/catalogCache';
 import { shopSurface } from '../constants/shopSurface';
+import { scheduleIdleTask } from '../utils/scheduleIdleTask';
 import { StorefrontHeader } from '../components/StorefrontHeader';
+import { StorefrontSearchBar } from '../components/StorefrontSearchBar';
 import { EditorialImageFrame } from '../components/EditorialImageFrame';
 import { CategoryFilterGroup } from '../components/CategoryFilterGroup';
 import { SubcategoryFilterGroup } from '../components/SubcategoryFilterGroup';
@@ -36,13 +38,17 @@ import { PriceFilterGroup } from '../components/PriceFilterGroup';
 import { useCategories } from '../context/CategoriesContext';
 
 const TOTAL_FRAMES = 240;
+const INITIAL_FRAME_BATCH = 12;
+const FRAME_BATCH_SIZE = 24;
 
 function categoryTileSrc(tile: { image?: string }): string {
   return tile.image || PRODUCT_IMAGE_FALLBACK;
 }
 
+const CATEGORY_SKELETON_COUNT = 6;
+
 function ShopByCategoriesSection() {
-  const { categories } = useCategories();
+  const { categories, loading } = useCategories();
 
   const tiles = useMemo(() => {
     return categories.map((c) => ({
@@ -95,6 +101,17 @@ function ShopByCategoriesSection() {
         </Box>
 
         <Grid container spacing={{ xs: 2, sm: 2.5 }}>
+          {loading && tiles.length === 0
+            ? Array.from({ length: CATEGORY_SKELETON_COUNT }, (_, index) => (
+                <Grid item xs={12} sm={6} md={4} key={`category-skeleton-${index}`}>
+                  <Skeleton
+                    variant="rectangular"
+                    height={280}
+                    sx={{ bgcolor: 'rgba(5, 11, 24, 0.06)' }}
+                  />
+                </Grid>
+              ))
+            : null}
           {tiles.map((tile, index) => {
             const src = categoryTileSrc(tile);
 
@@ -151,24 +168,56 @@ function ShopByCategoriesSection() {
 
 function FrameSequence({ scrollYProgress }: { scrollYProgress: MotionValue<number> }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [images, setImages] = useState<HTMLImageElement[]>([]);
+  const [images, setImages] = useState<Array<HTMLImageElement | undefined>>([]);
   
-  // Preload frames
+  // Preload frames progressively — first batch for canvas, remainder during idle time.
   useEffect(() => {
-    const loadedImages: HTMLImageElement[] = [];
+    const loadedImages: Array<HTMLImageElement | undefined> = new Array(TOTAL_FRAMES);
     let loadedCount = 0;
-    
-    for (let i = 1; i <= TOTAL_FRAMES; i++) {
+    let ready = false;
+
+    const publish = () => {
+      setImages([...loadedImages]);
+    };
+
+    const markLoaded = () => {
+      loadedCount += 1;
+      if (!ready && loadedCount >= Math.min(INITIAL_FRAME_BATCH, TOTAL_FRAMES)) {
+        ready = true;
+        publish();
+      }
+      if (loadedCount === TOTAL_FRAMES) {
+        publish();
+      }
+    };
+
+    const loadFrame = (index: number) => {
       const img = new Image();
-      const frameNum = i.toString().padStart(4, '0');
+      const frameNum = (index + 1).toString().padStart(4, '0');
       img.src = `/frames/frame_${frameNum}.webp`;
-      img.onload = () => {
-        loadedCount++;
-        if (loadedCount === TOTAL_FRAMES) {
-          setImages(loadedImages);
-        }
-      };
-      loadedImages.push(img);
+      img.onload = markLoaded;
+      img.onerror = markLoaded;
+      loadedImages[index] = img;
+    };
+
+    for (let i = 0; i < Math.min(INITIAL_FRAME_BATCH, TOTAL_FRAMES); i++) {
+      loadFrame(i);
+    }
+
+    let next = INITIAL_FRAME_BATCH;
+    const loadBatch = () => {
+      const end = Math.min(next + FRAME_BATCH_SIZE, TOTAL_FRAMES);
+      for (let i = next; i < end; i++) {
+        loadFrame(i);
+      }
+      next = end;
+      if (next < TOTAL_FRAMES) {
+        scheduleIdleTask(loadBatch);
+      }
+    };
+
+    if (next < TOTAL_FRAMES) {
+      scheduleIdleTask(loadBatch);
     }
   }, []);
 
@@ -187,8 +236,10 @@ function FrameSequence({ scrollYProgress }: { scrollYProgress: MotionValue<numbe
     const ctx = canvasRef.current.getContext('2d');
     if (!ctx) return;
 
-    // Initial draw
-    ctx.drawImage(images[0], 0, 0, canvasRef.current.width, canvasRef.current.height);
+    const first = images.find((img) => img?.complete);
+    if (first) {
+      ctx.drawImage(first, 0, 0, canvasRef.current.width, canvasRef.current.height);
+    }
 
     const unsubscribe = frameIndex.on("change", (latest) => {
       const canvas = canvasRef.current;
@@ -261,6 +312,7 @@ export function HomePage() {
   const categoryParam = searchParams.get('category') ?? '';
   const subcategoryParam = searchParams.get('subcategory') ?? '';
   const priceFilterParam = searchParams.get('priceFilter') ?? '';
+  const searchQuery = searchParams.get('q') ?? '';
   const activeFilterKey = parseCollectionFilterParam(categoryParam, categories);
   const apiCategory = apiCategoryForFilter(activeFilterKey);
   const subcategoryOptions = subcategoriesForFilter(categories, activeFilterKey);
@@ -272,7 +324,6 @@ export function HomePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [homeScrollAnimationEnabled, setHomeScrollAnimationEnabled] = useState(false);
-  const [settingsLoaded, setSettingsLoaded] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const collectionNavRef = useRef({ hash: '', search: '' });
@@ -337,11 +388,13 @@ export function HomePage() {
         const data = await apiFetch<{ settings: { homeScrollAnimationEnabled: boolean } }>(
           '/api/site-settings',
         );
-        setHomeScrollAnimationEnabled(data.settings.homeScrollAnimationEnabled);
+        if (data.settings.homeScrollAnimationEnabled) {
+          scheduleIdleTask(() => {
+            setHomeScrollAnimationEnabled(true);
+          });
+        }
       } catch {
-        setHomeScrollAnimationEnabled(false);
-      } finally {
-        setSettingsLoaded(true);
+        // Default static layout keeps CLS stable.
       }
     })();
   }, []);
@@ -352,6 +405,7 @@ export function HomePage() {
     const params = new URLSearchParams();
     if (apiCategory) params.set('category', apiCategory);
     if (apiSubcategory) params.set('subcategory', apiSubcategory);
+    if (searchQuery.trim()) params.set('q', searchQuery.trim());
     const q = params.toString() ? `?${params}` : '';
     void (async () => {
       try {
@@ -365,7 +419,20 @@ export function HomePage() {
         setLoading(false);
       }
     })();
-  }, [apiCategory, apiSubcategory, catalogRevision]);
+  }, [apiCategory, apiSubcategory, searchQuery, catalogRevision]);
+
+  function setSearchQuery(next: string) {
+    setSearchParams(
+      (prev) => {
+        const params = new URLSearchParams(prev);
+        const trimmed = next.trim();
+        if (!trimmed) params.delete('q');
+        else params.set('q', trimmed);
+        return params;
+      },
+      { replace: true },
+    );
+  }
 
   const visibleProducts = useMemo(
     () => products.filter((p) => productMatchesPriceFilter(p.price, activePriceFilter)),
@@ -374,10 +441,6 @@ export function HomePage() {
 
   const textY = useTransform(scrollYProgress, [0, 0.5], [0, -100]);
   const textOpacity = useTransform(scrollYProgress, [0, 0.3], [1, 0]);
-
-  if (!settingsLoaded) {
-    return <LuxuryShowcaseLoader variant="fullscreen" tone="dark" aria-label="Loading home page" />;
-  }
 
   return (
     <Box
@@ -388,6 +451,49 @@ export function HomePage() {
       }}
     >
       <StorefrontHeader />
+
+      <Box
+        component="section"
+        aria-label="Search products"
+        sx={{
+          px: { xs: 2, md: 4 },
+          py: { xs: 3, md: 4 },
+          bgcolor: shopSurface.creamDeep,
+          position: 'relative',
+          zIndex: 10,
+        }}
+      >
+        <Container maxWidth="md">
+          <Box sx={{ textAlign: 'center', mb: 2.5 }}>
+            <Typography
+              sx={{
+                ...shopSurface.pdpTypography.label,
+                color: shopSurface.inkMuted,
+                mb: 1,
+              }}
+            >
+              Search the collection
+            </Typography>
+            <Typography
+              sx={{
+                fontFamily: shopSurface.font.display,
+                fontStyle: 'italic',
+                fontSize: { xs: '1.2rem', sm: '1.45rem' },
+                color: shopSurface.ink,
+              }}
+            >
+              Find pieces by name, style, or material
+            </Typography>
+          </Box>
+          <StorefrontSearchBar
+            value={searchQuery}
+            onChange={setSearchQuery}
+            onSubmit={setSearchQuery}
+            scrollTargetId="collection"
+          />
+        </Container>
+      </Box>
+
       {homeScrollAnimationEnabled ? (
         <>
           {/* Scroll Sequence Container */}
@@ -549,7 +655,9 @@ export function HomePage() {
               The Collection
             </Typography>
             <Typography variant="subtitle1" align="center" sx={{ mb: 3, color: '#8A8175', maxWidth: 640, mx: 'auto' }}>
-              Browse the full catalogue — tap a category above or use the filters below.
+              {searchQuery.trim()
+                ? `Showing results for “${searchQuery.trim()}”. Refine with the filters below.`
+                : 'Browse the full catalogue — tap a category above or use the filters below.'}
             </Typography>
             <Stack direction="row" justifyContent="center" flexWrap="wrap" sx={{ mb: 6, gap: 1 }}>
               <CategoryFilterGroup
@@ -667,12 +775,27 @@ export function HomePage() {
             )}
           </motion.div>
 
+          <Box sx={{ minHeight: { xs: 720, sm: 960, md: 1080 } }}>
           {loading ? (
-            <LuxuryShowcaseLoader variant="inline" tone="dark" aria-label="Loading collection" />
+            <Grid container spacing={4}>
+              {Array.from({ length: 6 }, (_, index) => (
+                <Grid item xs={12} sm={6} md={4} key={`product-skeleton-${index}`}>
+                  <Skeleton
+                    variant="rectangular"
+                    height={420}
+                    sx={{ bgcolor: 'rgba(255, 255, 255, 0.06)' }}
+                  />
+                </Grid>
+              ))}
+            </Grid>
           ) : error ? (
             <Typography color="error" align="center">{error}</Typography>
           ) : visibleProducts.length === 0 ? (
-            <Typography color="text.secondary" align="center">No products found.</Typography>
+            <Typography color="text.secondary" align="center">
+              {searchQuery.trim()
+                ? `No products match “${searchQuery.trim()}”. Try another keyword or clear search.`
+                : 'No products found.'}
+            </Typography>
           ) : (
             <Grid container spacing={4}>
               {visibleProducts.map((p, index) => (
@@ -697,6 +820,7 @@ export function HomePage() {
               ))}
             </Grid>
           )}
+          </Box>
         </Container>
       </Box>
 
@@ -738,7 +862,14 @@ export function HomePage() {
             <Grid item xs={12} sm={6} md={2}>
               <Typography variant="subtitle2" sx={{ color: '#F5F5F5', mb: 2 }}>Support</Typography>
               <Stack spacing={1}>
-                <Typography variant="body2" sx={{ color: '#8A8175', cursor: 'pointer', '&:hover': { color: '#D6B36A' } }}>Contact Us</Typography>
+                <Typography
+                  component={RouterLink}
+                  to="/contact"
+                  variant="body2"
+                  sx={{ color: '#8A8175', cursor: 'pointer', textDecoration: 'none', '&:hover': { color: '#D6B36A' } }}
+                >
+                  Contact Us
+                </Typography>
                 <Typography variant="body2" sx={{ color: '#8A8175', cursor: 'pointer', '&:hover': { color: '#D6B36A' } }}>Shipping & Returns</Typography>
                 <Typography variant="body2" sx={{ color: '#8A8175', cursor: 'pointer', '&:hover': { color: '#D6B36A' } }}>Care Guide</Typography>
               </Stack>

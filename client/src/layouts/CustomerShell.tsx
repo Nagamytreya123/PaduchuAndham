@@ -17,6 +17,7 @@ import { cartBadgeCount, useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import { authSurface as authS } from '../constants/authSurface';
 import { shopSurface } from '../constants/shopSurface';
+import { BrandLogo } from '../components/BrandLogo';
 
 export function CustomerShell() {
   const theme = useTheme();
@@ -82,31 +83,48 @@ export function CustomerShell() {
               }),
         }}
       >
-        <Toolbar sx={{ gap: 2 }}>
-          <Typography
-            variant="h6"
+        <Toolbar sx={{ gap: 1.5 }}>
+          <Box
             component={RouterLink}
             to="/"
             sx={{
               flexGrow: 1,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 1,
               textDecoration: 'none',
+              minWidth: 0,
               ...(isImmersiveDark
                 ? {
-                    fontFamily: authS.font.display,
-                    fontWeight: 700,
-                    fontSize: { xs: '1.2rem', sm: '1.35rem' },
-                    letterSpacing: '0.03em',
                     color: authS.text.display,
-                    textShadow: authS.accentGlow,
                   }
                 : {
                     color: 'primary.main',
-                    fontWeight: 700,
                   }),
             }}
           >
-            Paduchuandham
-          </Typography>
+            <BrandLogo height={38} to={null} />
+            <Typography
+              variant="h6"
+              sx={{
+                ...(isImmersiveDark
+                  ? {
+                      fontFamily: authS.font.display,
+                      fontWeight: 700,
+                      fontSize: { xs: '1.2rem', sm: '1.35rem' },
+                      letterSpacing: '0.03em',
+                      color: authS.text.display,
+                      textShadow: authS.accentGlow,
+                    }
+                  : {
+                      color: 'primary.main',
+                      fontWeight: 700,
+                    }),
+              }}
+            >
+              Paduchuandham
+            </Typography>
+          </Box>
           {!isXs && (
             <>
               <Typography component={RouterLink} to="/cart" color="inherit" sx={{ textDecoration: 'none' }}>
@@ -177,6 +195,8 @@ export function CustomerShell() {
       <Container
         maxWidth={isFullBleedRoute ? false : 'lg'}
         disableGutters={isFullBleedRoute}
+        component="main"
+        id="main"
         sx={{
           flex: 1,
           width: '100%',

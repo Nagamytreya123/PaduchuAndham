@@ -1,54 +1,37 @@
-import mongoose, { Schema, type InferSchemaType } from 'mongoose';
-import { pickModel } from './pick.js';
+import { createDynamoModel } from '../db/dynamo/client.js';
 
-const orderItemSchema = new Schema(
-  {
-    productId: { type: Schema.Types.ObjectId, ref: 'Product', required: true },
-    name: { type: String, required: true },
-    price: { type: Number, required: true },
-    qty: { type: Number, required: true, min: 1 },
-  },
-  { _id: false },
-);
+export type OrderItemDoc = {
+  productId: string;
+  name: string;
+  price: number;
+  qty: number;
+};
 
-const addressSchema = new Schema(
-  {
-    label: { type: String, trim: true, maxlength: 80 },
-    recipientName: { type: String, trim: true, maxlength: 120 },
-    recipientMobile: { type: String, trim: true, maxlength: 20 },
-    line1: { type: String, required: true },
-    line2: { type: String },
-    city: { type: String, required: true },
-    state: { type: String, required: true },
-    postalCode: { type: String, required: true },
-    country: { type: String, default: 'IN' },
-  },
-  { _id: false },
-);
+export type OrderAddressDoc = {
+  label?: string;
+  recipientName?: string;
+  recipientMobile?: string;
+  line1: string;
+  line2?: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country?: string;
+};
 
-const orderSchema = new Schema(
-  {
-    user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    items: [orderItemSchema],
-    status: {
-      type: String,
-      enum: ['pending', 'paid', 'processing', 'shipped', 'delivered', 'cancelled'],
-      default: 'pending',
-    },
-    amount: { type: Number, required: true, min: 0 },
-    currency: { type: String, default: 'INR' },
-    razorpayOrderId: { type: String },
-    razorpayPaymentId: { type: String },
-    address: { type: addressSchema, required: true },
-    notes: { type: String },
-  },
-  { timestamps: true },
-);
+export type OrderDoc = {
+  _id: string;
+  user: string;
+  items: OrderItemDoc[];
+  status?: 'pending' | 'paid' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
+  amount: number;
+  currency?: string;
+  razorpayOrderId?: string;
+  razorpayPaymentId?: string;
+  address: OrderAddressDoc;
+  notes?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+};
 
-orderSchema.index({ user: 1, createdAt: -1 });
-orderSchema.index({ status: 1 });
-
-export type OrderDoc = InferSchemaType<typeof orderSchema>;
-const MongoOrderModel = mongoose.model('Order', orderSchema);
-export const OrderModel = pickModel(MongoOrderModel, 'Order') as typeof MongoOrderModel;
-
+export const OrderModel = createDynamoModel('Order') as any;

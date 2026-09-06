@@ -23,7 +23,6 @@ get_env() {
 
 JWT_SECRET="$(get_env JWT_SECRET)"
 CLIENT_URL="$(get_env CLIENT_URL)"
-MONGODB_URI="$(get_env MONGODB_URI)"
 GOOGLE_CLIENT_ID="$(get_env GOOGLE_CLIENT_ID)"
 GOOGLE_CLIENT_SECRET="$(get_env GOOGLE_CLIENT_SECRET)"
 ADMIN_EMAILS="$(get_env ADMIN_EMAILS)"
@@ -63,7 +62,6 @@ sam deploy \
   --parameter-overrides \
     "ClientUrl=$CLIENT_URL" \
     "JwtSecret=$JWT_SECRET" \
-    "MongoDbUri=$MONGODB_URI" \
     "GoogleClientId=$GOOGLE_CLIENT_ID" \
     "GoogleClientSecret=$GOOGLE_CLIENT_SECRET" \
     "AdminEmails=$ADMIN_EMAILS" \

@@ -1,6 +1,6 @@
-import { Types } from 'mongoose';
 import { OrderModel } from '../models/Order.js';
 import { REVIEW_ELIGIBLE_ORDER_STATUSES } from '../models/Review.js';
+import { isValidEntityId } from './entityId.js';
 
 /**
  * Returns an order id if the user has this product on an order marked **delivered**
@@ -9,16 +9,15 @@ import { REVIEW_ELIGIBLE_ORDER_STATUSES } from '../models/Review.js';
 export async function findPurchasedOrderForProduct(
   userId: string,
   productId: string,
-): Promise<Types.ObjectId | null> {
-  if (!Types.ObjectId.isValid(userId) || !Types.ObjectId.isValid(productId)) return null;
-  const pid = new Types.ObjectId(productId);
+): Promise<string | null> {
+  if (!isValidEntityId(userId) || !isValidEntityId(productId)) return null;
   const order = await OrderModel.findOne({
-    user: new Types.ObjectId(userId),
+    user: userId,
     status: { $in: [...REVIEW_ELIGIBLE_ORDER_STATUSES] },
-    'items.productId': pid,
+    'items.productId': productId,
   })
     .sort({ createdAt: 1 })
     .select('_id')
     .lean();
-  return order?._id ?? null;
+  return order?._id ? String(order._id) : null;
 }

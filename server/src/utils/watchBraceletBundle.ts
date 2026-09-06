@@ -1,10 +1,8 @@
-import type { Types } from 'mongoose';
-
 export type BundleProductLean = {
-  _id: Types.ObjectId;
+  _id: string;
   name: string;
   price: number;
-  matchingBraceletIds?: Types.ObjectId[];
+  matchingBraceletIds?: string[];
   watchBraceletBundlePrice?: number | null;
 };
 
@@ -125,7 +123,7 @@ export function validateOrderItemsWithBundles(
   items: OrderItemInput[],
   productsById: Map<string, BundleProductLean>,
   jewelleryCombos: JewelleryComboDefinition[] = [],
-): { amountPaise: number; lines: { productId: Types.ObjectId; name: string; price: number; qty: number }[] } {
+): { amountPaise: number; lines: { productId: string; name: string; price: number; qty: number }[] } {
   const pool: PoolUnit[] = [];
   for (const line of items) {
     const p = productsById.get(line.productId);
@@ -232,7 +230,7 @@ export function validateOrderItemsWithBundles(
   }
 
   let amountPaise = 0;
-  const lines: { productId: Types.ObjectId; name: string; price: number; qty: number }[] = [];
+  const lines: { productId: string; name: string; price: number; qty: number }[] = [];
 
   for (const g of groups.values()) {
     const p = productsById.get(g.productId)!;

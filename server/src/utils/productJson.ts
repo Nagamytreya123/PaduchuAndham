@@ -74,7 +74,7 @@ function normalizeJewelryDetails(j: JewelryDetailsLike | undefined): JewelryDeta
   return Object.keys(out).length ? out : undefined;
 }
 
-/** Mongoose lean docs may surface `null` on optional paths — normalize for JSON. */
+/** Optional paths may surface `null` from storage — normalize for JSON. */
 type ProductLike = {
   _id: unknown;
   name: string;

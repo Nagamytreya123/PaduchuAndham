@@ -1,31 +1,23 @@
-import mongoose, { Schema, type InferSchemaType } from 'mongoose';
-import { pickModel } from './pick.js';
+import { createDynamoModel } from '../db/dynamo/client.js';
 
-const cartItemSchema = new Schema(
-  {
-    productId: { type: Schema.Types.ObjectId, ref: 'Product', required: true },
-    name: { type: String, required: true },
-    price: { type: Number, required: true, min: 0 },
-    qty: { type: Number, required: true, min: 1 },
-    image: { type: String },
-    /** Same id on every line in a jewellery combo or watch+bracelet bundle (storefront grouping). */
-    bundleGroupId: { type: String },
-    bundleDisplayName: { type: String },
-    bundleUnitTotalPaise: { type: Number, min: 0 },
-    bundleImage: { type: String },
-  },
-  { _id: false },
-);
+export type CartItemDoc = {
+  productId: string;
+  name: string;
+  price: number;
+  qty: number;
+  image?: string;
+  bundleGroupId?: string;
+  bundleDisplayName?: string;
+  bundleUnitTotalPaise?: number;
+  bundleImage?: string;
+};
 
-const cartSchema = new Schema(
-  {
-    user: { type: Schema.Types.ObjectId, ref: 'User', required: true, unique: true },
-    items: { type: [cartItemSchema], default: [] },
-  },
-  { timestamps: true },
-);
+export type CartDoc = {
+  _id: string;
+  user: string;
+  items: CartItemDoc[];
+  createdAt?: Date;
+  updatedAt?: Date;
+};
 
-export type CartDoc = InferSchemaType<typeof cartSchema>;
-const MongoCartModel = mongoose.model('Cart', cartSchema);
-export const CartModel = pickModel(MongoCartModel, 'Cart') as typeof MongoCartModel;
-
+export const CartModel = createDynamoModel('Cart') as any;

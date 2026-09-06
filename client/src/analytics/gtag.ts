@@ -1,4 +1,5 @@
 import { getMeasurementId, isAnalyticsEnabled } from './config';
+import { scheduleIdleTask } from '../utils/scheduleIdleTask';
 
 declare global {
   interface Window {
@@ -18,24 +19,34 @@ function ensureGtagStub(): void {
   }
 }
 
-/** Load gtag.js and configure GA4. Safe to call multiple times. */
+/** Load gtag.js and configure GA4 after first paint. Safe to call multiple times. */
 export function initAnalytics(): void {
-  const measurementId = getMeasurementId();
-  if (!measurementId || initialized) return;
+  if (initialized) return;
 
-  initialized = true;
-  ensureGtagStub();
-  window.gtag!('js', new Date());
-  window.gtag!('config', measurementId, {
-    send_page_view: false,
-    anonymize_ip: true,
-    allow_google_signals: true,
-  });
+  const boot = () => {
+    const measurementId = getMeasurementId();
+    if (!measurementId || initialized) return;
 
-  const script = document.createElement('script');
-  script.async = true;
-  script.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(measurementId)}`;
-  document.head.appendChild(script);
+    initialized = true;
+    ensureGtagStub();
+    window.gtag!('js', new Date());
+    window.gtag!('config', measurementId, {
+      send_page_view: false,
+      anonymize_ip: true,
+      allow_google_signals: true,
+    });
+
+    const script = document.createElement('script');
+    script.async = true;
+    script.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(measurementId)}`;
+    document.head.appendChild(script);
+  };
+
+  if (document.readyState === 'complete') {
+    scheduleIdleTask(boot);
+  } else {
+    window.addEventListener('load', () => scheduleIdleTask(boot), { once: true });
+  }
 }
 
 export function gtag(...args: unknown[]): void {

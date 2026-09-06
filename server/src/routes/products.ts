@@ -1,12 +1,13 @@
 import { Router } from 'express';
-import { Types } from 'mongoose';
 import { z } from 'zod';
+import { isValidEntityId } from '../utils/entityId.js';
 import { ProductModel } from '../models/Product.js';
 import { ReviewModel } from '../models/Review.js';
 import { productToJson, productToListJson } from '../utils/productJson.js';
 import { requireAuth } from '../middleware/auth.js';
 import { findPurchasedOrderForProduct } from '../utils/reviewQualification.js';
 import { publicCatalogLimiter } from '../middleware/rateLimit.js';
+import { setPublicCatalogCacheHeaders } from '../middleware/publicCacheHeaders.js';
 import {
   cachedCatalog,
   cachedProductPublic,
@@ -18,6 +19,8 @@ import {
   isStorefrontHiddenCategory,
   storefrontHiddenCategoryFilter,
 } from '../services/categories.js';
+import { CategoryModel } from '../models/Category.js';
+import { rankProductsBySearch } from '../utils/productSearch.js';
 
 const router = Router();
 
@@ -34,39 +37,46 @@ type ProductPublicCache = {
   reviewSummary: { reviewCount: number; averageRating: number | null };
 };
 
-function setCacheHitHeader(res: import('express').Response, hit: boolean) {
-  if (process.env.NODE_ENV === 'development') {
-    res.setHeader('X-Cache', hit ? 'HIT' : 'MISS');
-  }
-}
-
 router.get('/', publicCatalogLimiter, async (req, res) => {
   const categoryRaw = typeof req.query.category === 'string' ? req.query.category.trim() : '';
   const subcategoryRaw =
     typeof req.query.subcategory === 'string' ? req.query.subcategory.trim() : '';
+  const searchRaw = typeof req.query.q === 'string' ? req.query.q.trim() : '';
 
   const { value, hit } = await cachedCatalog(
     'products:list',
-    [categoryRaw, subcategoryRaw],
+    [categoryRaw, subcategoryRaw, searchRaw.toLowerCase()],
     async () => {
       const hidden = await storefrontHiddenCategoryFilter();
       const base = buildProductListFilter(categoryRaw, subcategoryRaw);
       const filter = hidden ? { $and: [base, hidden] } : base;
       const list = await ProductModel.find(filter).sort({ createdAt: -1 }).lean();
+      const categoryRows = await CategoryModel.find({ isActive: true }).select('slug label').lean();
+      const labelFor = (category: string) => {
+        const key = category.trim().toLowerCase();
+        const match = categoryRows.find(
+          (row) => row.slug.toLowerCase() === key || row.label.toLowerCase() === key,
+        );
+        return match?.label;
+      };
+      let products = list.map((p) => productToListJson(p));
+      if (searchRaw) {
+        products = rankProductsBySearch(products, searchRaw, labelFor);
+      }
       return {
-        products: list.map((p) => productToListJson(p)),
+        products,
       };
     },
   );
 
-  setCacheHitHeader(res, hit);
+  setPublicCatalogCacheHeaders(res, hit);
   res.json(value);
 });
 
 /** List reviews + eligibility for the current user (optionalAuth on app). Must be registered before `GET /:id`. */
 router.get('/:id/reviews', publicCatalogLimiter, async (req, res) => {
   const id = String(req.params.id);
-  if (!Types.ObjectId.isValid(id)) {
+  if (!isValidEntityId(id)) {
     res.status(400).json({ error: 'Invalid product id' });
     return;
   }
@@ -80,7 +90,7 @@ router.get('/:id/reviews', publicCatalogLimiter, async (req, res) => {
   const skip = Math.max(0, parseInt(String(req.query.skip), 10) || 0);
 
   const { value: publicPart, hit } = await cachedProductReviewsPage(id, limit, skip, async () => {
-    const pid = new Types.ObjectId(id);
+    const pid = id;
     const [agg, reviews, total] = await Promise.all([
       ReviewModel.aggregate([
         { $match: { product: pid } },
@@ -90,7 +100,7 @@ router.get('/:id/reviews', publicCatalogLimiter, async (req, res) => {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .select('rating title body reviewerName createdAt')
+        .select('_id rating title body reviewerName createdAt')
         .lean(),
       ReviewModel.countDocuments({ product: id }),
     ]);
@@ -106,7 +116,7 @@ router.get('/:id/reviews', publicCatalogLimiter, async (req, res) => {
     return {
       summary,
       reviews: reviews.map((r) => ({
-        id: r._id.toString(),
+        id: String(r._id),
         rating: r.rating,
         title: r.title,
         body: r.body,
@@ -131,7 +141,7 @@ router.get('/:id/reviews', publicCatalogLimiter, async (req, res) => {
     };
   }
 
-  setCacheHitHeader(res, hit);
+  setPublicCatalogCacheHeaders(res, hit);
   res.json({ ...publicPart, viewer });
 });
 
@@ -147,7 +157,7 @@ router.post('/:id/reviews', publicCatalogLimiter, requireAuth, async (req, res) 
   }
 
   const productId = String(req.params.id);
-  if (!Types.ObjectId.isValid(productId)) {
+  if (!isValidEntityId(productId)) {
     res.status(400).json({ error: 'Invalid product id' });
     return;
   }
@@ -169,8 +179,8 @@ router.post('/:id/reviews', publicCatalogLimiter, requireAuth, async (req, res) 
 
   try {
     const doc = await ReviewModel.create({
-      user: new Types.ObjectId(req.user!.id),
-      product: new Types.ObjectId(productId),
+      user: req.user!.id,
+      product: productId,
       order: orderId,
       rating: body.rating,
       title: body.title?.length ? body.title : undefined,
@@ -199,13 +209,13 @@ router.post('/:id/reviews', publicCatalogLimiter, requireAuth, async (req, res) 
 
 router.get('/:id', publicCatalogLimiter, async (req, res) => {
   const id = String(req.params.id);
-  if (!Types.ObjectId.isValid(id)) {
+  if (!isValidEntityId(id)) {
     res.status(404).json({ error: 'Not found' });
     return;
   }
 
   const { value: cached, hit } = await cachedProductPublic(id, async (): Promise<ProductPublicCache | null> => {
-    const pid = new Types.ObjectId(id);
+    const pid = id;
 
     const [p, reviewAgg] = await Promise.all([
       ProductModel.findOne({ _id: pid, isActive: true }).lean(),
@@ -259,7 +269,7 @@ router.get('/:id', publicCatalogLimiter, async (req, res) => {
 
   const viewerReview = req.user
     ? await Promise.all([
-        ReviewModel.exists({ user: req.user.id, product: new Types.ObjectId(id) }),
+        ReviewModel.exists({ user: req.user.id, product: id }),
         findPurchasedOrderForProduct(req.user.id, id),
       ]).then(([hasReview, orderId]) => ({
         canSubmit: !hasReview && orderId != null,
@@ -268,7 +278,7 @@ router.get('/:id', publicCatalogLimiter, async (req, res) => {
       }))
     : null;
 
-  setCacheHitHeader(res, hit);
+  setPublicCatalogCacheHeaders(res, hit);
   res.json({
     product: {
       ...cached.base,

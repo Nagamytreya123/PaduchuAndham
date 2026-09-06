@@ -1,8 +1,9 @@
-import { useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
 import { Link as RouterLink } from 'react-router-dom';
+import { apiFetch } from '../../api/client';
 import type { ProductSummary } from '../../types/product';
 import { ProductCard } from '../ProductCard';
 import { editorialSurface } from '../../constants/editorialSurface';
@@ -10,12 +11,16 @@ import { IconChevronLeft, IconChevronRight } from '../../icons';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { useCategories } from '../../context/CategoriesContext';
 import { productMatchesCategory, shopPathForCategorySlug } from '../../utils/catalogCategory';
+import { seedCatalog } from '../../utils/catalogCache';
+import { scheduleIdleTask } from '../../utils/scheduleIdleTask';
 
 const PRODUCTS_PER_ROW = 5;
 
 type ExploreCategoryRowsProps = {
-  catalog: ProductSummary[];
+  catalog?: ProductSummary[];
   excludeProductId?: string;
+  /** Category of the opened product — its row is shown first. */
+  priorityCategory?: string;
 };
 
 function CategoryProductRow({
@@ -135,24 +140,64 @@ function CategoryProductRow({
   );
 }
 
-export function ExploreCategoryRows({ catalog, excludeProductId }: ExploreCategoryRowsProps) {
+export function ExploreCategoryRows({
+  catalog: catalogProp,
+  excludeProductId,
+  priorityCategory,
+}: ExploreCategoryRowsProps) {
   const { categories } = useCategories();
-  const rows = categories
-    .map((cat) => ({
-      category: cat.slug,
-      label: cat.label,
-      subtitle: cat.kind === 'watch' ? 'Precision time' : cat.kind === 'bracelet' ? 'Fine details' : 'Collection',
-      shopTo: shopPathForCategorySlug(cat.slug),
-      products: catalog
-        .filter(
-          (p) =>
-            p.isActive !== false &&
-            p.id !== excludeProductId &&
-            productMatchesCategory(p.category, cat),
-        )
-        .slice(0, PRODUCTS_PER_ROW),
-    }))
-    .filter((row) => row.products.length > 0);
+  const [catalog, setCatalog] = useState<ProductSummary[]>(catalogProp ?? []);
+
+  useEffect(() => {
+    if (catalogProp) {
+      setCatalog(catalogProp);
+      return;
+    }
+
+    scheduleIdleTask(() => {
+      void (async () => {
+        try {
+          const data = await apiFetch<{ products: ProductSummary[] }>('/api/products');
+          const active = data.products.filter((p) => p.isActive !== false);
+          seedCatalog(active);
+          setCatalog(active);
+        } catch {
+          setCatalog([]);
+        }
+      })();
+    });
+  }, [catalogProp]);
+
+  const rows = useMemo(() => {
+    const built = categories
+      .map((cat) => ({
+        category: cat.slug,
+        label: cat.label,
+        subtitle: cat.kind === 'watch' ? 'Precision time' : cat.kind === 'bracelet' ? 'Fine details' : 'Collection',
+        shopTo: shopPathForCategorySlug(cat.slug),
+        products: catalog
+          .filter(
+            (p) =>
+              p.isActive !== false &&
+              p.id !== excludeProductId &&
+              productMatchesCategory(p.category, cat),
+          )
+          .slice(0, PRODUCTS_PER_ROW),
+      }))
+      .filter((row) => row.products.length > 0);
+
+    if (!priorityCategory?.trim()) return built;
+
+    const priorityIndex = built.findIndex((row) => {
+      const cat = categories.find((c) => c.slug === row.category);
+      return cat != null && productMatchesCategory(priorityCategory, cat);
+    });
+
+    if (priorityIndex <= 0) return built;
+
+    const priorityRow = built[priorityIndex];
+    return [priorityRow, ...built.slice(0, priorityIndex), ...built.slice(priorityIndex + 1)];
+  }, [categories, catalog, excludeProductId, priorityCategory]);
 
   if (rows.length === 0) return null;
 
