@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Typography from '@mui/material/Typography';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
@@ -28,12 +28,21 @@ import { AdminPageHeader, DashboardCard, MotionButton, PageTransitionWrapper, Pr
 import { AdminMultiImageUpload, appendFilesToFormData } from '../../components/admin/AdminMultiImageUpload';
 import { adminCatalogGridSx } from '../../constants/adminLayout';
 import { useCategories } from '../../context/CategoriesContext';
-import { findCatalogCategory, isComboCategory, productMatchesCategory } from '../../utils/catalogCategory';
+import {
+  categoryKindOf,
+  categoryUsesSizeOptions,
+  findCatalogCategory,
+  isComboCategory,
+  normalizeCatalogCategory,
+  productMatchesCategory,
+  type CatalogCategory,
+} from '../../utils/catalogCategory';
+import { sumComboLinkedListPricesPaise } from '../../utils/bundlePricing';
 import { CategoryFilterGroup } from '../../components/CategoryFilterGroup';
 import { CategorySelectField } from '../../components/admin/CategorySelectField';
 import { SubcategorySelectField } from '../../components/admin/SubcategorySelectField';
 import { ComboProductsPicker } from '../../components/admin/ComboProductsPicker';
-import { apiUrl } from '../../api/client';
+import { apiFetch, apiUrl } from '../../api/client';
 
 const formGrid2Sx = {
   display: 'grid',
@@ -392,10 +401,26 @@ function AdminProductCatalogCard({
   );
 }
 
+function rupeeStringFromPaise(paise: number): string {
+  return (paise / 100).toFixed(2);
+}
+
+function comboCompareAtHelperText(sumPaise: number, linkedCount: number): string | undefined {
+  if (linkedCount < 2 || sumPaise <= 0) return undefined;
+  return `Linked items total ${formatInrFromPaise(sumPaise)} — compare-at updates when you change linked products.`;
+}
+
 export function AdminProductsPage() {
-  const { categories, kindFor, catalogRevision } = useCategories();
+  const { catalogRevision } = useCategories();
+  const [adminCategories, setAdminCategories] = useState<CatalogCategory[]>([]);
+  const kindFor = (productCategory: string) => categoryKindOf(productCategory, adminCategories);
   const isWatch = (c: string) => kindFor(c) === 'watch';
   const isJewelleryCat = (c: string) => kindFor(c) === 'jewellery';
+
+  const loadAdminCategories = useCallback(async () => {
+    const data = await apiFetch<{ categories: CatalogCategory[] }>('/api/admin/categories');
+    setAdminCategories((data.categories ?? []).map(normalizeCatalogCategory));
+  }, []);
 
   const [products, setProducts] = useState<AdminProductRow[]>([]);
   const [catalogFilterKey, setCatalogFilterKey] = useState<string>('all');
@@ -426,6 +451,7 @@ export function AdminProductsPage() {
   const [jewelryStoneOrMotif, setJewelryStoneOrMotif] = useState('');
   const [jewelryCustomization, setJewelryCustomization] = useState('');
   const [dimensionsNote, setDimensionsNote] = useState('');
+  const [sizeOptionsInput, setSizeOptionsInput] = useState('');
   const [weightGrams, setWeightGrams] = useState('');
   const [careInstructions, setCareInstructions] = useState('');
   const [priceRupee, setPriceRupee] = useState('');
@@ -457,6 +483,7 @@ export function AdminProductsPage() {
   const [editJewelryStoneOrMotif, setEditJewelryStoneOrMotif] = useState('');
   const [editJewelryCustomization, setEditJewelryCustomization] = useState('');
   const [editDimensionsNote, setEditDimensionsNote] = useState('');
+  const [editSizeOptionsInput, setEditSizeOptionsInput] = useState('');
   const [editWeightGrams, setEditWeightGrams] = useState('');
   const [editCareInstructions, setEditCareInstructions] = useState('');
   const [editPriceRupee, setEditPriceRupee] = useState('');
@@ -491,9 +518,20 @@ export function AdminProductsPage() {
   }, [catalogRevision]);
 
   useEffect(() => {
-    if (categories.length === 0) return;
-    setCategory((prev) => (prev && categories.some((c) => c.slug === prev) ? prev : categories[0]!.slug));
-  }, [categories]);
+    void loadAdminCategories().catch(() => setAdminCategories([]));
+  }, [catalogRevision, loadAdminCategories]);
+
+  useEffect(() => {
+    if (!addDialogOpen && !editOpen) return;
+    void loadAdminCategories().catch(() => setAdminCategories([]));
+  }, [addDialogOpen, editOpen, loadAdminCategories]);
+
+  useEffect(() => {
+    if (adminCategories.length === 0) return;
+    setCategory((prev) =>
+      prev && adminCategories.some((c) => c.slug === prev) ? prev : adminCategories[0]!.slug,
+    );
+  }, [adminCategories]);
 
   const prevCategoryRef = useRef(category);
   useEffect(() => {
@@ -503,8 +541,51 @@ export function AdminProductsPage() {
   }, [category]);
 
   function categoryIsCombo(slug: string): boolean {
-    return isComboCategory(categories.find((c) => c.slug === slug));
+    return isComboCategory(findCatalogCategory(slug, adminCategories));
   }
+
+  function selectedCategoryUsesSizeOptions(slug: string): boolean {
+    return categoryUsesSizeOptions(slug, adminCategories);
+  }
+
+  const productPriceById = useMemo(
+    () => new Map(products.map((p) => [p.id, p.price])),
+    [products],
+  );
+
+  function applyComboCompareAtFromLinkedIds(ids: string[], setCompareAt: (value: string) => void) {
+    if (ids.length < 2) return;
+    const sumPaise = sumComboLinkedListPricesPaise(ids, productPriceById);
+    if (sumPaise > 0) setCompareAt(rupeeStringFromPaise(sumPaise));
+  }
+
+  function handleComboProductIdsChange(ids: string[]) {
+    setComboProductIdsSelected(ids);
+    applyComboCompareAtFromLinkedIds(ids, setCompareAtRupee);
+  }
+
+  function handleEditComboProductIdsChange(ids: string[]) {
+    setEditComboProductIdsSelected(ids);
+    applyComboCompareAtFromLinkedIds(ids, setEditCompareAtRupee);
+  }
+
+  function removeEditExistingImage(url: string) {
+    if (isEmbeddedProductImage(url)) {
+      setEditEmbeddedImages((prev) => prev.filter((img) => img !== url));
+      return;
+    }
+    setEditImageUrls((prev) => splitList(prev).filter((img) => img !== url).join(', '));
+  }
+
+  const addComboCompareSumPaise = useMemo(
+    () => sumComboLinkedListPricesPaise(comboProductIdsSelected, productPriceById),
+    [comboProductIdsSelected, productPriceById],
+  );
+
+  const editComboCompareSumPaise = useMemo(
+    () => sumComboLinkedListPricesPaise(editComboProductIdsSelected, productPriceById),
+    [editComboProductIdsSelected, productPriceById],
+  );
 
   function resolvedCategory(): string {
     return category;
@@ -533,53 +614,63 @@ export function AdminProductsPage() {
 
   useEffect(() => {
     if (!isWatch(category)) {
-      setCaseShape('');
-      setDial('');
-      setStrapType('');
-      setWatchColor('');
-      setMatchingBraceletIdsSelected([]);
-      setBundlePriceRupee('');
+      setCaseShape((prev) => (prev === '' ? prev : ''));
+      setDial((prev) => (prev === '' ? prev : ''));
+      setStrapType((prev) => (prev === '' ? prev : ''));
+      setWatchColor((prev) => (prev === '' ? prev : ''));
+      setMatchingBraceletIdsSelected((prev) => (prev.length === 0 ? prev : []));
+      setBundlePriceRupee((prev) => (prev === '' ? prev : ''));
     }
     if (!isJewelleryCat(category)) {
-      setTags('');
-      setJewelryMaterialType('');
-      setJewelryFinish('');
-      setJewelryStoneOrMotif('');
-      setJewelryCustomization('');
+      setTags((prev) => (prev === '' ? prev : ''));
+      setJewelryMaterialType((prev) => (prev === '' ? prev : ''));
+      setJewelryFinish((prev) => (prev === '' ? prev : ''));
+      setJewelryStoneOrMotif((prev) => (prev === '' ? prev : ''));
+      setJewelryCustomization((prev) => (prev === '' ? prev : ''));
     }
     if (!categoryIsCombo(category)) {
-      setComboProductIdsSelected([]);
+      setComboProductIdsSelected((prev) => (prev.length === 0 ? prev : []));
     }
-  }, [category, kindFor, categories]);
+    if (selectedCategoryUsesSizeOptions(category)) {
+      setDimensionsNote((prev) => (prev === '' ? prev : ''));
+    } else {
+      setSizeOptionsInput((prev) => (prev === '' ? prev : ''));
+    }
+  }, [category, adminCategories]);
 
   useEffect(() => {
     if (!editOpen) return;
     const cat = resolvedEditCategory();
     if (!isWatch(cat)) {
-      setEditCaseShape('');
-      setEditDial('');
-      setEditStrapType('');
-      setEditWatchColor('');
-      setEditMatchingBraceletIdsSelected([]);
-      setEditBundlePriceRupee('');
+      setEditCaseShape((prev) => (prev === '' ? prev : ''));
+      setEditDial((prev) => (prev === '' ? prev : ''));
+      setEditStrapType((prev) => (prev === '' ? prev : ''));
+      setEditWatchColor((prev) => (prev === '' ? prev : ''));
+      setEditMatchingBraceletIdsSelected((prev) => (prev.length === 0 ? prev : []));
+      setEditBundlePriceRupee((prev) => (prev === '' ? prev : ''));
     }
     if (!isJewelleryCat(cat)) {
-      setEditJewelryMaterialType('');
-      setEditJewelryFinish('');
-      setEditJewelryStoneOrMotif('');
-      setEditJewelryCustomization('');
+      setEditJewelryMaterialType((prev) => (prev === '' ? prev : ''));
+      setEditJewelryFinish((prev) => (prev === '' ? prev : ''));
+      setEditJewelryStoneOrMotif((prev) => (prev === '' ? prev : ''));
+      setEditJewelryCustomization((prev) => (prev === '' ? prev : ''));
     }
     if (!categoryIsCombo(cat)) {
-      setEditComboProductIdsSelected([]);
+      setEditComboProductIdsSelected((prev) => (prev.length === 0 ? prev : []));
     }
-  }, [editOpen, editCategory, kindFor, categories]);
+    if (selectedCategoryUsesSizeOptions(cat)) {
+      setEditDimensionsNote((prev) => (prev === '' ? prev : ''));
+    } else {
+      setEditSizeOptionsInput((prev) => (prev === '' ? prev : ''));
+    }
+  }, [editOpen, editCategory, adminCategories]);
 
   function openEdit(p: AdminProductRow) {
-    const matched = findCatalogCategory(p.category, categories);
+    const matched = findCatalogCategory(p.category, adminCategories);
     setEditId(p.id);
     setEditName(p.name);
     setEditDescription(p.description);
-    setEditCategory(matched?.slug ?? categories[0]?.slug ?? p.category);
+    setEditCategory(matched?.slug ?? adminCategories[0]?.slug ?? p.category);
     setEditSubcategory(p.subcategory ?? '');
     setEditSku(p.sku ?? '');
     setEditSlug(p.slug ?? '');
@@ -599,6 +690,7 @@ export function AdminProductsPage() {
     setEditJewelryStoneOrMotif(p.jewelryDetails?.stoneOrMotif ?? '');
     setEditJewelryCustomization(p.jewelryDetails?.customizationNote ?? '');
     setEditDimensionsNote(p.dimensions?.displayNote ?? '');
+    setEditSizeOptionsInput((p.sizeOptions ?? []).join(', '));
     setEditWeightGrams(p.weightGrams != null ? String(p.weightGrams) : '');
     setEditCareInstructions(p.careInstructions ?? '');
     setEditPriceRupee((p.price / 100).toFixed(2));
@@ -644,6 +736,9 @@ export function AdminProductsPage() {
 
       const urls = splitList(editImageUrls);
       const combinedImages = [...urls, ...editEmbeddedImages];
+      if (combinedImages.length === 0 && editImageFiles.length === 0) {
+        throw new Error('Add at least one product image (upload a file or paste an image URL)');
+      }
 
       const editCat = resolvedEditCategory();
 
@@ -689,11 +784,7 @@ export function AdminProductsPage() {
         isActive: editIsActive,
       };
 
-      if (combinedImages.length > 0) {
-        payload.images = combinedImages;
-      } else if (editImageFiles.length > 0) {
-        payload.images = [];
-      }
+      payload.images = combinedImages;
 
       if (isWatch(editCat)) {
         payload.watchDetails = watchDetails ?? null;
@@ -725,10 +816,15 @@ export function AdminProductsPage() {
         payload.comboProductIds = [];
       }
 
-      if (editDimensionsNote.trim()) {
+      if (selectedCategoryUsesSizeOptions(editCat)) {
+        const sizeOptions = splitList(editSizeOptionsInput);
+        if (sizeOptions.length === 0) throw new Error('Add at least one size option');
+        payload.sizeOptions = sizeOptions;
+      } else if (editDimensionsNote.trim()) {
         payload.dimensions = { displayNote: editDimensionsNote.trim() };
+        payload.sizeOptions = [];
       } else {
-        payload.dimensions = undefined;
+        payload.sizeOptions = [];
       }
       if (slugTrim.length > 0) payload.slug = slugTrim;
 
@@ -869,7 +965,11 @@ export function AdminProductsPage() {
         payload.comboProductIds = comboIds;
       }
 
-      if (dimensionsNote.trim()) {
+      if (selectedCategoryUsesSizeOptions(cat)) {
+        const sizeOptions = splitList(sizeOptionsInput);
+        if (sizeOptions.length === 0) throw new Error('Add at least one size option');
+        payload.sizeOptions = sizeOptions;
+      } else if (dimensionsNote.trim()) {
         payload.dimensions = { displayNote: dimensionsNote.trim() };
       }
       if (slugTrim.length > 0) payload.slug = slugTrim;
@@ -884,7 +984,7 @@ export function AdminProductsPage() {
       }
       setName('');
       setDescription('');
-      setCategory(categories[0]?.slug ?? '');
+      setCategory(adminCategories[0]?.slug ?? '');
       setSubcategory('');
       setSku('');
       setSlug('');
@@ -902,6 +1002,7 @@ export function AdminProductsPage() {
       setJewelryStoneOrMotif('');
       setJewelryCustomization('');
       setDimensionsNote('');
+      setSizeOptionsInput('');
       setWeightGrams('');
       setCareInstructions('');
       setPriceRupee('');
@@ -931,10 +1032,10 @@ export function AdminProductsPage() {
 
   const filteredCatalog = useMemo(() => {
     if (catalogFilterKey === 'all') return products;
-    const cat = categories.find((c) => c.slug === catalogFilterKey);
+    const cat = adminCategories.find((c) => c.slug === catalogFilterKey);
     if (!cat) return products;
     return products.filter((p) => productMatchesCategory(p.category, cat));
-  }, [products, catalogFilterKey, categories]);
+  }, [products, catalogFilterKey, adminCategories]);
 
   const missingImageCount = useMemo(
     () => products.filter((p) => !(p.images?.length ?? 0)).length,
@@ -969,7 +1070,7 @@ export function AdminProductsPage() {
       ) : null}
 
       <CategoryFilterGroup
-        categories={categories}
+        categories={adminCategories}
         value={catalogFilterKey}
         ariaLabel="Filter catalog by category"
         onChange={setCatalogFilterKey}
@@ -1076,7 +1177,7 @@ export function AdminProductsPage() {
                 <ComboProductsPicker
                   products={products}
                   selectedIds={comboProductIdsSelected}
-                  onSelectedIdsChange={setComboProductIdsSelected}
+                  onSelectedIdsChange={handleComboProductIdsChange}
                   excludeProductId={null}
                   disabled={addSaving}
                 />
@@ -1168,12 +1269,24 @@ export function AdminProductsPage() {
                 fullWidth
                 helperText="Short labels (e.g. Handcrafted, Wedding, Adjustable) — especially useful for jewellery."
               />
-              <TextField
-                label="Size / dimensions (customer-facing)"
-                value={dimensionsNote}
-                onChange={(e) => setDimensionsNote(e.target.value)}
-                fullWidth
-              />
+              {selectedCategoryUsesSizeOptions(category) ? (
+                <TextField
+                  label="Size options"
+                  value={sizeOptionsInput}
+                  onChange={(e) => setSizeOptionsInput(e.target.value)}
+                  fullWidth
+                  required
+                  helperText="Comma-separated sizes customers can choose (e.g. S, M, L or 17 cm, 19 cm)."
+                />
+              ) : (
+                <TextField
+                  label="Size / dimensions (customer-facing)"
+                  value={dimensionsNote}
+                  onChange={(e) => setDimensionsNote(e.target.value)}
+                  fullWidth
+                  helperText="Shown as read-only size text on the product page."
+                />
+              )}
               <TextField
                 label="Weight (g)"
                 value={weightGrams}
@@ -1206,6 +1319,10 @@ export function AdminProductsPage() {
                   fullWidth
                   type="number"
                   inputProps={{ min: 0, step: '0.01' }}
+                  helperText={comboCompareAtHelperText(
+                    addComboCompareSumPaise,
+                    comboProductIdsSelected.length,
+                  )}
                 />
                 <TextField
                   label="Stock"
@@ -1275,7 +1392,7 @@ export function AdminProductsPage() {
               <ComboProductsPicker
                 products={products}
                 selectedIds={editComboProductIdsSelected}
-                onSelectedIdsChange={setEditComboProductIdsSelected}
+                onSelectedIdsChange={handleEditComboProductIdsChange}
                 excludeProductId={editId}
                 disabled={editSaving}
               />
@@ -1357,7 +1474,25 @@ export function AdminProductsPage() {
               fullWidth
               disabled={editSaving}
             />
-            <TextField label="Dimensions note" value={editDimensionsNote} onChange={(e) => setEditDimensionsNote(e.target.value)} fullWidth />
+            {selectedCategoryUsesSizeOptions(editCategory) ? (
+              <TextField
+                label="Size options"
+                value={editSizeOptionsInput}
+                onChange={(e) => setEditSizeOptionsInput(e.target.value)}
+                fullWidth
+                required
+                disabled={editSaving}
+                helperText="Comma-separated sizes customers can choose."
+              />
+            ) : (
+              <TextField
+                label="Size / dimensions (customer-facing)"
+                value={editDimensionsNote}
+                onChange={(e) => setEditDimensionsNote(e.target.value)}
+                fullWidth
+                disabled={editSaving}
+              />
+            )}
             <TextField label="Weight (g)" value={editWeightGrams} onChange={(e) => setEditWeightGrams(e.target.value)} type="number" fullWidth />
             <TextField
               label="Care instructions"
@@ -1369,7 +1504,7 @@ export function AdminProductsPage() {
             />
             <Box sx={formGrid3Sx}>
               <TextField label="Price (INR)" value={editPriceRupee} onChange={(e) => setEditPriceRupee(e.target.value)} type="number" fullWidth />
-              <TextField label="Compare-at (INR)" value={editCompareAtRupee} onChange={(e) => setEditCompareAtRupee(e.target.value)} type="number" fullWidth />
+              <TextField label="Compare-at (INR)" value={editCompareAtRupee} onChange={(e) => setEditCompareAtRupee(e.target.value)} type="number" fullWidth helperText={comboCompareAtHelperText(editComboCompareSumPaise, editComboProductIdsSelected.length)} />
               <TextField label="Stock" value={editStock} onChange={(e) => setEditStock(e.target.value)} type="number" fullWidth />
             </Box>
             <TextField
@@ -1386,6 +1521,7 @@ export function AdminProductsPage() {
               label="Upload additional image files"
               helperText="New uploads are appended (max 15 total)"
               existingUrls={[...splitList(editImageUrls), ...editEmbeddedImages]}
+              onRemoveExistingUrl={removeEditExistingImage}
             />
           </Stack>
         </DialogContent>

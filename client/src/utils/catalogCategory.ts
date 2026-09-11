@@ -1,4 +1,5 @@
 export type CatalogCategoryKind = 'watch' | 'bracelet' | 'jewellery' | 'generic';
+export type CatalogSizeMode = 'description' | 'option';
 
 export type CatalogPriceFilter = {
   id: string;
@@ -19,11 +20,33 @@ export type CatalogCategory = {
   priceFilters: CatalogPriceFilter[];
   priceFiltersEnabled: boolean;
   isCombo: boolean;
+  sizeMode?: CatalogSizeMode;
   isActive: boolean;
 };
 
+export function normalizeCatalogCategory(c: CatalogCategory): CatalogCategory {
+  return {
+    ...c,
+    priceFilters: c.priceFilters ?? [],
+    priceFiltersEnabled: c.priceFiltersEnabled !== false,
+    isCombo: c.isCombo === true,
+    sizeMode: c.sizeMode === 'option' ? 'option' : 'description',
+    isActive: c.isActive !== false,
+    subcategories: c.subcategories ?? [],
+    tileImageUrl: c.tileImageUrl ?? '',
+  };
+}
+
 export function isComboCategory(cat: CatalogCategory | undefined): boolean {
   return cat?.isCombo === true;
+}
+
+export function isSizeOptionCategory(cat: CatalogCategory | undefined): boolean {
+  return cat?.sizeMode === 'option';
+}
+
+export function categoryUsesSizeOptions(productCategory: string, categories: CatalogCategory[]): boolean {
+  return isSizeOptionCategory(findCatalogCategory(productCategory, categories));
 }
 
 export function productMatchesCategory(productCategory: string, cat: CatalogCategory): boolean {

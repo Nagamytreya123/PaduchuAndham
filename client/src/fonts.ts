@@ -18,3 +18,6 @@ import '@fontsource/cormorant-garamond/latin-600.css';
 import '@fontsource/noto-serif/latin-400.css';
 import '@fontsource/noto-serif/latin-700.css';
 import '@fontsource/noto-serif/latin-400-italic.css';
+import '@fontsource/sora/latin-600.css';
+import '@fontsource/sora/latin-700.css';
+import '@fontsource/dm-serif-display/latin-400.css';

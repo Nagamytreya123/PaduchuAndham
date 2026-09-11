@@ -6,6 +6,11 @@ export type SiteSettingsDoc = {
   _id: string;
   homeScrollAnimationEnabled?: boolean;
   supportWhatsAppMobile?: string;
+  socialInstagramUrl?: string;
+  socialYoutubeUrl?: string;
+  socialFacebookUrl?: string;
+  shippingChargePaise?: number;
+  freeShippingMinPaise?: number;
   createdAt?: Date;
   updatedAt?: Date;
 };

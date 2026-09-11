@@ -44,6 +44,8 @@ export type ProductDoc = {
   matchingBraceletIds?: string[];
   watchBraceletBundlePrice?: number;
   comboProductIds?: string[];
+  /** Selectable sizes when the product category uses size-as-option mode. */
+  sizeOptions?: string[];
   createdBy: string;
   createdAt?: Date;
   updatedAt?: Date;

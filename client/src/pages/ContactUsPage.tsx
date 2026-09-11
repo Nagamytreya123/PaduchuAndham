@@ -3,7 +3,8 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import { apiFetch } from '../api/client';
-import { LuxuryShowcaseLoader } from '../components/loading';
+import { BrandFillLoader } from '../components/loading';
+import { useMinimumLoading } from '../hooks/useMinimumLoading';
 import { StorefrontHeader } from '../components/StorefrontHeader';
 import { shopSurface } from '../constants/shopSurface';
 import {
@@ -16,6 +17,7 @@ import {
 export function ContactUsPage() {
   const [mobile, setMobile] = useState<string | null>(() => getClientSupportWhatsAppFallback());
   const [loading, setLoading] = useState(true);
+  const showLoading = useMinimumLoading(loading);
   const [redirecting, setRedirecting] = useState(false);
 
   useEffect(() => {
@@ -70,8 +72,8 @@ export function ContactUsPage() {
           Contact us
         </Typography>
 
-        {loading ? (
-          <LuxuryShowcaseLoader variant="inline" tone="light" aria-label="Loading contact details" />
+        {showLoading ? (
+          <BrandFillLoader variant="inline" aria-label="Loading contact details" />
         ) : redirecting ? (
           <Typography sx={{ color: shopSurface.inkMuted, fontFamily: shopSurface.font.body }}>
             Opening WhatsApp…

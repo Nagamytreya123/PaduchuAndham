@@ -57,6 +57,38 @@ export async function uploadComboImageToS3(
   return uploadBufferToS3(compressed, `combo-${Date.now()}-${base}.webp`, mimetype);
 }
 
+/** Upload product image bytes to S3 as WebP; returns `/uploads/...` path. */
+export async function uploadProductImageToS3(
+  buffer: Buffer,
+  originalName: string,
+  _mimetype: string,
+): Promise<string> {
+  const { buffer: compressed, mimetype } = await compressImageForStorage(buffer);
+  const base = originalName.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9._-]/g, '_');
+  return uploadBufferToS3(compressed, `product-${Date.now()}-${base}.webp`, mimetype);
+}
+
+/** Presigned GET URL for a stored `/uploads/...` path (for email clients that cannot follow redirects). */
+export async function getS3PresignedUrlForUploadPath(
+  uploadPath: string,
+  expiresIn = 3600,
+): Promise<string | null> {
+  if (!isS3UploadsEnabled()) return null;
+  const match = uploadPath.match(/^\/uploads\/(.+)$/);
+  if (!match?.[1]) return null;
+  const key = `uploads/${match[1]}`;
+  try {
+    return await getSignedUrl(
+      getS3Client(),
+      new GetObjectCommand({ Bucket: uploadsBucket(), Key: key }),
+      { expiresIn },
+    );
+  } catch (err) {
+    console.error('[s3 uploads] presign failed', key, err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
 /** Serve GET /uploads/* from S3 when local disk has no file (Lambda). */
 export async function serveUploadFromS3(
   req: Request,

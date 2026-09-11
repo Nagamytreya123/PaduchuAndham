@@ -38,6 +38,7 @@ export function CustomerShell() {
   /** Full-bleed storefront pages with in-page chrome (home editorial landing or `StorefrontHeader`). */
   const hasInPageStorefrontHeader =
     location.pathname === '/' ||
+    location.pathname === '/landing' ||
     location.pathname === '/shop' ||
     location.pathname === '/wishlist' ||
     location.pathname === '/cart' ||

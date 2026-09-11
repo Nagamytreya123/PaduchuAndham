@@ -1,67 +1,74 @@
-import { lazy, Suspense, type ReactElement } from 'react';
+import { Suspense, type ReactElement } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
-import { LuxuryShowcaseLoader } from './components/loading';
+import { BrandFillLoader } from './components/loading';
+import { useMinimumLoading } from './hooks/useMinimumLoading';
+import { lazyWithMinimum } from './utils/lazyWithMinimum';
 import { CustomerShell } from './layouts/CustomerShell';
 import { AccountLayout } from './layouts/AccountLayout';
 import { AdminShell } from './layouts/AdminShell';
 import { AnalyticsListener } from './components/AnalyticsListener';
 import { ScrollRestoration } from './components/ScrollRestoration';
 
-const HomePage = lazy(() => import('./pages/HomePage').then((m) => ({ default: m.HomePage })));
-const ShopPage = lazy(() => import('./pages/ShopPage').then((m) => ({ default: m.ShopPage })));
-const WishlistPage = lazy(() => import('./pages/WishlistPage').then((m) => ({ default: m.WishlistPage })));
-const ProductDetailPage = lazy(() =>
+const HomePage = lazyWithMinimum(() => import('./pages/HomePage').then((m) => ({ default: m.HomePage })));
+const LandingPage = lazyWithMinimum(() => import('./pages/LandingPage').then((m) => ({ default: m.LandingPage })));
+const ShopPage = lazyWithMinimum(() => import('./pages/ShopPage').then((m) => ({ default: m.ShopPage })));
+const WishlistPage = lazyWithMinimum(() => import('./pages/WishlistPage').then((m) => ({ default: m.WishlistPage })));
+const ProductDetailPage = lazyWithMinimum(() =>
   import('./pages/ProductDetailPage').then((m) => ({ default: m.ProductDetailPage })),
 );
-const CartPage = lazy(() => import('./pages/CartPage').then((m) => ({ default: m.CartPage })));
-const CheckoutPage = lazy(() => import('./pages/CheckoutPage').then((m) => ({ default: m.CheckoutPage })));
-const OrderCompletionPage = lazy(() =>
+const CartPage = lazyWithMinimum(() => import('./pages/CartPage').then((m) => ({ default: m.CartPage })));
+const CheckoutPage = lazyWithMinimum(() => import('./pages/CheckoutPage').then((m) => ({ default: m.CheckoutPage })));
+const OrderCompletionPage = lazyWithMinimum(() =>
   import('./pages/OrderCompletionPage').then((m) => ({ default: m.OrderCompletionPage })),
 );
-const LoginPage = lazy(() => import('./pages/LoginPage').then((m) => ({ default: m.LoginPage })));
-const AccountPage = lazy(() => import('./pages/account/AccountPage').then((m) => ({ default: m.AccountPage })));
-const OrdersPage = lazy(() => import('./pages/account/OrdersPage').then((m) => ({ default: m.OrdersPage })));
-const OrderDetailPage = lazy(() =>
+const LoginPage = lazyWithMinimum(() => import('./pages/LoginPage').then((m) => ({ default: m.LoginPage })));
+const AccountPage = lazyWithMinimum(() => import('./pages/account/AccountPage').then((m) => ({ default: m.AccountPage })));
+const OrdersPage = lazyWithMinimum(() => import('./pages/account/OrdersPage').then((m) => ({ default: m.OrdersPage })));
+const OrderDetailPage = lazyWithMinimum(() =>
   import('./pages/account/OrderDetailPage').then((m) => ({ default: m.OrderDetailPage })),
 );
-const OrderItemDetailPage = lazy(() =>
+const OrderItemDetailPage = lazyWithMinimum(() =>
   import('./pages/account/OrderItemDetailPage').then((m) => ({ default: m.OrderItemDetailPage })),
 );
-const SavedAddressesPage = lazy(() =>
+const SavedAddressesPage = lazyWithMinimum(() =>
   import('./pages/account/SavedAddressesPage').then((m) => ({ default: m.SavedAddressesPage })),
 );
-const DashboardPage = lazy(() =>
+const DashboardPage = lazyWithMinimum(() =>
   import('./pages/admin/DashboardPage').then((m) => ({ default: m.DashboardPage })),
 );
-const AdminProductsPage = lazy(() =>
+const AdminProductsPage = lazyWithMinimum(() =>
   import('./pages/admin/AdminProductsPage').then((m) => ({ default: m.AdminProductsPage })),
 );
-const AdminOrdersPage = lazy(() =>
+const AdminOrdersPage = lazyWithMinimum(() =>
   import('./pages/admin/AdminOrdersPage').then((m) => ({ default: m.AdminOrdersPage })),
 );
-const AdminReviewsPage = lazy(() =>
+const AdminReviewsPage = lazyWithMinimum(() =>
   import('./pages/admin/AdminReviewsPage').then((m) => ({ default: m.AdminReviewsPage })),
 );
-const AdminSettingsPage = lazy(() =>
+const AdminSettingsPage = lazyWithMinimum(() =>
   import('./pages/admin/AdminSettingsPage').then((m) => ({ default: m.AdminSettingsPage })),
 );
-const AdminCategoriesPage = lazy(() =>
+const AdminCategoriesPage = lazyWithMinimum(() =>
   import('./pages/admin/AdminCategoriesPage').then((m) => ({ default: m.AdminCategoriesPage })),
 );
-const ContactUsPage = lazy(() =>
+const AdminCouponsPage = lazyWithMinimum(() =>
+  import('./pages/admin/AdminCouponsPage').then((m) => ({ default: m.AdminCouponsPage })),
+);
+const ContactUsPage = lazyWithMinimum(() =>
   import('./pages/ContactUsPage').then((m) => ({ default: m.ContactUsPage })),
 );
 
-function RouteFallback({ tone = 'light' }: { tone?: 'light' | 'dark' }) {
-  return <LuxuryShowcaseLoader variant="fullscreen" tone={tone} aria-label="Loading page" />;
+function RouteFallback() {
+  return <BrandFillLoader variant="fullscreen" aria-label="Loading page" />;
 }
 
 function ProtectedCustomer({ children }: { children: ReactElement }) {
   const { user, loading } = useAuth();
   const location = useLocation();
-  if (loading) {
-    return <LuxuryShowcaseLoader variant="fullscreen" tone="light" aria-label="Loading account" />;
+  const showLoading = useMinimumLoading(loading);
+  if (showLoading) {
+    return <BrandFillLoader variant="fullscreen" aria-label="Loading account" />;
   }
   if (!user) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
@@ -71,8 +78,9 @@ function ProtectedCustomer({ children }: { children: ReactElement }) {
 
 function ProtectedAdmin({ children }: { children: ReactElement }) {
   const { user, loading } = useAuth();
-  if (loading) {
-    return <LuxuryShowcaseLoader variant="fullscreen" tone="dark" aria-label="Loading admin" />;
+  const showLoading = useMinimumLoading(loading);
+  if (showLoading) {
+    return <BrandFillLoader variant="fullscreen" aria-label="Loading admin" />;
   }
   if (!user || user.role !== 'admin') {
     return <Navigate to="/" replace />;
@@ -89,6 +97,7 @@ export function App() {
         <Routes>
           <Route element={<CustomerShell />}>
             <Route index element={<HomePage />} />
+            <Route path="landing" element={<LandingPage />} />
             <Route path="shop" element={<ShopPage />} />
             <Route path="wishlist" element={<WishlistPage />} />
             <Route path="products/:id" element={<ProductDetailPage />} />
@@ -138,6 +147,7 @@ export function App() {
             <Route index element={<DashboardPage />} />
             <Route path="products" element={<AdminProductsPage />} />
             <Route path="categories" element={<AdminCategoriesPage />} />
+            <Route path="coupons" element={<AdminCouponsPage />} />
             <Route path="orders" element={<AdminOrdersPage />} />
             <Route path="reviews" element={<AdminReviewsPage />} />
             <Route path="settings" element={<AdminSettingsPage />} />

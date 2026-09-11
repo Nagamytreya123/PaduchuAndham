@@ -1,6 +1,7 @@
-import nodemailer from 'nodemailer';
 import { env } from '../config/env.js';
 import { UserModel } from '../models/User.js';
+import { resolveOrderItemImages } from '../utils/emailImageUrl.js';
+import { sendMail, warnMissingSmtpOnce } from './emailTransport.js';
 
 export type PaidOrderLine = {
   name: string;
@@ -57,15 +58,6 @@ function parseNotifyEmails(): string[] {
   return out;
 }
 
-function absoluteImageUrl(raw: string | null | undefined): string | null {
-  if (!raw || typeof raw !== 'string') return null;
-  const s = raw.trim();
-  if (!s || s.startsWith('data:')) return null;
-  if (/^https?:\/\//i.test(s)) return s;
-  const base = (env.SERVER_PUBLIC_URL ?? env.CLIENT_URL).replace(/\/$/, '');
-  return `${base}${s.startsWith('/') ? '' : '/'}${s}`;
-}
-
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
@@ -115,10 +107,10 @@ function addressHtmlBlock(addr: OrderAddressEmail): string {
   return `<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;max-width:560px;border-collapse:collapse;font:inherit;background:#f9f9f9;border:1px solid #eee;border-radius:8px;overflow:hidden"><tbody>${rows}</tbody></table>`;
 }
 
-function itemsHtmlTable(items: PaidOrderLine[]): string {
+function itemsHtmlTable(items: PaidOrderLine[], imageSrcs: (string | null)[]): string {
   const rows = items
-    .map((i) => {
-      const img = absoluteImageUrl(i.imageRaw);
+    .map((i, index) => {
+      const img = imageSrcs[index] ?? null;
       const thumb = img
         ? `<img src="${escapeHtml(img)}" width="72" height="72" style="object-fit:cover;border-radius:8px;border:1px solid #e5e5e5;display:block" alt="" />`
         : `<div style="width:72px;height:72px;border-radius:8px;background:#f0f0f0;border:1px solid #e5e5e5"></div>`;
@@ -137,10 +129,10 @@ function itemsHtmlTable(items: PaidOrderLine[]): string {
   return `<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;max-width:560px;border-collapse:collapse">${rows}</table>`;
 }
 
-function itemsTextBlock(items: PaidOrderLine[]): string {
+function itemsTextBlock(items: PaidOrderLine[], imageSrcs: (string | null)[]): string {
   return items
-    .map((i) => {
-      const img = absoluteImageUrl(i.imageRaw);
+    .map((i, index) => {
+      const img = imageSrcs[index] ?? null;
       const bits = [
         `  • ${i.name} × ${i.qty} — ${rupeesFromPaise(lineTotalPaise(i))} (${rupeesFromPaise(i.price)} each)`,
       ];
@@ -159,64 +151,9 @@ function summaryBlock(payload: PaidOrderNotifyPayload, total: string): string {
   ].join('\n');
 }
 
-let warnedMissingSmtp = false;
-
-function warnMissingSmtpOnce(reason: string): void {
-  if (warnedMissingSmtp) return;
-  warnedMissingSmtp = true;
-  console.warn(`[orderPaidEmails] ${reason}`);
-}
-
-function createTransporter() {
-  const host = env.SMTP_HOST?.trim();
-  if (!host) {
-    warnMissingSmtpOnce(
-      'SMTP_HOST is not set — order confirmation emails are disabled. Add SMTP_HOST, SMTP_USER, and SMTP_PASS to .env, then restart the API.',
-    );
-    return null;
-  }
-  const port = Number(env.SMTP_PORT) > 0 ? Number(env.SMTP_PORT) : 587;
-  const secure =
-    port === 465 || env.SMTP_SECURE?.trim().toLowerCase() === 'true' || env.SMTP_SECURE === '1';
-  const user = env.SMTP_USER?.trim();
-  const pass = env.SMTP_PASS ?? '';
-  if (!user || !pass) {
-    warnMissingSmtpOnce(
-      'SMTP_USER or SMTP_PASS is missing — order confirmation emails are disabled. Set both in .env (Gmail: use an App Password).',
-    );
-    return null;
-  }
-  return nodemailer.createTransport({
-    host,
-    port,
-    secure,
-    auth: { user, pass },
-  });
-}
-
-function fromAddress(): string {
-  const user = env.SMTP_USER?.trim();
-  const addr = env.SMTP_FROM?.trim() || user;
-  if (!addr) return 'orders@paduchuandham.com';
-  return `"Paduchu Andham Orders" <${addr}>`;
-}
-
-async function sendMail(opts: { to: string; subject: string; text: string; html: string }): Promise<void> {
-  const transporter = createTransporter();
-  if (!transporter) return;
-  const from = fromAddress();
-  await transporter.sendMail({
-    from,
-    to: opts.to,
-    subject: opts.subject,
-    text: opts.text,
-    html: opts.html,
-  });
-  console.info(`[orderPaidEmails] sent "${opts.subject}" to ${opts.to}`);
-}
-
 function buildAdminBodies(
   payload: PaidOrderNotifyPayload,
+  imageSrcs: (string | null)[],
   customerEmail: string | undefined,
   customerName: string | undefined,
 ) {
@@ -237,7 +174,7 @@ function buildAdminBodies(
     customerEmail ? `Email: ${customerEmail}` : null,
     '',
     'Items:',
-    itemsTextBlock(payload.items),
+    itemsTextBlock(payload.items, imageSrcs),
     '',
     'Ship to:',
     addrText,
@@ -253,7 +190,7 @@ ${customerBits}
 <p style="margin:8px 0"><strong>Razorpay payment:</strong> ${escapeHtml(payload.razorpayPaymentId)}</p>
 <p style="margin:8px 0;font-size:18px"><strong>Total paid:</strong> ${escapeHtml(total)}</p>
 <h3 style="margin:24px 0 8px;border-top:1px solid #eee;padding-top:16px">Items</h3>
-${itemsHtmlTable(payload.items)}
+${itemsHtmlTable(payload.items, imageSrcs)}
 <h3 style="margin:24px 0 8px">Ship to</h3>
 ${addrHtml}
 </body></html>`;
@@ -261,7 +198,11 @@ ${addrHtml}
   return { subject, text, html };
 }
 
-function buildCustomerBodies(payload: PaidOrderNotifyPayload, customerName: string | undefined) {
+function buildCustomerBodies(
+  payload: PaidOrderNotifyPayload,
+  imageSrcs: (string | null)[],
+  customerName: string | undefined,
+) {
   const total = rupeesFromPaise(payload.amountPaise);
   const addrText = addressTextBlock(payload.address);
   const addrHtml = addressHtmlBlock(payload.address);
@@ -277,7 +218,7 @@ function buildCustomerBodies(payload: PaidOrderNotifyPayload, customerName: stri
     summaryBlock(payload, total),
     '',
     'Items:',
-    itemsTextBlock(payload.items),
+    itemsTextBlock(payload.items, imageSrcs),
     '',
     'Shipping address:',
     addrText,
@@ -295,7 +236,7 @@ function buildCustomerBodies(payload: PaidOrderNotifyPayload, customerName: stri
 <p style="margin:8px 0"><strong>Payment ref:</strong> ${escapeHtml(payload.razorpayPaymentId)}</p>
 <p style="margin:8px 0;font-size:18px"><strong>Amount paid:</strong> ${escapeHtml(total)}</p>
 <h3 style="margin:24px 0 8px;border-top:1px solid #eee;padding-top:16px">Your items</h3>
-${itemsHtmlTable(payload.items)}
+${itemsHtmlTable(payload.items, imageSrcs)}
 <h3 style="margin:24px 0 8px">Shipping address</h3>
 ${addrHtml}
 <p style="margin:24px 0"><a href="${escapeHtml(ordersUrl)}" style="display:inline-block;background:#111;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-weight:600">View my orders</a></p>
@@ -331,22 +272,28 @@ export async function notifyOrderPaidEmails(payload: PaidOrderNotifyPayload): Pr
 
   const adminTo = parseNotifyEmails().filter((email) => email !== customerEmail?.toLowerCase());
 
+  const { imageSrcs, attachments } = await resolveOrderItemImages(payload.items);
+
   const tasks: Promise<void>[] = [];
 
   if (customerEmail) {
-    const b = buildCustomerBodies(payload, customerName);
+    const b = buildCustomerBodies(payload, imageSrcs, customerName);
     tasks.push(
-      sendMail({ to: customerEmail, ...b }).catch((err) => {
-        console.error(`[notifyOrderPaidEmails] customer email failed (${customerEmail})`, err);
-        throw err;
-      }),
+      sendMail({ to: customerEmail, ...b, attachments })
+        .then((sent) => {
+          if (!sent) throw new Error('SMTP not configured');
+        })
+        .catch((err) => {
+          console.error(`[notifyOrderPaidEmails] customer email failed (${customerEmail})`, err);
+          throw err;
+        }),
     );
   } else {
     console.warn('[notifyOrderPaidEmails] no customer email for user', payload.userId);
   }
 
   if (adminTo.length > 0) {
-    const b = buildAdminBodies(payload, customerEmail, customerName);
+    const b = buildAdminBodies(payload, imageSrcs, customerEmail, customerName);
     for (const adminEmail of adminTo) {
       tasks.push(
         sendMail({
@@ -354,10 +301,15 @@ export async function notifyOrderPaidEmails(payload: PaidOrderNotifyPayload): Pr
           subject: b.subject,
           text: b.text,
           html: b.html,
-        }).catch((err) => {
-          console.error(`[notifyOrderPaidEmails] admin email failed (${adminEmail})`, err);
-          throw err;
-        }),
+          attachments,
+        })
+          .then((sent) => {
+            if (!sent) throw new Error('SMTP not configured');
+          })
+          .catch((err) => {
+            console.error(`[notifyOrderPaidEmails] admin email failed (${adminEmail})`, err);
+            throw err;
+          }),
       );
     }
   } else {

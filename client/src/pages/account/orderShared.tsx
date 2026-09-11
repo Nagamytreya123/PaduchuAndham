@@ -96,6 +96,10 @@ export type OrderDetail = {
   id: string;
   status: string;
   amount: number;
+  subtotalPaise?: number;
+  discountPaise?: number;
+  couponCode?: string;
+  shippingPaise?: number;
   currency: string;
   createdAt: string;
   items?: OrderLine[];

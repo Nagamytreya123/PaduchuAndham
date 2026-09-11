@@ -1,3 +1,11 @@
+/** Sum list prices (paise) for combo-linked products — used for compare-at and savings on PDP. */
+export function sumComboLinkedListPricesPaise(
+  productIds: string[],
+  priceById: ReadonlyMap<string, number>,
+): number {
+  return productIds.reduce((sum, id) => sum + (priceById.get(id) ?? 0), 0);
+}
+
 /** Split bundle total across watch and bracelet by list-price ratio (integer paise). Mirrors server checkout validation. */
 export function allocateWatchBraceletBundle(
   watchListPaise: number,

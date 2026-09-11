@@ -31,6 +31,7 @@ const lineSchema = z.object({
       if (!t || t.startsWith('data:')) return undefined;
       return t;
     }),
+  selectedSize: z.string().min(1).max(80).optional(),
 });
 
 const putBodySchema = z.object({
@@ -52,6 +53,7 @@ router.get('/', async (req, res) => {
     bundleDisplayName: it.bundleDisplayName,
     bundleUnitTotalPaise: it.bundleUnitTotalPaise,
     bundleImage: it.bundleImage,
+    selectedSize: it.selectedSize,
   }));
   res.json({ items });
 });
@@ -77,6 +79,7 @@ router.put('/', async (req, res) => {
     bundleDisplayName: it.bundleDisplayName,
     bundleUnitTotalPaise: it.bundleUnitTotalPaise,
     bundleImage: it.bundleImage,
+    selectedSize: it.selectedSize,
   }));
 
   await CartModel.findOneAndUpdate(

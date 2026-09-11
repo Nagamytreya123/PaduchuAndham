@@ -14,6 +14,7 @@
     "seed:starter": "tsx src/scripts/seedStarterProducts.ts",
     "fix:product-images": "tsx src/scripts/fixProductImages.ts",
     "recompress:product-images": "tsx src/scripts/recompressProductImages.ts",
+    "backfill:product-timestamps": "tsx src/scripts/backfillProductTimestamps.ts",
     "check:product-images": "tsx src/scripts/checkProductImages.ts"
   },
   "dependencies": {

@@ -14,6 +14,7 @@ import { useCategories } from '../context/CategoriesContext';
 import { apiFetch } from '../api/client';
 import type { ProductSummary } from '../types/product';
 import { formatInrFromPaise } from '../utils/format';
+import { SansDigitsText } from '../components/SansDigitsText';
 import { handleProductImageError, PRODUCT_IMAGE_FALLBACK } from '../utils/productImage';
 import { IconClose } from '../icons';
 
@@ -140,7 +141,7 @@ function WishlistCard({
               '&:hover': { color: shopSurface.inkMuted },
             }}
           >
-            {item.name}
+            <SansDigitsText text={item.name} />
           </Typography>
           {item.subtitle ? (
             <Typography

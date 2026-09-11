@@ -22,7 +22,12 @@ export function PriceFilterGroup({
   if (filters.length === 0) return null;
   const selected = value || ALL;
   return (
-    <Stack direction="row" justifyContent="center" flexWrap="wrap" sx={{ width: '100%' }}>
+    <Stack
+      direction="row"
+      justifyContent="center"
+      flexWrap="wrap"
+      sx={{ width: 'fit-content', maxWidth: '100%', mx: 'auto' }}
+    >
       <ToggleButtonGroup
         exclusive
         value={selected}

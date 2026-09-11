@@ -5,6 +5,7 @@ import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import Stack from '@mui/material/Stack';
 import { PdpLoadingState } from '../components/loading';
+import { useMinimumLoading } from '../hooks/useMinimumLoading';
 import Chip from '@mui/material/Chip';
 import Paper from '@mui/material/Paper';
 import Link from '@mui/material/Link';
@@ -15,6 +16,7 @@ import { comboToWishlistItem } from '../context/WishlistContext';
 import { StorefrontHeader } from '../components/StorefrontHeader';
 import type { JewelleryComboDetail } from '../types/jewelleryCombo';
 import { formatInrFromPaise } from '../utils/format';
+import { shopSurface } from '../constants/shopSurface';
 import { allocateListRatioBundle } from '../utils/bundlePricing';
 
 export function JewelleryComboDetailPage() {
@@ -23,6 +25,7 @@ export function JewelleryComboDetailPage() {
   const { addBundle } = useCart();
   const [combo, setCombo] = useState<JewelleryComboDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const showLoading = useMinimumLoading(loading);
 
   useEffect(() => {
     if (!id) return;
@@ -38,7 +41,7 @@ export function JewelleryComboDetailPage() {
     })();
   }, [id]);
 
-  if (loading) {
+  if (showLoading) {
     return <PdpLoadingState aria-label="Loading combo" />;
   }
 
@@ -137,11 +140,13 @@ export function JewelleryComboDetailPage() {
       </Paper>
 
       <Stack direction="row" alignItems="baseline" gap={1} flexWrap="wrap">
-        <Typography variant="h6" color="primary.main" fontWeight={800}>
+        <Typography sx={{ ...shopSurface.amount, fontSize: '1.25rem', color: 'primary.main' }}>
           {formatInrFromPaise(combo.price)}
         </Typography>
         {listSum > combo.price && (
-          <Typography variant="body2" color="text.secondary" sx={{ textDecoration: 'line-through' }}>
+          <Typography
+            sx={{ ...shopSurface.amount, color: 'text.secondary', textDecoration: 'line-through' }}
+          >
             {formatInrFromPaise(listSum)}
           </Typography>
         )}

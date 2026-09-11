@@ -9,6 +9,11 @@ router.use(requireAuth, requireAdmin);
 const patchSchema = z.object({
   homeScrollAnimationEnabled: z.boolean().optional(),
   supportWhatsAppMobile: z.string().nullable().optional(),
+  socialInstagramUrl: z.string().nullable().optional(),
+  socialYoutubeUrl: z.string().nullable().optional(),
+  socialFacebookUrl: z.string().nullable().optional(),
+  shippingChargePaise: z.number().int().min(0).optional(),
+  freeShippingMinPaise: z.number().int().positive().nullable().optional(),
 });
 
 router.get('/', async (_req, res) => {
@@ -26,9 +31,9 @@ router.patch('/', async (req, res) => {
   }
 
   try {
-    const settings = await updateSiteSettings(body);
-    const supportWhatsApp = (await getAdminSiteSettings()).supportWhatsApp;
-    res.json({ settings, supportWhatsApp });
+    await updateSiteSettings(body);
+    const payload = await getAdminSiteSettings();
+    res.json(payload);
   } catch (e) {
     res.status(400).json({ error: e instanceof Error ? e.message : 'Failed to save settings' });
   }

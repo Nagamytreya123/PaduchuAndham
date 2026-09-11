@@ -15,7 +15,9 @@ export function ensureGoogleStrategy(): boolean {
   }
   if (googleConfigured) return true;
 
-  const callbackURL = `${(env.SERVER_PUBLIC_URL ?? env.CLIENT_URL).replace(/\/$/, '')}/api/auth/google/callback`;
+  // OAuth redirect must match the browser origin (CLIENT_URL). In local dev the Vite proxy
+  // serves /api on :5173 — do not use SERVER_PUBLIC_URL here (often :4000 for the API only).
+  const callbackURL = `${env.CLIENT_URL.replace(/\/$/, '')}/api/auth/google/callback`;
 
   passport.use(
     new GoogleStrategy(

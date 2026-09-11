@@ -1,4 +1,5 @@
 import type { SxProps, Theme } from '@mui/material/styles';
+import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import MenuItem from '@mui/material/MenuItem';
@@ -94,12 +95,23 @@ export function ShippingAddressFields({ value, onChange, showLabel, showRecipien
             fullWidth
             value={value.state}
             onChange={(e) => patch({ state: e.target.value })}
-            SelectProps={{ displayEmpty: true }}
+            InputLabelProps={{ shrink: true }}
+            SelectProps={{
+              displayEmpty: true,
+              renderValue: (selected) => {
+                const state = String(selected ?? '');
+                if (!state) {
+                  return (
+                    <Box component="span" sx={{ color: '#5c5c5c', opacity: 0.72 }}>
+                      Select state
+                    </Box>
+                  );
+                }
+                return state;
+              },
+            }}
             sx={fieldSx}
           >
-            <MenuItem value="">
-              <em>Select state</em>
-            </MenuItem>
             {INDIAN_STATES_AND_UTS.map((name) => (
               <MenuItem key={name} value={name}>
                 {name}

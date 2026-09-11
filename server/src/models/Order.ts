@@ -5,6 +5,7 @@ export type OrderItemDoc = {
   name: string;
   price: number;
   qty: number;
+  selectedSize?: string;
 };
 
 export type OrderAddressDoc = {
@@ -25,6 +26,11 @@ export type OrderDoc = {
   items: OrderItemDoc[];
   status?: 'pending' | 'paid' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
   amount: number;
+  subtotalPaise?: number;
+  discountPaise?: number;
+  couponCode?: string;
+  couponId?: string;
+  shippingPaise?: number;
   currency?: string;
   razorpayOrderId?: string;
   razorpayPaymentId?: string;

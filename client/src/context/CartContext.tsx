@@ -21,6 +21,8 @@ export type CartLine = {
   price: number;
   qty: number;
   image?: string;
+  /** Selected size when the product category uses size-as-option mode. */
+  selectedSize?: string;
   /** Present on every line that belongs to one jewellery combo or watch+bracelet bundle. */
   bundleGroupId?: string;
   bundleDisplayName?: string;
@@ -55,6 +57,11 @@ export function cartBadgeCount(lines: CartLine[]): number {
   return n;
 }
 
+export function cartStandaloneLineKey(line: Pick<CartLine, 'productId' | 'selectedSize' | 'bundleGroupId'>): string {
+  if (line.bundleGroupId) return line.bundleGroupId;
+  return `${line.productId}:${line.selectedSize ?? ''}`;
+}
+
 function mergeCartLines(server: CartLine[], guest: CartLine[]): CartLine[] {
   const collectGroups = (lines: CartLine[]) => {
     const m = new Map<string, CartLine[]>();
@@ -85,14 +92,15 @@ function mergeCartLines(server: CartLine[], guest: CartLine[]): CartLine[] {
   for (const l of server) {
     if (l.bundleGroupId) continue;
     if (bundledPids.has(l.productId)) continue;
-    standaloneMap.set(l.productId, { ...l });
+    standaloneMap.set(cartStandaloneLineKey(l), { ...l });
   }
   for (const l of guest) {
     if (l.bundleGroupId) continue;
     if (bundledPids.has(l.productId)) continue;
-    const ex = standaloneMap.get(l.productId);
-    if (ex) standaloneMap.set(l.productId, { ...ex, qty: ex.qty + l.qty });
-    else standaloneMap.set(l.productId, { ...l });
+    const key = cartStandaloneLineKey(l);
+    const ex = standaloneMap.get(key);
+    if (ex) standaloneMap.set(key, { ...ex, qty: ex.qty + l.qty });
+    else standaloneMap.set(key, { ...l });
   }
 
   return [...standaloneMap.values(), ...bundleOut];
@@ -116,6 +124,7 @@ function sanitizeCartForApi(items: CartLine[]): CartLine[] {
     bundleUnitTotalPaise:
       item.bundleUnitTotalPaise !== undefined ? Math.round(item.bundleUnitTotalPaise) : undefined,
     bundleImage: safeImage(item.bundleImage),
+    selectedSize: item.selectedSize?.trim() || undefined,
   }));
 }
 
@@ -134,9 +143,9 @@ type CartCtx = {
   lines: CartLine[];
   add: (line: Omit<CartLine, 'qty'> & { qty?: number }) => void;
   addBundle: (input: AddBundleInput) => void;
-  setQty: (productId: string, qty: number) => void;
+  setQty: (productId: string, qty: number, selectedSize?: string) => void;
   setBundleQty: (bundleGroupId: string, qty: number) => void;
-  remove: (productId: string) => void;
+  remove: (productId: string, selectedSize?: string) => void;
   removeBundle: (bundleGroupId: string) => void;
   clear: () => void;
   totalPaise: number;
@@ -249,8 +258,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const add = useCallback((line: Omit<CartLine, 'qty'> & { qty?: number }) => {
     const qty = line.qty ?? 1;
+    const key = cartStandaloneLineKey(line);
     setLines((prev) => {
-      const idx = prev.findIndex((l) => l.productId === line.productId && !l.bundleGroupId);
+      const idx = prev.findIndex((l) => !l.bundleGroupId && cartStandaloneLineKey(l) === key);
       if (idx === -1) {
         return [...prev, { ...line, qty }];
       }
@@ -260,6 +270,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         qty: copy[idx]!.qty + qty,
         image: line.image ?? copy[idx]!.image,
         name: line.name || copy[idx]!.name,
+        selectedSize: line.selectedSize ?? copy[idx]!.selectedSize,
       };
       return copy;
     });
@@ -312,16 +323,21 @@ export function CartProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const setQty = useCallback((productId: string, qty: number) => {
+  const setQty = useCallback((productId: string, qty: number, selectedSize?: string) => {
+    const key = `${productId}:${selectedSize ?? ''}`;
     setLines((prev) => {
-      const line = prev.find((l) => l.productId === productId);
+      const line = prev.find((l) => !l.bundleGroupId && cartStandaloneLineKey(l) === key);
       if (line?.bundleGroupId) {
         return prev
           .map((l) => (l.bundleGroupId === line.bundleGroupId ? { ...l, qty } : l))
           .filter((l) => l.qty > 0);
       }
-      if (qty <= 0) return prev.filter((l) => l.productId !== productId);
-      return prev.map((l) => (l.productId === productId && !l.bundleGroupId ? { ...l, qty } : l));
+      if (qty <= 0) {
+        return prev.filter((l) => l.bundleGroupId || cartStandaloneLineKey(l) !== key);
+      }
+      return prev.map((l) =>
+        !l.bundleGroupId && cartStandaloneLineKey(l) === key ? { ...l, qty } : l,
+      );
     });
   }, []);
 
@@ -329,13 +345,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setLines((prev) => prev.filter((l) => l.bundleGroupId !== bundleGroupId));
   }, []);
 
-  const remove = useCallback((productId: string) => {
+  const remove = useCallback((productId: string, selectedSize?: string) => {
+    const key = `${productId}:${selectedSize ?? ''}`;
     setLines((prev) => {
-      const hit = prev.find((l) => l.productId === productId);
+      const hit = prev.find((l) => !l.bundleGroupId && cartStandaloneLineKey(l) === key);
       if (hit?.bundleGroupId) {
         return prev.filter((l) => l.bundleGroupId !== hit.bundleGroupId);
       }
-      return prev.filter((l) => l.productId !== productId);
+      return prev.filter((l) => l.bundleGroupId || cartStandaloneLineKey(l) !== key);
     });
   }, []);
 

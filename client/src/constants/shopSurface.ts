@@ -8,6 +8,14 @@ export const shopSurface = {
   inkMuted: '#5c5c5c',
   white: '#ffffff',
   badge: '#8A8175',
+  /** Shop collection filter toggles — gold selected state on cream. */
+  filterToggle: {
+    border: '#c4a574',
+    selectedBg: '#c4a574',
+    selectedBorder: '#c4a574',
+    selectedHoverBg: '#b89563',
+    hoverBg: 'rgba(196, 165, 116, 0.12)',
+  },
   font: {
     display: '"Playfair Display", "Cormorant Garamond", Georgia, serif',
     body: '"Inter", "Helvetica Neue", Arial, sans-serif',
@@ -27,9 +35,11 @@ export const shopSurface = {
       lineHeight: 1.2,
     },
     price: {
-      fontFamily: '"Playfair Display", Georgia, serif',
+      fontFamily: '"Inter", "Helvetica Neue", Arial, sans-serif',
       fontSize: '1.25rem',
-      fontWeight: 500,
+      fontWeight: 600,
+      fontVariantNumeric: 'tabular-nums lining-nums',
+      letterSpacing: '0.01em',
     },
     body: {
       fontFamily: '"Inter", sans-serif',

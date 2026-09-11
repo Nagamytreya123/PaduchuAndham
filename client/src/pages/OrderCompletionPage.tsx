@@ -7,6 +7,7 @@ import { OrderCompletionExperience, type OrderCompletionOutcome } from '../compo
 import { formatEstimatedDelivery } from '../utils/estimatedDelivery';
 import type { OrderCompletionNavState } from '../types/orderCompletion';
 import { useReducedMotion } from '../hooks/useReducedMotion';
+import { clearStoredCouponCode } from '../utils/coupon';
 
 function delay(ms: number) {
   return new Promise<void>((r) => {
@@ -47,6 +48,7 @@ export function OrderCompletionPage() {
         await delay(Math.max(0, minProcessingMs - elapsed));
         trackPurchase(state.orderId, state.lines, state.totalPaise);
         clear();
+        clearStoredCouponCode();
         setOutcome('success');
       } catch (e) {
         const elapsed = Date.now() - started;

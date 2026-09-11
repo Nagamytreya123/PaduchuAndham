@@ -16,6 +16,8 @@ type AdminMultiImageUploadProps = {
   helperText?: string;
   /** Existing saved image URLs — shown as thumbnails in the edit dialog */
   existingUrls?: string[];
+  /** Remove a saved image before the product is updated */
+  onRemoveExistingUrl?: (url: string) => void;
 };
 
 export function AdminMultiImageUpload({
@@ -25,6 +27,7 @@ export function AdminMultiImageUpload({
   label = 'Upload image files',
   helperText = 'JPEG, PNG, or WebP — large photos are compressed automatically on upload (up to 10 MB each).',
   existingUrls = [],
+  onRemoveExistingUrl,
 }: AdminMultiImageUploadProps) {
   const remaining = MAX_FILES - files.length - existingUrls.length;
 
@@ -52,16 +55,40 @@ export function AdminMultiImageUpload({
         {files.length > 0 ? ` · ${files.length} new file${files.length === 1 ? '' : 's'} selected` : ''}
       </Typography>
       {existingUrls.length > 0 ? (
-        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-          {existingUrls.map((url) => (
-            <Box
-              key={url}
-              component="img"
-              src={resolveMediaUrl(url)}
-              alt=""
-              sx={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 1, border: '1px solid', borderColor: 'divider' }}
-            />
-          ))}
+        <Stack spacing={0.75}>
+          <Typography variant="caption" color="text.secondary">
+            Saved images
+          </Typography>
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+            {existingUrls.map((url, index) => (
+              <Stack key={`${url}-${index}`} spacing={0.5} alignItems="center" sx={{ width: 72 }}>
+                <Box
+                  component="img"
+                  src={resolveMediaUrl(url)}
+                  alt=""
+                  sx={{
+                    width: 72,
+                    height: 72,
+                    objectFit: 'cover',
+                    borderRadius: 1,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                  }}
+                />
+                {onRemoveExistingUrl ? (
+                  <IconButton
+                    size="small"
+                    aria-label="Remove saved image"
+                    disabled={disabled}
+                    onClick={() => onRemoveExistingUrl(url)}
+                    sx={{ mt: -0.25 }}
+                  >
+                    <IconDelete fontSize="small" />
+                  </IconButton>
+                ) : null}
+              </Stack>
+            ))}
+          </Stack>
         </Stack>
       ) : null}
       {files.map((f, index) => (

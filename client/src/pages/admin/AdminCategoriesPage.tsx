@@ -92,6 +92,7 @@ function normalizeAdminCategory(c: CatalogCategory): CatalogCategory {
     priceFilters: c.priceFilters ?? [],
     priceFiltersEnabled: c.priceFiltersEnabled !== false,
     isCombo: c.isCombo === true,
+    sizeMode: c.sizeMode === 'option' ? 'option' : 'description',
     isActive: c.isActive !== false,
     subcategories: c.subcategories ?? [],
     tileImageUrl: c.tileImageUrl ?? '',
@@ -126,6 +127,7 @@ export function AdminCategoriesPage() {
   const [filters, setFilters] = useState<FilterDraft[]>([]);
   const [priceFiltersEnabled, setPriceFiltersEnabled] = useState(true);
   const [isCombo, setIsCombo] = useState(false);
+  const [sizeMode, setSizeMode] = useState<'description' | 'option'>('description');
   const [togglingSlug, setTogglingSlug] = useState<string | null>(null);
 
   const [subDialogOpen, setSubDialogOpen] = useState(false);
@@ -192,6 +194,7 @@ export function AdminCategoriesPage() {
     setFilters([]);
     setPriceFiltersEnabled(true);
     setIsCombo(false);
+    setSizeMode('description');
     setError(null);
     setDialogOpen(true);
   }
@@ -204,6 +207,7 @@ export function AdminCategoriesPage() {
     setFilters(draftsFromFilters(cat.priceFilters ?? []));
     setPriceFiltersEnabled(cat.priceFiltersEnabled !== false);
     setIsCombo(cat.isCombo === true);
+    setSizeMode(cat.sizeMode === 'option' ? 'option' : 'description');
     setError(null);
     setDialogOpen(true);
   }
@@ -242,7 +246,7 @@ export function AdminCategoriesPage() {
         await apiFetch(`/api/admin/categories/${encodeURIComponent(slug)}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ label: name, priceFilters, priceFiltersEnabled, isCombo }),
+          body: JSON.stringify({ label: name, priceFilters, priceFiltersEnabled, isCombo, sizeMode }),
         });
       }
 
@@ -254,7 +258,7 @@ export function AdminCategoriesPage() {
         await apiFetch(`/api/admin/categories/${encodeURIComponent(slug)}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ priceFilters, priceFiltersEnabled, isCombo }),
+          body: JSON.stringify({ priceFilters, priceFiltersEnabled, isCombo, sizeMode }),
         });
       }
 
@@ -522,6 +526,7 @@ export function AdminCategoriesPage() {
                         ? ` · ${c.priceFilters.length} price filter${c.priceFilters.length === 1 ? '' : 's'}`
                         : ''}
                       {c.isCombo ? ' · combo category' : ''}
+                      {c.sizeMode === 'option' ? ' · size as option' : ''}
                       {c.priceFiltersEnabled === false ? ' · price filters off' : ''}
                     </Typography>
                     <FormControlLabel
@@ -637,6 +642,20 @@ export function AdminCategoriesPage() {
             />
             <Typography variant="caption" color="text.secondary">
               Combo categories let you create product sets that add all linked items to the cart at one price.
+            </Typography>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={sizeMode === 'option'}
+                  disabled={saving}
+                  onChange={(_e, checked) => setSizeMode(checked ? 'option' : 'description')}
+                />
+              }
+              label="Size as selectable option"
+            />
+            <Typography variant="caption" color="text.secondary">
+              When enabled, products in this category list size options customers must choose on the product page.
+              Otherwise size is entered as a description on each product.
             </Typography>
             <Divider />
             <Stack direction="row" alignItems="center" justifyContent="space-between" flexWrap="wrap" gap={1}>

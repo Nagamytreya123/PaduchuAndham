@@ -4,6 +4,7 @@ import { pruneCatalog } from '../utils/catalogCache';
 import {
   categoryKindOf,
   findCatalogCategory,
+  normalizeCatalogCategory,
   type CatalogCategory,
   type CatalogCategoryKind,
 } from '../utils/catalogCategory';
@@ -34,18 +35,10 @@ export function CategoriesProvider({ children }: { children: ReactNode }) {
   const skipRevisionBump = useRef(true);
 
   const refresh = useCallback(async (opts?: RefreshOptions) => {
-    const data = await apiFetch<{ categories: CatalogCategory[] }>('/api/categories');
-    setCategories(
-      (data.categories ?? []).map((c) => ({
-        ...c,
-        priceFilters: c.priceFilters ?? [],
-            priceFiltersEnabled: c.priceFiltersEnabled !== false,
-        isCombo: c.isCombo === true,
-        isActive: c.isActive !== false,
-            subcategories: c.subcategories ?? [],
-        tileImageUrl: c.tileImageUrl ?? '',
-      })),
-    );
+    const data = await apiFetch<{ categories: CatalogCategory[] }>('/api/categories', {
+      cache: 'no-store',
+    });
+    setCategories((data.categories ?? []).map(normalizeCatalogCategory));
     const removed = opts?.removedProductIds ?? [];
     if (removed.length > 0) {
       pruneCatalog(removed);

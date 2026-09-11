@@ -44,7 +44,7 @@ export function resolveMediaUrl(url: string | undefined | null): string {
     return t;
   }
 
-  if (t.startsWith('/uploads/')) {
+  if (t.startsWith('/uploads/') || t.startsWith('/api/')) {
     const base = mediaBaseOrigin();
     return base ? `${base}${t}` : t;
   }

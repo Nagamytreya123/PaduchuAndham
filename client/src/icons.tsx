@@ -238,6 +238,14 @@ export function IconOrderRefunded(props: SvgIconProps) {
   );
 }
 
+export function IconBell(props: SvgIconProps) {
+  return (
+    <SvgIcon {...props}>
+      <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.9.49-.09 1-.09 1.5 0 2.49.4 4 2.42 4 4.9v6z" />
+    </SvgIcon>
+  );
+}
+
 export function IconLocationPin(props: SvgIconProps) {
   return (
     <SvgIcon {...props} viewBox="0 0 24 24">
@@ -298,6 +306,14 @@ export function IconGoogle(props: SvgIconProps) {
         fill="#1976D2"
         d="M43.611 20.083H42V20H24v8h11.303a12.04 12.04 0 0 1-4.087 5.571l.003-.002l6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z"
       />
+    </SvgIcon>
+  );
+}
+
+export function IconCoupon(props: SvgIconProps) {
+  return (
+    <SvgIcon {...props}>
+      <path d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58s1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41s-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4S7 4.67 7 5.5S6.33 7 5.5 7zm15.27 9.73l-7 7a2.996 2.996 0 0 1-4.24 0l-9-9a2.996 2.996 0 0 1 0-4.24l7-7A2.996 2.996 0 0 1 11.58 3h7c.8 0 1.54.31 2.09.86l4.14 4.14c.55.55.86 1.29.86 2.09v7c0 .8-.31 1.54-.86 2.09z" />
     </SvgIcon>
   );
 }

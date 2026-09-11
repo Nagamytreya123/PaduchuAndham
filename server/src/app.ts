@@ -32,7 +32,9 @@ import meRoutes from './routes/me.js';
 import siteSettingsRoutes from './routes/siteSettings.js';
 import adminSiteSettingsRoutes from './routes/adminSiteSettings.js';
 import adminCategoriesRoutes from './routes/adminCategories.js';
+import adminCouponsRoutes from './routes/adminCoupons.js';
 import categoriesRoutes from './routes/categories.js';
+import couponsRoutes from './routes/coupons.js';
 import { serveUploadFromS3 } from './utils/s3Upload.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -145,8 +147,10 @@ export function createApp(): express.Express {
   app.use('/api/orders', optionalAuth, ordersRoutes);
   app.use('/api/admin/orders', optionalAuth, adminOrdersRoutes);
   app.use('/api/site-settings', siteSettingsRoutes);
+  app.use('/api/coupons', optionalAuth, couponsRoutes);
   app.use('/api/admin/site-settings', optionalAuth, adminSiteSettingsRoutes);
   app.use('/api/admin/categories', optionalAuth, adminCategoriesRoutes);
+  app.use('/api/admin/coupons', optionalAuth, adminCouponsRoutes);
   app.use('/api/admin/reviews', optionalAuth, adminReviewsRoutes);
 
   app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

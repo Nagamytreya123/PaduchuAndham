@@ -10,7 +10,8 @@ import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import { IconGoogle, IconInfoOutlined } from '../icons';
 import Alert from '@mui/material/Alert';
-import { LuxuryShowcaseLoader } from '../components/loading';
+import { BrandFillLoader } from '../components/loading';
+import { useMinimumLoading } from '../hooks/useMinimumLoading';
 import Link from '@mui/material/Link';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
@@ -78,9 +79,11 @@ export function LoginPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const reducedMotion = useReducedMotion();
   const { user, loading, refresh } = useAuth();
+  const showLoading = useMinimumLoading(loading);
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const celebrate = searchParams.get('celebrate') === '1';
+  const adminOtpFromUrl = searchParams.get('adminOtp') === '1';
   const err = searchParams.get('error');
   const tabFromUrl = useTabFromMode(searchParams);
   const [tab, setTab] = useState(tabFromUrl);
@@ -90,6 +93,10 @@ export function LoginPage() {
   const [busy, setBusy] = useState(false);
   const [formErr, setFormErr] = useState<string | null>(null);
   const [emailTouched, setEmailTouched] = useState(false);
+  const [otpStep, setOtpStep] = useState(false);
+  const [otpChallengeId, setOtpChallengeId] = useState<string | null>(null);
+  const [otpCode, setOtpCode] = useState('');
+  const [otpResendBusy, setOtpResendBusy] = useState(false);
   const [authExitStage, setAuthExitStage] = useState<AuthExitStage>('idle');
   const [celebrateSynced, setCelebrateSynced] = useState(false);
   const authExitStageRef = useRef(authExitStage);
@@ -97,18 +104,30 @@ export function LoginPage() {
   const videoPhaseRef = useRef<'intro' | 'outro'>('intro');
   const outroNavOnceRef = useRef(false);
   const googleLoginTracked = useRef(false);
+  const postAuthRoleRef = useRef<'admin' | 'customer' | null>(null);
 
   useEffect(() => {
     setTab(useTabFromMode(searchParams));
   }, [searchParams]);
+
+  useEffect(() => {
+    if (!adminOtpFromUrl) return;
+    const challenge = searchParams.get('challenge');
+    if (!challenge) return;
+    setOtpStep(true);
+    setOtpChallengeId(challenge);
+    postAuthRoleRef.current = 'admin';
+    const next = new URLSearchParams(searchParams);
+    next.delete('adminOtp');
+    next.delete('challenge');
+    setSearchParams(next, { replace: true });
+  }, [adminOtpFromUrl, searchParams, setSearchParams]);
 
   const redirectTarget = useMemo(() => {
     const raw = searchParams.get('redirect');
     if (raw?.startsWith('/') && !raw.startsWith('//')) return raw;
     return '/account';
   }, [searchParams]);
-
-  const postAuthRoleRef = useRef<'admin' | 'customer' | null>(null);
 
   const beginOutroThenNavigate = useCallback(() => {
     if (outroNavOnceRef.current) return;
@@ -254,7 +273,7 @@ export function LoginPage() {
         exit: { opacity: 0, transition: { duration: 0.15, ease: 'easeIn' as const } },
       };
 
-  if (loading) {
+  if (showLoading) {
     return (
       <Box
         component="main"
@@ -290,13 +309,13 @@ export function LoginPage() {
           justifyContent="center"
           sx={{ position: 'relative', zIndex: 2, minHeight: 'calc(100dvh - 56px)' }}
         >
-          <LuxuryShowcaseLoader variant="overlay" tone="dark" message="Preparing your experience…" />
+          <BrandFillLoader variant="overlay" aria-label="Preparing your experience" />
         </Stack>
       </Box>
     );
   }
 
-  if (user && !celebrate && authExitStage === 'idle') {
+  if (user && !celebrate && authExitStage === 'idle' && !otpStep) {
     return <Navigate to={user.role === 'admin' ? '/admin' : redirectTarget} replace />;
   }
 
@@ -313,15 +332,33 @@ export function LoginPage() {
     beginOutroThenNavigate();
   }
 
+  function beginOtpStep(challengeId: string) {
+    setAuthExitStage('idle');
+    setOtpStep(true);
+    setOtpChallengeId(challengeId);
+    setOtpCode('');
+    setFormErr(null);
+    postAuthRoleRef.current = 'admin';
+  }
+
   async function emailSignIn() {
     setBusy(true);
     setFormErr(null);
     try {
       setAuthExitStage('collapsing');
-      const data = await apiFetch<{ user: { role: 'admin' | 'customer' } }>('/api/auth/login', {
+      const data = await apiFetch<{
+        requiresOtp?: boolean;
+        challengeId?: string;
+        email?: string;
+        user: { role: 'admin' | 'customer' };
+      }>('/api/auth/login', {
         method: 'POST',
         body: JSON.stringify({ email: email.trim().toLowerCase() }),
       });
+      if (data.requiresOtp && data.challengeId) {
+        beginOtpStep(data.challengeId);
+        return;
+      }
       await finishAuthSuccess('login', data.user.role);
     } catch (e) {
       setAuthExitStage('idle');
@@ -336,19 +373,64 @@ export function LoginPage() {
     setFormErr(null);
     try {
       setAuthExitStage('collapsing');
-      const data = await apiFetch<{ user: { role: 'admin' | 'customer' } }>('/api/auth/signup', {
+      const data = await apiFetch<{
+        requiresOtp?: boolean;
+        challengeId?: string;
+        email?: string;
+        user: { role: 'admin' | 'customer' };
+      }>('/api/auth/signup', {
         method: 'POST',
         body: JSON.stringify({
           email: email.trim().toLowerCase(),
           name: displayName.trim() || undefined,
         }),
       });
+      if (data.requiresOtp && data.challengeId) {
+        beginOtpStep(data.challengeId);
+        return;
+      }
       await finishAuthSuccess('signup', data.user.role);
     } catch (e) {
       setAuthExitStage('idle');
       setFormErr(e instanceof Error ? e.message : 'Could not create account');
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function verifyAdminOtp() {
+    if (!otpChallengeId) return;
+    setBusy(true);
+    setFormErr(null);
+    try {
+      setAuthExitStage('collapsing');
+      await apiFetch('/api/auth/admin/otp/verify', {
+        method: 'POST',
+        body: JSON.stringify({ challengeId: otpChallengeId, otp: otpCode.trim() }),
+      });
+      setOtpStep(false);
+      await finishAuthSuccess('login', 'admin');
+    } catch (e) {
+      setAuthExitStage('idle');
+      setFormErr(e instanceof Error ? e.message : 'Verification failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resendAdminOtp() {
+    if (!otpChallengeId) return;
+    setOtpResendBusy(true);
+    setFormErr(null);
+    try {
+      await apiFetch('/api/auth/admin/otp/resend', {
+        method: 'POST',
+        body: JSON.stringify({ challengeId: otpChallengeId }),
+      });
+    } catch (e) {
+      setFormErr(e instanceof Error ? e.message : 'Could not resend code');
+    } finally {
+      setOtpResendBusy(false);
     }
   }
 
@@ -470,6 +552,7 @@ export function LoginPage() {
                   >
                     {tab === 0 ? 'Welcome back' : 'Join the lookbook'}
                   </Typography>
+                  {!otpStep && (
                   <Tabs
                     value={tab}
                     onChange={(_, v) => {
@@ -510,6 +593,7 @@ export function LoginPage() {
                     <Tab label="Sign in" id="auth-tab-0" aria-controls="auth-panel-0" disableRipple />
                     <Tab label="Sign up" id="auth-tab-1" aria-controls="auth-panel-1" disableRipple />
                   </Tabs>
+                  )}
 
                   {err === 'auth' && (
                     <Alert
@@ -541,7 +625,105 @@ export function LoginPage() {
                       Could not load your profile.
                     </Alert>
                   )}
+                  {err === 'otp' && (
+                    <Alert
+                      severity="error"
+                      sx={{
+                        mb: 2,
+                        borderRadius: 1.5,
+                        bgcolor: S.errorBg,
+                        color: S.error,
+                        border: `1px solid rgba(255, 180, 171, 0.25)`,
+                        fontFamily: S.font.body,
+                      }}
+                    >
+                      Could not send the admin verification email. Check ADMIN_OTP_EMAIL and SMTP settings, then try again.
+                    </Alert>
+                  )}
 
+                  {otpStep ? (
+                    <Stack spacing={2}>
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          color: S.text.muted,
+                          fontFamily: S.font.body,
+                          fontSize: '1rem',
+                          lineHeight: 1.6,
+                        }}
+                      >
+                        We sent a 6-digit verification code to the admin inbox. Enter it below to access the admin panel.
+                      </Typography>
+                      <TextField
+                        label="Verification code"
+                        variant="outlined"
+                        fullWidth
+                        value={otpCode}
+                        onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        inputProps={{ inputMode: 'numeric', pattern: '[0-9]*', autoComplete: 'one-time-code' }}
+                        sx={textFieldAuthSx}
+                      />
+                      <Button
+                        variant="contained"
+                        size="large"
+                        disabled={busy || otpCode.trim().length !== 6}
+                        onClick={() => void verifyAdminOtp()}
+                        fullWidth
+                        sx={{
+                          py: 1.35,
+                          fontFamily: S.font.body,
+                          fontWeight: 700,
+                          fontSize: '0.875rem',
+                          letterSpacing: '0.06em',
+                          textTransform: 'uppercase',
+                          color: S.text.onAccent,
+                          background: `linear-gradient(90deg, ${S.accent} 0%, #E8D8A8 100%)`,
+                          boxShadow: '0 4px 14px rgba(233, 195, 73, 0.2)',
+                          '&:hover': {
+                            background: `linear-gradient(90deg, ${S.accentHover} 0%, #D5C697 100%)`,
+                          },
+                        }}
+                      >
+                        Verify and continue
+                      </Button>
+                      <Stack direction="row" justifyContent="space-between" alignItems="center">
+                        <Button
+                          variant="text"
+                          disabled={otpResendBusy}
+                          onClick={() => void resendAdminOtp()}
+                          sx={{ color: S.text.muted, fontFamily: S.font.body, textTransform: 'none' }}
+                        >
+                          {otpResendBusy ? 'Sending…' : 'Resend code'}
+                        </Button>
+                        <Button
+                          variant="text"
+                          onClick={() => {
+                            setOtpStep(false);
+                            setOtpChallengeId(null);
+                            setOtpCode('');
+                            setFormErr(null);
+                          }}
+                          sx={{ color: S.text.muted, fontFamily: S.font.body, textTransform: 'none' }}
+                        >
+                          Back to sign in
+                        </Button>
+                      </Stack>
+                      {formErr && (
+                        <Alert
+                          severity="error"
+                          sx={{
+                            borderRadius: 1.5,
+                            bgcolor: S.errorBg,
+                            color: S.error,
+                            fontFamily: S.font.body,
+                            border: '1px solid rgba(255, 180, 171, 0.25)',
+                          }}
+                        >
+                          {formErr}
+                        </Alert>
+                      )}
+                    </Stack>
+                  ) : (
                   <AnimatePresence mode="wait">
                     <motion.div
                       key={tab}
@@ -740,6 +922,7 @@ export function LoginPage() {
                       </Stack>
                     </motion.div>
                   </AnimatePresence>
+                  )}
                 </Box>
                 </motion.div>
               </Box>

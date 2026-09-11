@@ -38,6 +38,42 @@ function normalizeId(doc: EntityDoc): EntityDoc {
   return { ...doc, _id: id };
 }
 
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+function stampCreateTimestamps(doc: EntityDoc): void {
+  const now = nowIso();
+  if (!doc.createdAt) doc.createdAt = now;
+  if (!doc.updatedAt) doc.updatedAt = now;
+}
+
+function stampUpdateTimestamp(doc: EntityDoc): void {
+  doc.updatedAt = nowIso();
+}
+
+function compareSortValues(av: unknown, bv: unknown): number {
+  if (av == null && bv == null) return 0;
+  if (av == null) return -1;
+  if (bv == null) return 1;
+
+  const toMs = (value: unknown): number | null => {
+    if (value instanceof Date) return value.getTime();
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string') {
+      const ms = Date.parse(value);
+      return Number.isNaN(ms) ? null : ms;
+    }
+    return null;
+  };
+
+  const ams = toMs(av);
+  const bms = toMs(bv);
+  if (ams != null && bms != null) return ams - bms;
+
+  return String(av).localeCompare(String(bv));
+}
+
 function stripForStorage(doc: EntityDoc): EntityDoc {
   const out = { ...doc };
   delete (out as { save?: unknown }).save;
@@ -428,12 +464,13 @@ class DynamoQuery<T extends EntityDoc> {
 
   private finish(rows: T[]): T[] {
     if (this.sortSpec) {
-      const [[field, dir]] = Object.entries(this.sortSpec);
+      const entries = Object.entries(this.sortSpec);
       rows.sort((a, b) => {
-        const av = a[field as keyof T];
-        const bv = b[field as keyof T];
-        const cmp = String(av) < String(bv) ? -1 : String(av) > String(bv) ? 1 : 0;
-        return dir === -1 ? -cmp : cmp;
+        for (const [field, dir] of entries) {
+          const cmp = compareSortValues(a[field as keyof T], b[field as keyof T]);
+          if (cmp !== 0) return dir === -1 ? -cmp : cmp;
+        }
+        return 0;
       });
     }
     if (this.skipN !== null) rows = rows.slice(this.skipN);
@@ -498,7 +535,12 @@ class DynamoOneQuery<T extends EntityDoc> {
     filter: Record<string, unknown>,
     hydrateDoc?: (doc: T) => T,
   ) {
-    this.query = new DynamoQuery<T>(entityType, filter, hydrateDoc).limit(1);
+    this.query = new DynamoQuery<T>(entityType, filter, hydrateDoc);
+  }
+
+  sort(spec: Record<string, 1 | -1>): this {
+    this.query.sort(spec);
+    return this;
   }
 
   select(fields: string): this {
@@ -517,7 +559,7 @@ class DynamoOneQuery<T extends EntityDoc> {
   }
 
   async exec(): Promise<T | null> {
-    const rows = await this.query.exec();
+    const rows = await this.query.limit(1).exec();
     return rows[0] ?? null;
   }
 
@@ -596,6 +638,7 @@ export class DynamoEntityModel<T extends EntityDoc = EntityDoc> {
       return out;
     };
     wrapped.save = async () => {
+      stampUpdateTimestamp(doc as EntityDoc);
       await self.replace(String((doc as EntityDoc)._id), doc);
       return wrapped;
     };
@@ -633,11 +676,12 @@ export class DynamoEntityModel<T extends EntityDoc = EntityDoc> {
       list.push = (...items: EntityDoc[]) => {
         for (const a of items) {
           const row = hydrateAddress(a);
-          rawAddrs.push(row);
-          hydratedAddrs.push(row);
+          Array.prototype.push.call(rawAddrs, row);
+          // hydratedAddrs === list; use native push to avoid recursive list.push
+          Array.prototype.push.call(hydratedAddrs, row);
         }
         syncAddresses();
-        return rawAddrs.length;
+        return hydratedAddrs.length;
       };
       syncAddresses();
     }
@@ -646,6 +690,7 @@ export class DynamoEntityModel<T extends EntityDoc = EntityDoc> {
 
   async create(doc: Partial<T>): Promise<T> {
     const normalized = normalizeId(doc as EntityDoc) as T;
+    stampCreateTimestamps(normalized as EntityDoc);
     const id = String((normalized as EntityDoc)._id);
     await getDynamoDoc().send(
       new PutCommand({ TableName: env.DYNAMODB_TABLE!, Item: buildPutItem(this.entityType, id, normalized as EntityDoc) }),
@@ -683,6 +728,7 @@ export class DynamoEntityModel<T extends EntityDoc = EntityDoc> {
   }
 
   async replace(id: string, doc: T): Promise<void> {
+    stampUpdateTimestamp(doc as EntityDoc);
     await getDynamoDoc().send(
       new PutCommand({
         TableName: env.DYNAMODB_TABLE!,

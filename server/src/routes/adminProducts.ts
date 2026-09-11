@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { ProductModel } from '../models/Product.js';
+import { ProductModel, type ProductDoc } from '../models/Product.js';
 import { OrderModel } from '../models/Order.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { productToJson } from '../utils/productJson.js';
@@ -12,6 +12,7 @@ import {
   persistUploadedMulterFiles,
 } from '../utils/productImageStorage.js';
 import { invalidateCatalogCache } from '../cache/catalog.js';
+import { sortProductsByCreatedDesc } from '../utils/productSort.js';
 import { normalizeCategoryInput } from '../services/categories.js';
 import { CategoryModel } from '../models/Category.js';
 import { createImageUpload, withMulter } from '../middleware/multerUpload.js';
@@ -88,11 +89,50 @@ const createSchema = z.object({
   matchingBraceletIds: z.array(objectIdHex).max(24).optional(),
   watchBraceletBundlePrice: z.union([z.number().int().min(0), z.null()]).optional(),
   comboProductIds: z.array(objectIdHex).max(24).optional(),
+  sizeOptions: z.array(z.string().min(1).max(80)).max(30).optional(),
 });
 
 async function categoryIsCombo(slug: string): Promise<boolean> {
   const doc = await CategoryModel.findOne({ slug }).select('isCombo').lean();
   return doc?.isCombo === true;
+}
+
+async function categoryUsesSizeOptions(slug: string): Promise<boolean> {
+  const doc = await CategoryModel.findOne({ slug }).select('sizeMode').lean();
+  return doc?.sizeMode === 'option';
+}
+
+function normalizeSizeOptionList(raw: string[] | undefined): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const row of raw ?? []) {
+    const label = row.trim().replace(/\s+/g, ' ');
+    if (!label) continue;
+    const key = label.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(label);
+  }
+  return out;
+}
+
+async function resolveProductSizeFields(
+  categorySlug: string,
+  dimensions: z.infer<typeof dimensionsSchema> | undefined,
+  sizeOptions: string[] | undefined,
+): Promise<{ dimensions?: ProductDoc['dimensions']; sizeOptions?: string[] }> {
+  const optionMode = await categoryUsesSizeOptions(categorySlug);
+  if (optionMode) {
+    const opts = normalizeSizeOptionList(sizeOptions);
+    if (opts.length === 0) {
+      throw new Error('Add at least one size option for this category');
+    }
+    return { sizeOptions: opts };
+  }
+  return {
+    dimensions: dimensions ?? undefined,
+    sizeOptions: undefined,
+  };
 }
 
 async function validateComboProductIds(
@@ -158,6 +198,13 @@ router.post('/', productImageUpload, async (req, res) => {
       res.status(400).json({ error: e instanceof Error ? e.message : 'Invalid combo products' });
       return;
     }
+    let sizeFields: { dimensions?: ProductDoc['dimensions']; sizeOptions?: string[] };
+    try {
+      sizeFields = await resolveProductSizeFields(categorySlug, body.dimensions, body.sizeOptions);
+    } catch (e) {
+      res.status(400).json({ error: e instanceof Error ? e.message : 'Invalid size fields' });
+      return;
+    }
     const product = await ProductModel.create({
       name: body.name,
       description: body.description ?? '',
@@ -171,7 +218,8 @@ router.post('/', productImageUpload, async (req, res) => {
       slug: body.slug,
       materials: body.materials ?? [],
       tags: body.tags ?? [],
-      dimensions: body.dimensions,
+      dimensions: sizeFields.dimensions,
+      sizeOptions: sizeFields.sizeOptions,
       weightGrams: body.weightGrams,
       careInstructions: body.careInstructions,
       compareAtPrice: body.compareAtPrice,
@@ -257,7 +305,7 @@ async function loadSalesAggregates() {
 
 router.get('/', async (_req, res) => {
   const { byProductId, bySubcategory, totalUnitsSold } = await loadSalesAggregates();
-  const list = await ProductModel.find().sort({ createdAt: -1 }).lean();
+  const list = sortProductsByCreatedDesc((await ProductModel.find().lean()) as ProductDoc[]);
   res.json({
     products: list.map((p) => ({
       ...productToJson(p),
@@ -312,7 +360,32 @@ router.patch('/:id', productImageUpload, async (req, res) => {
     if (patch.slug !== undefined) doc.slug = patch.slug;
     if (patch.materials !== undefined) doc.materials = patch.materials;
     if (patch.tags !== undefined) doc.tags = patch.tags;
-    if (patch.dimensions !== undefined) doc.dimensions = patch.dimensions ?? undefined;
+    if (
+      patch.dimensions !== undefined ||
+      patch.sizeOptions !== undefined ||
+      patch.category !== undefined
+    ) {
+      const categorySlug = doc.category as string;
+      const nextDimensions =
+        patch.dimensions !== undefined ? patch.dimensions : doc.dimensions ?? undefined;
+      const nextSizeOptions =
+        patch.sizeOptions !== undefined
+          ? patch.sizeOptions
+          : (doc.sizeOptions ?? []).map(String);
+      try {
+        const sizeFields = await resolveProductSizeFields(categorySlug, nextDimensions, nextSizeOptions);
+        if (sizeFields.dimensions) {
+          doc.dimensions = sizeFields.dimensions;
+          doc.set('sizeOptions', undefined);
+        } else {
+          doc.set('dimensions', undefined);
+          doc.sizeOptions = sizeFields.sizeOptions;
+        }
+      } catch (e) {
+        res.status(400).json({ error: e instanceof Error ? e.message : 'Invalid size fields' });
+        return;
+      }
+    }
     if (patch.weightGrams !== undefined) doc.weightGrams = patch.weightGrams;
     if (patch.careInstructions !== undefined) doc.careInstructions = patch.careInstructions;
     if (patch.compareAtPrice !== undefined) doc.compareAtPrice = patch.compareAtPrice;

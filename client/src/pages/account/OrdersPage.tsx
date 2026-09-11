@@ -6,7 +6,8 @@ import Paper from '@mui/material/Paper';
 import Button from '@mui/material/Button';
 import Box from '@mui/material/Box';
 import { IconChevronRight } from '../../icons';
-import { LuxuryShowcaseLoader } from '../../components/loading';
+import { BrandFillLoader } from '../../components/loading';
+import { useMinimumLoading } from '../../hooks/useMinimumLoading';
 import { apiFetch } from '../../api/client';
 import { formatInrFromPaise } from '../../utils/format';
 import { useAuth } from '../../context/AuthContext';
@@ -200,6 +201,7 @@ export function OrdersPage() {
   const navigate = useNavigate();
   const [orders, setOrders] = useState<OrderDetail[]>([]);
   const [loading, setLoading] = useState(true);
+  const showLoading = useMinimumLoading(loading);
   const [quickReview, setQuickReview] = useState<QuickReviewState | null>(null);
 
   const reloadOrders = useCallback(async () => {
@@ -224,8 +226,8 @@ export function OrdersPage() {
 
   const groups = groupOrdersByPlacedAt(orders);
 
-  if (loading) {
-    return <LuxuryShowcaseLoader variant="inline" tone="light" aria-label="Loading orders" />;
+  if (showLoading) {
+    return <BrandFillLoader variant="inline" aria-label="Loading orders" />;
   }
 
   return (

@@ -1,7 +1,7 @@
 import Box from '@mui/material/Box';
 import { StorefrontHeader } from '../StorefrontHeader';
 import { shopSurface } from '../../constants/shopSurface';
-import { LuxuryShowcaseLoader } from './LuxuryShowcaseLoader';
+import { BrandFillLoader } from './BrandFillLoader';
 
 type Props = {
   'aria-label'?: string;
@@ -35,7 +35,7 @@ export function PdpLoadingState({ 'aria-label': ariaLabel = 'Loading product' }:
           <Box sx={{ bgcolor: '#0F0F10' }} />
         </Box>
         <Box sx={{ position: 'relative', zIndex: 1, width: '100%' }}>
-          <LuxuryShowcaseLoader variant="pdp" tone="light" aria-label={ariaLabel} />
+          <BrandFillLoader variant="pdp" aria-label={ariaLabel} />
         </Box>
       </Box>
     </Box>

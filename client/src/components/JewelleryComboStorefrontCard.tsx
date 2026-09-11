@@ -115,8 +115,9 @@ export function JewelleryComboStorefrontCard({
                 <Typography
                   variant="body2"
                   sx={{
+                    ...shopSurface.amount,
                     color: isLight ? shopSurface.ink : '#D6B36A',
-                    fontWeight: 700,
+                    fontSize: '0.9375rem',
                   }}
                 >
                   {formatInrFromPaise(combo.price)}

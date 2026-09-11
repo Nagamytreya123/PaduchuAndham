@@ -48,6 +48,7 @@ const patchSchema = z.object({
   priceFilters: z.array(priceFilterSchema).max(30).optional(),
   priceFiltersEnabled: z.boolean().optional(),
   isCombo: z.boolean().optional(),
+  sizeMode: z.enum(['description', 'option']).optional(),
   isActive: z.boolean().optional(),
 });
 
@@ -91,6 +92,7 @@ router.patch('/:slug', async (req, res) => {
     body.priceFilters === undefined &&
     body.priceFiltersEnabled === undefined &&
     body.isCombo === undefined &&
+    body.sizeMode === undefined &&
     body.isActive === undefined
   ) {
     res.status(400).json({ error: 'Nothing to update' });

@@ -10,6 +10,7 @@ import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import { WishlistProvider } from './context/WishlistContext';
 import { CategoriesProvider } from './context/CategoriesContext';
+import { ToastProvider } from './context/ToastContext';
 import { App } from './App';
 
 scheduleIdleTask(() => {
@@ -25,7 +26,9 @@ createRoot(document.getElementById('root')!).render(
           <CategoriesProvider>
             <CartProvider>
               <WishlistProvider>
-                <App />
+                <ToastProvider>
+                  <App />
+                </ToastProvider>
               </WishlistProvider>
             </CartProvider>
           </CategoriesProvider>

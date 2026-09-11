@@ -29,6 +29,8 @@ for (const key of [
   'GOOGLE_CLIENT_SECRET',
   'ADMIN_EMAILS',
   'ADMIN_ORDER_NOTIFY_EMAIL',
+  'ADMIN_OTP_EMAIL',
+  'ADMIN_OTP_SMTP_PASS',
   'RAZORPAY_WEBHOOK_SECRET',
   'SMTP_HOST',
   'SMTP_USER',
@@ -39,6 +41,9 @@ for (const key of [
   'SERVER_PUBLIC_URL',
   'EMAIL_QUEUE_URL',
   'SUPPORT_WHATSAPP_MOBILE',
+  'SOCIAL_INSTAGRAM_URL',
+  'SOCIAL_YOUTUBE_URL',
+  'SOCIAL_FACEBOOK_URL',
 ] as const) {
   const v = process.env[key];
   if (v !== undefined && v.trim() === '') Reflect.deleteProperty(process.env, key);
@@ -58,6 +63,10 @@ const schema = z.object({
   ADMIN_EMAILS: z.string().optional(),
   /** Comma-separated inboxes that receive “new paid order” email alerts */
   ADMIN_ORDER_NOTIFY_EMAIL: z.string().optional(),
+  /** Inbox that receives admin login OTP codes (also used as SMTP sender; separate from SMTP_USER). */
+  ADMIN_OTP_EMAIL: z.string().email().optional(),
+  /** App password for ADMIN_OTP_EMAIL when it differs from SMTP_USER. Falls back to SMTP_PASS. */
+  ADMIN_OTP_SMTP_PASS: z.string().optional(),
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.string().optional(),
   SMTP_SECURE: z.string().optional(),
@@ -77,6 +86,9 @@ const schema = z.object({
   EMAIL_QUEUE_URL: z.string().url().optional(),
   /** Default WhatsApp support number (10-digit Indian mobile, no +91). Overridable in admin settings. */
   SUPPORT_WHATSAPP_MOBILE: z.string().optional(),
+  SOCIAL_INSTAGRAM_URL: z.string().optional(),
+  SOCIAL_YOUTUBE_URL: z.string().optional(),
+  SOCIAL_FACEBOOK_URL: z.string().optional(),
 });
 
 export type Env = z.infer<typeof schema>;

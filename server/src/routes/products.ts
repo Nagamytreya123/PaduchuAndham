@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { isValidEntityId } from '../utils/entityId.js';
-import { ProductModel } from '../models/Product.js';
+import { ProductModel, type ProductDoc } from '../models/Product.js';
 import { ReviewModel } from '../models/Review.js';
 import { productToJson, productToListJson } from '../utils/productJson.js';
 import { requireAuth } from '../middleware/auth.js';
@@ -15,14 +15,40 @@ import {
   invalidateCatalogForProductIds,
 } from '../cache/catalog.js';
 import {
+  buildPriceRangeMongoFilter,
   buildProductListFilter,
   isStorefrontHiddenCategory,
+  resolveStorefrontPriceFilter,
   storefrontHiddenCategoryFilter,
 } from '../services/categories.js';
 import { CategoryModel } from '../models/Category.js';
 import { rankProductsBySearch } from '../utils/productSearch.js';
+import { sortProductsByCreatedDesc } from '../utils/productSort.js';
 
 const router = Router();
+
+const ALLOWED_PAGE_SIZES = new Set([20, 30, 40]);
+
+function parsePositiveInt(raw: unknown, fallback: number): number {
+  const n = parseInt(String(raw), 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+function parsePageSize(raw: unknown): number {
+  const n = parseInt(String(raw), 10);
+  return ALLOWED_PAGE_SIZES.has(n) ? n : 20;
+}
+
+function buildListMongoFilter(
+  base: Record<string, unknown>,
+  hidden: Record<string, unknown> | null,
+  priceRange: Record<string, unknown> | null,
+): Record<string, unknown> {
+  const parts: Record<string, unknown>[] = [base];
+  if (hidden) parts.push(hidden);
+  if (priceRange) parts.push(priceRange);
+  return parts.length === 1 ? base : { $and: parts };
+}
 
 const createReviewSchema = z.object({
   rating: z.coerce.number().int().min(1).max(5),
@@ -33,6 +59,7 @@ const createReviewSchema = z.object({
 type ProductPublicCache = {
   base: ReturnType<typeof productToJson>;
   matchingBracelets: ReturnType<typeof productToJson>[];
+  matchingWatches: Array<ReturnType<typeof productToJson> & { watchBraceletBundlePrice?: number }>;
   comboProducts: ReturnType<typeof productToJson>[];
   reviewSummary: { reviewCount: number; averageRating: number | null };
 };
@@ -42,32 +69,101 @@ router.get('/', publicCatalogLimiter, async (req, res) => {
   const subcategoryRaw =
     typeof req.query.subcategory === 'string' ? req.query.subcategory.trim() : '';
   const searchRaw = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+  const priceFilterRaw =
+    typeof req.query.priceFilter === 'string' ? req.query.priceFilter.trim() : '';
+  const isPaginated = req.query.page !== undefined || req.query.limit !== undefined;
+  const page = parsePositiveInt(req.query.page, 1);
+  const limit = parsePageSize(req.query.limit);
 
-  const { value, hit } = await cachedCatalog(
-    'products:list',
-    [categoryRaw, subcategoryRaw, searchRaw.toLowerCase()],
-    async () => {
-      const hidden = await storefrontHiddenCategoryFilter();
-      const base = buildProductListFilter(categoryRaw, subcategoryRaw);
-      const filter = hidden ? { $and: [base, hidden] } : base;
-      const list = await ProductModel.find(filter).sort({ createdAt: -1 }).lean();
-      const categoryRows = await CategoryModel.find({ isActive: true }).select('slug label').lean();
-      const labelFor = (category: string) => {
-        const key = category.trim().toLowerCase();
-        const match = categoryRows.find(
-          (row) => row.slug.toLowerCase() === key || row.label.toLowerCase() === key,
-        );
-        return match?.label;
-      };
+  const cacheSuffix = isPaginated ? 'products:list:paginated:v1' : 'products:list:created-desc:v3';
+  const cacheParts = isPaginated
+    ? [
+        categoryRaw,
+        subcategoryRaw,
+        searchRaw.toLowerCase(),
+        priceFilterRaw.toLowerCase(),
+        String(page),
+        String(limit),
+      ]
+    : [categoryRaw, subcategoryRaw, searchRaw.toLowerCase()];
+
+  const { value, hit } = await cachedCatalog(cacheSuffix, cacheParts, async () => {
+    const hidden = await storefrontHiddenCategoryFilter();
+    const base = buildProductListFilter(categoryRaw, subcategoryRaw);
+    const resolvedPriceFilter = priceFilterRaw
+      ? await resolveStorefrontPriceFilter(categoryRaw, subcategoryRaw, priceFilterRaw)
+      : null;
+    const priceRange = resolvedPriceFilter
+      ? buildPriceRangeMongoFilter(resolvedPriceFilter.minPaise, resolvedPriceFilter.maxPaise)
+      : null;
+    const filter = buildListMongoFilter(base, hidden, priceRange);
+
+    const categoryRows = await CategoryModel.find({ isActive: true }).select('slug label').lean();
+    const labelFor = (category: string) => {
+      const key = category.trim().toLowerCase();
+      const match = categoryRows.find(
+        (row) => row.slug.toLowerCase() === key || row.label.toLowerCase() === key,
+      );
+      return match?.label;
+    };
+
+    if (!isPaginated) {
+      const list = sortProductsByCreatedDesc(
+        (await ProductModel.find(filter).lean()) as ProductDoc[],
+      );
       let products = list.map((p) => productToListJson(p));
       if (searchRaw) {
         products = rankProductsBySearch(products, searchRaw, labelFor);
       }
+      return { products };
+    }
+
+    if (searchRaw) {
+      const list = sortProductsByCreatedDesc(
+        (await ProductModel.find(filter).lean()) as ProductDoc[],
+      );
+      let products = list.map((p) => productToListJson(p));
+      products = rankProductsBySearch(products, searchRaw, labelFor);
+      const total = products.length;
+      const totalPages = Math.max(1, Math.ceil(total / limit));
+      const safePage = Math.min(page, totalPages);
+      const skip = (safePage - 1) * limit;
+      const pageProducts = products.slice(skip, skip + limit);
       return {
-        products,
+        products: pageProducts,
+        pagination: {
+          page: safePage,
+          pageSize: limit,
+          total,
+          totalPages,
+          hasNext: safePage < totalPages,
+          hasPrev: safePage > 1,
+        },
       };
-    },
-  );
+    }
+
+    const total = await ProductModel.countDocuments(filter);
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+    const safePage = Math.min(page, totalPages);
+    const skip = (safePage - 1) * limit;
+    const docs = await ProductModel.find(filter)
+      .sort({ createdAt: -1, _id: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+    const products = docs.map((p) => productToListJson(p as ProductDoc));
+    return {
+      products,
+      pagination: {
+        page: safePage,
+        pageSize: limit,
+        total,
+        totalPages,
+        hasNext: safePage < totalPages,
+        hasPrev: safePage > 1,
+      },
+    };
+  });
 
   setPublicCatalogCacheHeaders(res, hit);
   res.json(value);
@@ -207,6 +303,37 @@ router.post('/:id/reviews', publicCatalogLimiter, requireAuth, async (req, res) 
   }
 });
 
+router.get('/:id/cover', publicCatalogLimiter, async (req, res) => {
+  const id = String(req.params.id);
+  if (!isValidEntityId(id)) {
+    res.status(404).end();
+    return;
+  }
+
+  const product = await ProductModel.findOne({ _id: id, isActive: true }).select('images').lean();
+  const image = product?.images?.[0];
+  if (!image) {
+    res.status(404).end();
+    return;
+  }
+
+  if (image.startsWith('/uploads/') || image.startsWith('http://') || image.startsWith('https://')) {
+    res.redirect(302, image);
+    return;
+  }
+
+  const dataMatch = image.match(/^data:([^;]+);base64,(.+)$/);
+  if (dataMatch) {
+    const buf = Buffer.from(dataMatch[2], 'base64');
+    res.set('Cache-Control', 'public, max-age=86400');
+    res.type(dataMatch[1]);
+    res.send(buf);
+    return;
+  }
+
+  res.status(404).end();
+});
+
 router.get('/:id', publicCatalogLimiter, async (req, res) => {
   const id = String(req.params.id);
   if (!isValidEntityId(id)) {
@@ -240,6 +367,20 @@ router.get('/:id', publicCatalogLimiter, async (req, res) => {
         .map((row) => productToJson(row));
     }
 
+    let matchingWatches: ProductPublicCache['matchingWatches'] = [];
+    if (matchingBracelets.length === 0) {
+      const parentWatches = await ProductModel.find({
+        matchingBraceletIds: { $in: [pid] },
+      }).lean();
+      matchingWatches = parentWatches
+        .filter((watch) => watch.isActive !== false)
+        .map((watch) => ({
+          ...productToJson(watch),
+          watchBraceletBundlePrice:
+            watch.watchBraceletBundlePrice == null ? undefined : watch.watchBraceletBundlePrice,
+        }));
+    }
+
     const comboIds = p.comboProductIds ?? [];
     let comboProducts: ReturnType<typeof productToJson>[] = [];
     if (comboIds.length > 0) {
@@ -259,7 +400,7 @@ router.get('/:id', publicCatalogLimiter, async (req, res) => {
         }
       : { reviewCount: 0, averageRating: null as number | null };
 
-    return { base, matchingBracelets, comboProducts, reviewSummary };
+    return { base, matchingBracelets, matchingWatches, comboProducts, reviewSummary };
   });
 
   if (!cached) {
@@ -283,6 +424,7 @@ router.get('/:id', publicCatalogLimiter, async (req, res) => {
     product: {
       ...cached.base,
       matchingBracelets: cached.matchingBracelets,
+      matchingWatches: cached.matchingWatches,
       comboProducts: cached.comboProducts,
       reviewSummary: cached.reviewSummary,
       viewerReview,

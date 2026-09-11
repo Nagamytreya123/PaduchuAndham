@@ -14,7 +14,8 @@ import DialogActions from '@mui/material/DialogActions';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Checkbox from '@mui/material/Checkbox';
 import Alert from '@mui/material/Alert';
-import { LuxuryShowcaseLoader } from '../../components/loading';
+import { BrandFillLoader } from '../../components/loading';
+import { useMinimumLoading } from '../../hooks/useMinimumLoading';
 import { apiFetch } from '../../api/client';
 import { ShippingAddressFields } from '../../components/ShippingAddressFields';
 import type { SavedAddressRow, ShippingAddressForm } from '../../types/address';
@@ -25,7 +26,7 @@ const MAX_ADDRESSES = 10;
 
 function LocationPinIcon() {
   return (
-    <SvgIcon fontSize="small" viewBox="0 0 24 24" sx={{ color: 'text.secondary' }}>
+    <SvgIcon fontSize="small" viewBox="0 0 24 24" sx={{ color: shopSurface.inkMuted }}>
       <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5S10.62 6.5 12 6.5s2.5 1.12 2.5 2.5S13.38 11.5 12 11.5z" />
     </SvgIcon>
   );
@@ -47,6 +48,7 @@ function formatStreetBlock(row: SavedAddressRow): string {
 export function SavedAddressesPage() {
   const [rows, setRows] = useState<SavedAddressRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const showLoading = useMinimumLoading(loading);
   const [error, setError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -162,8 +164,8 @@ export function SavedAddressesPage() {
     }
   }
 
-  if (loading) {
-    return <LuxuryShowcaseLoader variant="inline" tone="light" aria-label="Loading addresses" />;
+  if (showLoading) {
+    return <BrandFillLoader variant="inline" aria-label="Loading addresses" />;
   }
 
   return (
@@ -223,15 +225,19 @@ export function SavedAddressesPage() {
                   </Box>
                   <Stack spacing={1} sx={{ flex: 1, minWidth: 0 }}>
                     <Stack direction="row" alignItems="center" flexWrap="wrap" columnGap={0.5} rowGap={0.75}>
-                      <Typography component="span" fontWeight={700} sx={{ fontSize: '0.95rem' }}>
+                      <Typography component="span" fontWeight={700} sx={{ fontSize: '0.95rem', color: shopSurface.ink }}>
                         {displayName}
                       </Typography>
                       {mobile ? (
-                        <Typography component="span" variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
+                        <Typography
+                          component="span"
+                          variant="body2"
+                          sx={{ fontWeight: 600, color: shopSurface.inkMuted }}
+                        >
                           · {mobile}
                         </Typography>
                       ) : null}
-                      <Typography component="span" fontWeight={700} sx={{ fontSize: '0.95rem' }}>
+                      <Typography component="span" fontWeight={700} sx={{ fontSize: '0.95rem', color: shopSurface.ink }}>
                         , {row.postalCode}
                       </Typography>
                       <Chip
@@ -242,17 +248,18 @@ export function SavedAddressesPage() {
                           fontWeight: 700,
                           fontSize: '0.65rem',
                           letterSpacing: 0.6,
-                          bgcolor: 'grey.200',
-                          color: 'text.primary',
+                          bgcolor: 'rgba(5, 11, 24, 0.06)',
+                          color: shopSurface.ink,
+                          border: '1px solid rgba(5, 11, 24, 0.14)',
                           borderRadius: 1,
-                          '& .MuiChip-label': { px: 1.25 },
+                          '& .MuiChip-label': { px: 1.25, color: shopSurface.ink },
                         }}
                       />
                     </Stack>
                     <Typography
                       variant="body2"
-                      color="text.secondary"
                       sx={{
+                        color: shopSurface.inkMuted,
                         lineHeight: 1.45,
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',

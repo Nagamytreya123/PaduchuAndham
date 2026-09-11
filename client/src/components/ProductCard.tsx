@@ -11,28 +11,42 @@ import { formatInrFromPaise } from '../utils/format';
 import { getProductDisplayImage, handleProductImageError } from '../utils/productImage';
 import { EditorialImageFrame } from './EditorialImageFrame';
 import { WishlistToggleButton } from './WishlistToggleButton';
+import { ProductCardAddButton } from './ProductCardAddButton';
 import { productToWishlistItem } from '../context/WishlistContext';
+import { shopSurface } from '../constants/shopSurface';
 
 const LIGHT_INK = '#1a1a1a';
 const LIGHT_INK_MUTED = '#5c5c5c';
 const LIGHT_PRICE = '#8B6B4A';
+const LIGHT_DISCOUNT = '#9a7348';
+
+function discountPercentOff(pricePaise: number, compareAtPaise?: number): number | null {
+  if (compareAtPaise == null || compareAtPaise <= pricePaise) return null;
+  const pct = Math.round(((compareAtPaise - pricePaise) / compareAtPaise) * 100);
+  return pct > 0 ? pct : null;
+}
 
 export function ProductCard({
   product,
   tone = 'dark',
   imageFrame = 'default',
+  layout = 'default',
 }: {
   product: ProductSummary;
   /** Use `light` on cream/white storefront surfaces (dark theme defaults white text). */
   tone?: 'dark' | 'light';
   /** `editorial` = 4:5 studio frame (home / cart style). */
   imageFrame?: 'default' | 'editorial';
+  /** `shop` = compact grid card on the shop page. */
+  layout?: 'default' | 'shop';
 }) {
   const img = getProductDisplayImage(product);
   const hasUploadedImage = Boolean(product.images[0]?.trim());
   const showCompare = product.compareAtPrice != null && product.compareAtPrice > product.price;
+  const discountPercent = discountPercentOff(product.price, product.compareAtPrice);
   const isLight = tone === 'light';
   const isEditorial = imageFrame === 'editorial';
+  const isShop = layout === 'shop';
 
   return (
     <Card
@@ -77,24 +91,30 @@ export function ProductCard({
             }}
           />
         </Box>
-        <CardContent sx={{ flexGrow: 1 }}>
-          <Stack direction="row" gap={0.5} flexWrap="wrap" sx={{ mb: 1 }}>
-            <Chip
-              label={product.category}
-              size="small"
-              sx={{
-                fontWeight: 600,
-                ...(isLight && {
-                  bgcolor: 'rgba(26, 26, 26, 0.08)',
-                  color: LIGHT_INK,
-                  border: '1px solid rgba(26, 26, 26, 0.14)',
-                }),
-              }}
-            />
-          </Stack>
+        <CardContent sx={{ flexGrow: 1, ...(isShop && { pt: 1.25, pb: 1.5, '&:last-child': { pb: 1.5 } }) }}>
+          {!isShop ? (
+            <Stack direction="row" gap={0.5} flexWrap="wrap" sx={{ mb: 1 }}>
+              <Chip
+                label={product.category}
+                size="small"
+                sx={{
+                  fontWeight: 600,
+                  ...(isLight && {
+                    bgcolor: 'rgba(26, 26, 26, 0.08)',
+                    color: LIGHT_INK,
+                    border: '1px solid rgba(26, 26, 26, 0.14)',
+                  }),
+                }}
+              />
+            </Stack>
+          ) : null}
           <Typography
-            variant="subtitle1"
-            sx={{ fontWeight: 700, color: isLight ? LIGHT_INK : undefined }}
+            variant={isShop ? 'body2' : 'subtitle1'}
+            sx={{
+              fontWeight: isShop ? 600 : 700,
+              fontSize: isShop ? '0.75rem' : undefined,
+              color: isLight ? LIGHT_INK : undefined,
+            }}
             gutterBottom
             noWrap
           >
@@ -114,26 +134,69 @@ export function ProductCard({
               .filter(Boolean)
               .join(' · ') || product.description}
           </Typography>
-          <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
-            <Typography
-              variant="subtitle2"
-              color={isLight ? undefined : 'primary.main'}
-              sx={{ color: isLight ? LIGHT_PRICE : undefined, fontWeight: 700 }}
+          <Stack direction="row" alignItems="center" justifyContent="space-between" gap={1}>
+            <Stack
+              direction="row"
+              alignItems="center"
+              gap={0.75}
+              flexWrap="wrap"
+              sx={{ minWidth: 0, flex: 1 }}
             >
-              {formatInrFromPaise(product.price)}
-            </Typography>
-            {showCompare && (
-              <Typography
-                variant="caption"
-                color={isLight ? undefined : 'text.secondary'}
-                sx={{
-                  textDecoration: 'line-through',
-                  color: isLight ? LIGHT_INK_MUTED : undefined,
-                }}
+              <Stack
+                direction="row"
+                alignItems="baseline"
+                gap={0.75}
+                sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}
               >
-                {formatInrFromPaise(product.compareAtPrice!)}
-              </Typography>
-            )}
+                <Typography
+                  variant={isShop ? 'caption' : 'subtitle2'}
+                  color={isLight ? undefined : 'primary.main'}
+                  sx={{
+                    ...shopSurface.amount,
+                    color: isLight ? LIGHT_PRICE : undefined,
+                    fontSize: isShop ? '0.8125rem' : '0.9375rem',
+                    lineHeight: 1.2,
+                    textTransform: 'none',
+                    letterSpacing: '0.01em',
+                  }}
+                >
+                  {formatInrFromPaise(product.price)}
+                </Typography>
+                {showCompare && (
+                  <Typography
+                    variant="caption"
+                    color={isLight ? undefined : 'text.secondary'}
+                    sx={{
+                      ...shopSurface.amount,
+                      textDecoration: 'line-through',
+                      color: isLight ? LIGHT_INK_MUTED : undefined,
+                      fontSize: isShop ? '0.75rem' : '0.8125rem',
+                      lineHeight: 1.2,
+                      textTransform: 'none',
+                      letterSpacing: '0.01em',
+                    }}
+                  >
+                    {formatInrFromPaise(product.compareAtPrice!)}
+                  </Typography>
+                )}
+              </Stack>
+              {isShop && discountPercent != null ? (
+                <Typography
+                  variant="caption"
+                  sx={{
+                    fontWeight: 700,
+                    fontSize: '0.75rem',
+                    color: isLight ? LIGHT_DISCOUNT : 'primary.main',
+                    letterSpacing: '0.02em',
+                    lineHeight: 1.2,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {discountPercent}% off
+                </Typography>
+              ) : null}
+            </Stack>
+            <ProductCardAddButton product={product} tone={isLight ? 'light' : 'dark'} />
           </Stack>
         </CardContent>
       </CardActionArea>

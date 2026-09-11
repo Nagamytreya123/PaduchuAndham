@@ -20,12 +20,16 @@ import AccordionDetails from '@mui/material/AccordionDetails';
 import { IconAdd, IconRemove } from '../icons';
 import { apiFetch } from '../api/client';
 import { useCart } from '../context/CartContext';
+import { useCategories } from '../context/CategoriesContext';
+import { categoryUsesSizeOptions } from '../utils/catalogCategory';
 import { WishlistToggleButton } from '../components/WishlistToggleButton';
 import { productToWishlistItem } from '../context/WishlistContext';
 import type { ProductSummary } from '../types/product';
 import { formatInrFromPaise } from '../utils/format';
 import { allocateWatchBraceletBundle, allocateListRatioBundle } from '../utils/bundlePricing';
 import { ProductDetailGallery } from '../components/product/ProductDetailGallery';
+import { ProductDescription } from '../components/product/ProductDescription';
+import { SansDigitsText } from '../components/SansDigitsText';
 import { StorefrontHeader } from '../components/StorefrontHeader';
 import { shopSurface } from '../constants/shopSurface';
 import { trackViewItem } from '../analytics';
@@ -33,6 +37,7 @@ import { cacheProduct, getCachedProduct } from '../utils/catalogCache';
 import { getProductDisplayImage } from '../utils/productImage';
 import { preloadLcpImage } from '../utils/preloadLcpImage';
 import { useLcpImagePreload } from '../hooks/useLcpImagePreload';
+import { useMinimumLoading } from '../hooks/useMinimumLoading';
 
 const ExploreCategoryRows = lazy(() =>
   import('../components/product/ExploreCategoryRows').then((m) => ({ default: m.ExploreCategoryRows })),
@@ -59,6 +64,7 @@ export function ProductDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { add, addBundle, remove } = useCart();
+  const { categories } = useCategories();
   const [product, setProduct] = useState<ProductSummary | null>(() =>
     id && PRODUCT_ID_RE.test(id) ? getCachedProduct(id) ?? null : null,
   );
@@ -69,7 +75,11 @@ export function ProductDetailPage() {
   });
   const [notFound, setNotFound] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const showLoading = useMinimumLoading(loading);
   const [bundleBraceletId, setBundleBraceletId] = useState<string | null>(null);
+  const [bundleWatchId, setBundleWatchId] = useState<string | null>(null);
+  const [selectedSize, setSelectedSize] = useState<string | null>(null);
+  const [sizeError, setSizeError] = useState<string | null>(null);
   const fetchAbortRef = useRef<AbortController | null>(null);
   const viewItemTracked = useRef<string | null>(null);
   const lcpImageUrl = useMemo(
@@ -163,7 +173,12 @@ export function ProductDetailPage() {
 
   useEffect(() => {
     setQty(1);
+    setSelectedSize(null);
+    setSizeError(null);
   }, [id]);
+
+  const matchingBraceletIds = (product?.matchingBracelets ?? []).map((b) => b.id).join(',');
+  const matchingWatchIds = (product?.matchingWatches ?? []).map((w) => w.id).join(',');
 
   useEffect(() => {
     if (!product) return;
@@ -174,11 +189,21 @@ export function ProductDetailPage() {
         return br[0]?.id ?? null;
       });
     } else {
-      setBundleBraceletId(null);
+      setBundleBraceletId((prev) => (prev === null ? prev : null));
     }
-  }, [product]);
 
-  if (loading) {
+    const watches = product.matchingWatches ?? [];
+    if (watches.length > 0) {
+      setBundleWatchId((prev) => {
+        if (prev && watches.some((w) => w.id === prev)) return prev;
+        return watches[0]?.id ?? null;
+      });
+    } else {
+      setBundleWatchId((prev) => (prev === null ? prev : null));
+    }
+  }, [product?.id, matchingBraceletIds, matchingWatchIds]);
+
+  if (showLoading) {
     return <PdpLoadingState aria-label="Loading product" />;
   }
 
@@ -212,8 +237,12 @@ export function ProductDetailPage() {
 
   const img = product.images[0];
   const commitQty = Math.min(Math.max(1, qty), product.stock || 1);
+  const usesSizeOptions = categoryUsesSizeOptions(product.category, categories);
+  const sizeOptions = usesSizeOptions ? (product.sizeOptions ?? []).filter((s) => s.trim()) : [];
+  const requiresSizeSelection = sizeOptions.length > 0;
 
   const bracelets = product.matchingBracelets ?? [];
+  const watches = product.matchingWatches ?? [];
   const comboProducts = product.comboProducts ?? [];
   const isComboProduct = comboProducts.length >= 2;
   const bundlePaiseRaw = product.watchBraceletBundlePrice;
@@ -241,6 +270,33 @@ export function ProductDetailPage() {
       : 0;
   const bundleCommitQty = Math.min(commitQty, Math.max(1, bundleMaxQty));
 
+  const selectedWatch = watches.find((w) => w.id === bundleWatchId) ?? null;
+  const reverseBundlePaiseRaw = selectedWatch?.watchBraceletBundlePrice;
+  const hasReverseBundleDeal =
+    reverseBundlePaiseRaw != null && reverseBundlePaiseRaw > 0 && watches.length > 0;
+  const reverseBundlePaise = hasReverseBundleDeal ? reverseBundlePaiseRaw! : null;
+  const showBraceletWatchPair = watches.length > 0 && selectedWatch != null;
+  const reverseListPairSum =
+    showBraceletWatchPair && selectedWatch ? selectedWatch.price + product.price : null;
+  const reversePairChargePaise =
+    showBraceletWatchPair && selectedWatch
+      ? hasReverseBundleDeal && reverseBundlePaise != null
+        ? reverseBundlePaise
+        : reverseListPairSum!
+      : null;
+  const reverseBundleSave =
+    hasReverseBundleDeal &&
+    reverseListPairSum != null &&
+    reverseBundlePaise != null &&
+    reverseListPairSum > reverseBundlePaise
+      ? reverseListPairSum - reverseBundlePaise
+      : null;
+  const reverseBundleMaxQty =
+    showBraceletWatchPair && selectedWatch
+      ? Math.min(product.stock || 0, selectedWatch.stock || 0)
+      : 0;
+  const reverseBundleCommitQty = Math.min(commitQty, Math.max(1, reverseBundleMaxQty));
+
   const showCompare = product.compareAtPrice != null && product.compareAtPrice > product.price;
   const materialValue =
     product.jewelryDetails?.materialType ??
@@ -259,6 +315,9 @@ export function ProductDetailPage() {
         product.price,
       )
     : [];
+  const inStock = isComboProduct
+    ? comboMaxQty >= 1
+    : (product.stock ?? 0) > 0 && product.isActive !== false;
 
   return (
     <Box sx={{ pb: { xs: 10, sm: 4 } }}>
@@ -270,7 +329,7 @@ export function ProductDetailPage() {
         </Typography>
       ) : null}
 
-      <ProductDetailGallery images={product.images} productName={product.name} />
+      <ProductDetailGallery images={product.images} productName={product.name} inStock={inStock} />
 
       <Box sx={{ px: 2, pt: 3, maxWidth: 520, mx: 'auto' }}>
         <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 2 }}>
@@ -281,7 +340,7 @@ export function ProductDetailPage() {
         </Stack>
 
         <Typography component="h1" sx={{ ...pdpTypography.title, color: 'text.primary', mb: 1.5 }}>
-          {product.name}
+          <SansDigitsText text={product.name} />
         </Typography>
 
         <Stack direction="row" alignItems="baseline" gap={1.5} flexWrap="wrap" sx={{ mb: 2.5 }}>
@@ -300,21 +359,60 @@ export function ProductDetailPage() {
           ) : null}
         </Stack>
 
-        {product.description?.trim() ? (
-          <Typography sx={{ ...pdpTypography.body, color: 'text.secondary', mb: 3 }}>
-            {product.description.trim()}
-          </Typography>
-        ) : null}
+        <ProductDescription key={product.id} description={product.description ?? ''} />
 
         <Stack spacing={2} sx={{ mb: 3 }}>
           <DetailRow label="Material" value={materialValue} />
           {product.watchDetails?.color ? (
             <DetailRow label="Colour" value={product.watchDetails.color} />
           ) : null}
-          {product.dimensions?.displayNote ? (
+          {!requiresSizeSelection && product.dimensions?.displayNote ? (
             <DetailRow label="Size" value={product.dimensions.displayNote} />
           ) : null}
         </Stack>
+
+        {requiresSizeSelection ? (
+          <Box sx={{ mb: 3 }}>
+            <Typography sx={{ ...pdpTypography.label, color: 'text.secondary', mb: 1 }}>
+              Size <Box component="span" sx={{ color: 'error.main' }}>*</Box>
+            </Typography>
+            <FormControl component="fieldset" variant="standard" fullWidth error={Boolean(sizeError)}>
+              <RadioGroup
+                value={selectedSize ?? ''}
+                onChange={(e) => {
+                  setSelectedSize(e.target.value);
+                  setSizeError(null);
+                }}
+              >
+                <Stack direction="row" flexWrap="wrap" gap={1}>
+                  {sizeOptions.map((size) => (
+                    <Paper
+                      key={size}
+                      elevation={0}
+                      sx={{
+                        borderRadius: 1.5,
+                        border: '1px solid',
+                        borderColor: selectedSize === size ? 'primary.main' : 'divider',
+                      }}
+                    >
+                      <FormControlLabel
+                        value={size}
+                        control={<Radio size="small" />}
+                        label={size}
+                        sx={{ m: 0, px: 1.25, py: 0.5 }}
+                      />
+                    </Paper>
+                  ))}
+                </Stack>
+              </RadioGroup>
+              {sizeError ? (
+                <Typography variant="caption" color="error" sx={{ mt: 0.75, display: 'block' }}>
+                  {sizeError}
+                </Typography>
+              ) : null}
+            </FormControl>
+          </Box>
+        ) : null}
 
         {isComboProduct && (
           <Paper
@@ -482,6 +580,127 @@ export function ProductDetailPage() {
           </Paper>
         )}
 
+        {showBraceletWatchPair && selectedWatch && reversePairChargePaise != null && (
+          <Paper
+            elevation={0}
+            sx={{
+              p: 2,
+              mb: 3,
+              borderRadius: 2,
+              border: '1px solid',
+              borderColor: 'divider',
+              bgcolor: 'action.hover',
+            }}
+          >
+            <Typography sx={{ ...pdpTypography.label, color: 'text.primary', mb: 1 }}>
+              Buy with a matching watch
+            </Typography>
+            <FormControl component="fieldset" variant="standard" fullWidth sx={{ mb: 1.5 }}>
+              <RadioGroup
+                value={bundleWatchId ?? ''}
+                onChange={(e) => setBundleWatchId(e.target.value)}
+              >
+                {watches.map((w) => {
+                  const thumb = w.images[0];
+                  return (
+                    <Paper
+                      key={w.id}
+                      elevation={0}
+                      sx={{
+                        mb: 1,
+                        borderRadius: 1.5,
+                        border: '1px solid',
+                        borderColor: bundleWatchId === w.id ? 'primary.main' : 'divider',
+                        overflow: 'hidden',
+                      }}
+                    >
+                      <FormControlLabel
+                        value={w.id}
+                        sx={{ alignItems: 'center', m: 0, px: 1, py: 0.75, width: '100%' }}
+                        control={<Radio size="small" />}
+                        label={
+                          <Stack direction="row" spacing={1.5} alignItems="center" sx={{ width: '100%' }}>
+                            <Box
+                              component={thumb ? 'img' : 'div'}
+                              src={thumb || undefined}
+                              alt=""
+                              sx={{
+                                width: 48,
+                                height: 48,
+                                borderRadius: 1,
+                                objectFit: 'cover',
+                                bgcolor: 'grey.200',
+                              }}
+                            />
+                            <Typography variant="body2" fontWeight={700} noWrap sx={{ flex: 1 }}>
+                              {w.name}
+                            </Typography>
+                            <Link
+                              component={RouterLink}
+                              to={`/products/${w.id}`}
+                              variant="caption"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              Details
+                            </Link>
+                          </Stack>
+                        }
+                      />
+                    </Paper>
+                  );
+                })}
+              </RadioGroup>
+            </FormControl>
+            <Stack direction="row" alignItems="baseline" gap={1} flexWrap="wrap" sx={{ mb: 1.5 }}>
+              <Typography sx={{ ...pdpTypography.price, color: 'primary.main' }}>
+                {formatInrFromPaise(reversePairChargePaise)}
+              </Typography>
+              {reverseBundleSave != null && reverseBundleSave > 0 && (
+                <Chip size="small" color="success" label={`Save ${formatInrFromPaise(reverseBundleSave)}`} />
+              )}
+            </Stack>
+            <Button
+              variant="contained"
+              color="secondary"
+              fullWidth
+              disabled={reverseBundleMaxQty < 1}
+              sx={{ ...pdpTypography.cta, py: 1.35 }}
+              onClick={() => {
+                const watchImg = selectedWatch.images[0];
+                const alloc = allocateWatchBraceletBundle(
+                  selectedWatch.price,
+                  product.price,
+                  reversePairChargePaise,
+                );
+                addBundle({
+                  groupId: `watch-bracelet-${selectedWatch.id}-${product.id}`,
+                  displayName: `${selectedWatch.name} + ${product.name}`,
+                  unitTotalPaise: reversePairChargePaise,
+                  image: watchImg ?? img,
+                  components: [
+                    {
+                      productId: selectedWatch.id,
+                      name: selectedWatch.name,
+                      unitPricePaise: alloc.watchUnitPaise,
+                      image: watchImg,
+                    },
+                    {
+                      productId: product.id,
+                      name: product.name,
+                      unitPricePaise: alloc.braceletUnitPaise,
+                      image: img,
+                    },
+                  ],
+                  qty: reverseBundleCommitQty,
+                });
+                navigate('/cart');
+              }}
+            >
+              Add watch + bracelet
+            </Button>
+          </Paper>
+        )}
+
         <Typography sx={{ ...pdpTypography.label, color: 'text.secondary', mb: 1 }}>Quantity</Typography>
         <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 3 }}>
           <IconButton size="small" onClick={() => setQty((q) => Math.max(1, q - 1))} aria-label="decrease">
@@ -508,6 +727,10 @@ export function ProductDetailPage() {
           disabled={isComboProduct ? comboMaxQty < 1 : product.stock < 1}
           sx={{ ...pdpTypography.cta, py: 1.6, borderRadius: 0 }}
           onClick={() => {
+            if (requiresSizeSelection && !selectedSize) {
+              setSizeError('Please select a size');
+              return;
+            }
             if (isComboProduct) {
               addBundle({
                 groupId: `product-combo-${product.id}`,
@@ -525,26 +748,20 @@ export function ProductDetailPage() {
               navigate('/cart');
               return;
             }
-            remove(product.id);
+            remove(product.id, selectedSize ?? undefined);
             add({
               productId: product.id,
               name: product.name,
               price: product.price,
               qty: commitQty,
               image: img,
+              selectedSize: selectedSize ?? undefined,
             });
             navigate('/cart');
           }}
         >
           {isComboProduct ? `Add combo to bag — ${formatInrFromPaise(product.price)}` : 'Add to bag'}
         </Button>
-        <Typography
-          variant="caption"
-          color="text.secondary"
-          sx={{ display: 'block', textAlign: 'center', mt: 1.25, ...pdpTypography.body, fontSize: '0.75rem' }}
-        >
-          Free express shipping on all orders.
-        </Typography>
 
         {product.careInstructions ? (
           <Accordion

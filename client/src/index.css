@@ -92,3 +92,86 @@
     transform: translateX(100%);
   }
 }
+
+/* shadcn/ui scope for Hero10 — avoids global preflight while matching storefront tokens */
+.hero-10-scope {
+  --background: 24 100% 97%;
+  --foreground: 222 68% 6%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 68% 6%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 68% 6%;
+  --primary: 340 78% 59%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 24 45% 94%;
+  --secondary-foreground: 222 68% 6%;
+  --muted: 24 35% 93%;
+  --muted-foreground: 222 20% 38%;
+  --accent: 24 45% 94%;
+  --accent-foreground: 222 68% 6%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 222 20% 88%;
+  --input: 222 20% 88%;
+  --ring: 340 78% 59%;
+  box-sizing: border-box;
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.hero-10-scope *,
+.hero-10-scope *::before,
+.hero-10-scope *::after {
+  box-sizing: border-box;
+}
+
+/* shadcn/ui scope for CoverflowCarousel */
+.coverflow-carousel-scope {
+  --background: 22 100% 91%;
+  --foreground: 222 68% 6%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 68% 6%;
+  --border: 222 20% 88%;
+  --muted: 22 60% 88%;
+  --muted-foreground: 222 20% 38%;
+  --ring: 340 78% 59%;
+  width: 100%;
+  max-width: 48rem;
+  margin-inline: auto;
+  background-color: #ffe2d3;
+  border-radius: 1rem;
+  box-sizing: border-box;
+}
+
+.coverflow-carousel-scope *,
+.coverflow-carousel-scope *::before,
+.coverflow-carousel-scope *::after {
+  box-sizing: border-box;
+}
+
+.coverflow-carousel-scope .coverflow-carousel-frame {
+  width: 100%;
+  background-color: #fff2ea;
+  border-radius: 0.75rem;
+}
+
+.coverflow-carousel-scope .coverflow-carousel-frame > div {
+  width: 100%;
+}
+
+/* shadcn/ui scope for CircularGallery */
+.circular-gallery-scope {
+  --background: 240 20% 98%;
+  --foreground: 222 68% 6%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 68% 6%;
+  --border: 222 20% 88%;
+  --muted-foreground: 222 20% 38%;
+  box-sizing: border-box;
+}
+
+.circular-gallery-scope *,
+.circular-gallery-scope *::before,
+.circular-gallery-scope *::after {
+  box-sizing: border-box;
+}

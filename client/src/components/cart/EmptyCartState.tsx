@@ -483,20 +483,9 @@ export function EmptyCartState() {
                     fontFamily: editorialSurface.font.headline,
                     fontSize: '1.5rem',
                     color: '#ffffff',
-                    mb: 0.5,
                   }}
                 >
                   {cat.label}
-                </Typography>
-                <Typography
-                  sx={{
-                    ...editorialSurface.label,
-                    fontSize: '0.6875rem',
-                    color: 'rgba(255,255,255,0.72)',
-                    letterSpacing: '0.18em',
-                  }}
-                >
-                  {cat.kind === 'watch' ? 'Precision time' : cat.kind === 'bracelet' ? 'Fine details' : 'Collection'}
                 </Typography>
                 <Box
                   className="empty-cart-cat-line"
@@ -504,7 +493,7 @@ export function EmptyCartState() {
                     height: '1px',
                     width: 0,
                     bgcolor: 'rgba(255,255,255,0.5)',
-                    mt: 1.5,
+                    mt: 1.25,
                     transition: 'width 0.5s ease',
                   }}
                 />

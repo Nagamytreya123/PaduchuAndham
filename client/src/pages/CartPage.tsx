@@ -7,12 +7,15 @@ import IconButton from '@mui/material/IconButton';
 import { IconAdd, IconDelete, IconRemove } from '../icons';
 import Box from '@mui/material/Box';
 import { Link as RouterLink } from 'react-router-dom';
-import { useCart, type CartLine } from '../context/CartContext';
+import { cartStandaloneLineKey, useCart, type CartLine } from '../context/CartContext';
 import { formatInrFromPaise } from '../utils/format';
+import { SansDigitsText } from '../components/SansDigitsText';
 import { handleProductImageError, PRODUCT_IMAGE_FALLBACK } from '../utils/productImage';
 import { StorefrontPageShell } from '../components/StorefrontPageShell';
 import { EmptyCartState } from '../components/cart/EmptyCartState';
 import { StorefrontHeader } from '../components/StorefrontHeader';
+import { CouponPromoBanner } from '../components/CouponPromoBanner';
+import { cartBlocksCoupons } from '../utils/couponEligibility';
 import { editorialSurface } from '../constants/editorialSurface';
 import { shopSurface } from '../constants/shopSurface';
 
@@ -189,6 +192,7 @@ function toDisplayRows(lines: CartLine[]): CartDisplayRow[] {
 export function CartPage() {
   const { lines, setQty, setBundleQty, remove, removeBundle, totalPaise } = useCart();
   const displayRows = useMemo(() => toDisplayRows(lines), [lines]);
+  const couponsBlocked = useMemo(() => cartBlocksCoupons(lines), [lines]);
 
   if (lines.length === 0) {
     return (
@@ -255,7 +259,7 @@ export function CartPage() {
                     }}
                   >
                     <Typography sx={{ fontFamily: shopSurface.font.display, fontWeight: 600, fontSize: '1.05rem', color: shopSurface.ink }}>
-                      {row.title}
+                      <SansDigitsText text={row.title} />
                     </Typography>
                     <Typography variant="body2" sx={{ color: shopSurface.inkMuted, mt: 0.5 }}>
                       <Box component="span" sx={shopSurface.amount}>
@@ -266,9 +270,6 @@ export function CartPage() {
                         {formatInrFromPaise(row.unitTotalPaise * row.qty)}
                       </Box>{' '}
                       total
-                    </Typography>
-                    <Typography variant="caption" sx={{ color: shopSurface.inkMuted, display: 'block', mt: 0.5 }}>
-                      Combined set (multiple SKUs)
                     </Typography>
                   </Box>
                 </Stack>
@@ -297,7 +298,7 @@ export function CartPage() {
               </Stack>
             </Paper>
           ) : (
-            <Paper key={row.line.productId} elevation={0} sx={shopSurface.card}>
+            <Paper key={cartStandaloneLineKey(row.line)} elevation={0} sx={shopSurface.card}>
               <Stack
                 direction={{ xs: 'column', sm: 'row' }}
                 spacing={2}
@@ -308,20 +309,21 @@ export function CartPage() {
                   <CartLineImage src={row.line.image} alt={row.line.name} />
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography sx={{ fontFamily: shopSurface.font.display, fontWeight: 600, fontSize: '1.05rem', color: shopSurface.ink }}>
-                      {row.line.name}
+                      <SansDigitsText text={row.line.name} />
                     </Typography>
                     <Typography variant="body2" sx={{ color: shopSurface.inkMuted, mt: 0.5 }}>
                       <Box component="span" sx={shopSurface.amount}>
                         {formatInrFromPaise(row.line.price)}
                       </Box>{' '}
                       each
+                      {row.line.selectedSize ? ` · Size ${row.line.selectedSize}` : ''}
                     </Typography>
                   </Box>
                 </Box>
                 <Stack direction="row" spacing={1} alignItems="center">
                   <IconButton
                     size="small"
-                    onClick={() => setQty(row.line.productId, row.line.qty - 1)}
+                    onClick={() => setQty(row.line.productId, row.line.qty - 1, row.line.selectedSize)}
                     aria-label="decrease qty"
                     sx={{ color: shopSurface.ink }}
                   >
@@ -330,13 +332,17 @@ export function CartPage() {
                   <Typography sx={{ minWidth: 24, textAlign: 'center', color: shopSurface.ink }}>{row.line.qty}</Typography>
                   <IconButton
                     size="small"
-                    onClick={() => setQty(row.line.productId, row.line.qty + 1)}
+                    onClick={() => setQty(row.line.productId, row.line.qty + 1, row.line.selectedSize)}
                     aria-label="increase qty"
                     sx={{ color: shopSurface.ink }}
                   >
                     <IconAdd />
                   </IconButton>
-                  <IconButton color="error" onClick={() => remove(row.line.productId)} aria-label="remove">
+                  <IconButton
+                    color="error"
+                    onClick={() => remove(row.line.productId, row.line.selectedSize)}
+                    aria-label="remove"
+                  >
                     <IconDelete />
                   </IconButton>
                 </Stack>
@@ -346,7 +352,8 @@ export function CartPage() {
         )}
 
         <Paper elevation={0} sx={shopSurface.card}>
-          <Stack direction="row" justifyContent="space-between" alignItems="center">
+          {!couponsBlocked ? <CouponPromoBanner subtotalPaise={totalPaise} cartLines={lines} /> : null}
+          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 2 }}>
             <Typography sx={{ fontFamily: shopSurface.font.display, fontSize: '1.15rem', fontWeight: 600, color: shopSurface.ink }}>
               Total
             </Typography>

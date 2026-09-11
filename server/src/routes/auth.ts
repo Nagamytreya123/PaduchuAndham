@@ -7,6 +7,11 @@ import { authCookieOptions, clearAuthCookieOptions } from '../utils/authCookie.j
 import { authLimiter } from '../middleware/rateLimit.js';
 import { loadUserById } from '../cache/userLoader.js';
 import { invalidateCachedUser, setCachedUser } from '../cache/session.js';
+import {
+  createAndSendAdminOtp,
+  resendAdminOtp,
+  verifyAdminOtp,
+} from '../services/adminOtp.js';
 
 const router = Router();
 
@@ -34,16 +39,33 @@ router.get(
       next,
     );
   },
-  (req, res) => {
+  async (req, res) => {
     const u = req.user as { id: string; email: string; role: 'admin' | 'customer' } | undefined;
     if (!u) {
       res.redirect(`${env.CLIENT_URL}/login?error=user`);
       return;
     }
+    if (u.role === 'admin') {
+      try {
+        const challenge = await createAndSendAdminOtp(u.id);
+        const bridge =
+          `${env.CLIENT_URL.replace(/\/$/, '')}/login?` +
+          new URLSearchParams({
+            adminOtp: '1',
+            challenge: challenge.challengeId,
+            redirect: '/admin',
+          }).toString();
+        res.redirect(bridge);
+      } catch (err) {
+        console.error('[auth] admin Google OTP failed', err);
+        res.redirect(`${env.CLIENT_URL}/login?error=otp`);
+      }
+      return;
+    }
     const token = issueAuthCookie(u.id, u.role);
     const maxAge = 7 * 24 * 60 * 60 * 1000;
     res.cookie(env.JWT_COOKIE_NAME, token, authCookieOptions(maxAge));
-    const dest = u.role === 'admin' ? '/admin' : '/account';
+    const dest = '/account';
     const bridge =
       `${env.CLIENT_URL.replace(/\/$/, '')}/login?` +
       new URLSearchParams({ celebrate: '1', redirect: dest }).toString();
@@ -85,6 +107,29 @@ function setSessionCookie(res: import('express').Response, userId: string, role:
   res.cookie(env.JWT_COOKIE_NAME, token, authCookieOptions(maxAgeMs));
 }
 
+async function beginAdminOtpSignIn(
+  res: Response,
+  user: { _id: { toString(): string }; email: string; name: string; avatarUrl?: string },
+  role: 'admin',
+) {
+  const id = user._id.toString();
+  try {
+    const challenge = await createAndSendAdminOtp(id);
+    res.json({
+      ok: true,
+      requiresOtp: true,
+      challengeId: challenge.challengeId,
+      email: challenge.email,
+      user: { id, email: user.email, name: user.name, role },
+    });
+  } catch (err) {
+    console.error('[auth] admin OTP email failed', err);
+    res.status(503).json({
+      error: err instanceof Error ? err.message : 'Could not send verification email.',
+    });
+  }
+}
+
 /** Email sign-in for returning customers (account must already exist). */
 async function emailLogin(req: Request, res: Response) {
   const { email } = req.body as { email?: string };
@@ -105,6 +150,10 @@ async function emailLogin(req: Request, res: Response) {
   }
   const id = user._id.toString();
   const role = user.role as 'admin' | 'customer';
+  if (role === 'admin') {
+    await beginAdminOtpSignIn(res, user, role);
+    return;
+  }
   setSessionCookie(res, id, role);
   await setCachedUser({
     id,
@@ -146,6 +195,10 @@ async function emailSignup(req: Request, res: Response) {
     role,
   });
   const id = created._id.toString();
+  if (role === 'admin') {
+    await beginAdminOtpSignIn(res, created, role);
+    return;
+  }
   setSessionCookie(res, id, role);
   await setCachedUser({
     id,
@@ -164,6 +217,39 @@ async function emailSignup(req: Request, res: Response) {
   });
 }
 
+async function adminOtpVerify(req: Request, res: Response) {
+  const { challengeId, otp } = req.body as { challengeId?: string; otp?: string };
+  if (!challengeId?.trim() || !otp?.trim()) {
+    res.status(400).json({ error: 'Verification code is required.' });
+    return;
+  }
+  const result = await verifyAdminOtp(challengeId.trim(), otp);
+  if (!result.ok) {
+    res.status(result.status).json({ error: result.error });
+    return;
+  }
+  setSessionCookie(res, result.user.id, result.user.role);
+  res.json({ ok: true, user: result.user });
+}
+
+async function adminOtpResend(req: Request, res: Response) {
+  const { challengeId } = req.body as { challengeId?: string };
+  if (!challengeId?.trim()) {
+    res.status(400).json({ error: 'Verification session is required.' });
+    return;
+  }
+  try {
+    const challenge = await resendAdminOtp(challengeId.trim());
+    res.json({ ok: true, challengeId: challenge.challengeId, email: challenge.email });
+  } catch (err) {
+    res.status(400).json({
+      error: err instanceof Error ? err.message : 'Could not resend verification code.',
+    });
+  }
+}
+
+router.post('/admin/otp/verify', adminOtpVerify);
+router.post('/admin/otp/resend', adminOtpResend);
 router.post('/login', emailLogin);
 router.post('/signup', emailSignup);
 router.post('/dev-login', emailLogin);

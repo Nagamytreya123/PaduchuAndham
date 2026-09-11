@@ -59,6 +59,13 @@ Parameters:
   SmtpFrom:
     Type: String
     Default: ''
+  AdminOtpEmail:
+    Type: String
+    Default: ''
+  AdminOtpSmtpPass:
+    Type: String
+    NoEcho: true
+    Default: ''
   RedisUrl:
     Type: String
     NoEcho: true
@@ -165,6 +172,8 @@ Resources:
           SMTP_USER: !Ref SmtpUser
           SMTP_PASS: !Ref SmtpPass
           SMTP_FROM: !Ref SmtpFrom
+          ADMIN_OTP_EMAIL: !Ref AdminOtpEmail
+          ADMIN_OTP_SMTP_PASS: !Ref AdminOtpSmtpPass
           REDIS_URL: !Ref RedisUrl
           EMAIL_QUEUE_URL: !Ref EmailQueue
       Events:

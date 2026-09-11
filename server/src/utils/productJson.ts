@@ -98,7 +98,17 @@ type ProductLike = {
   matchingBraceletIds?: unknown[] | null;
   watchBraceletBundlePrice?: number | null;
   comboProductIds?: unknown[] | null;
+  sizeOptions?: string[] | null;
+  createdAt?: string | Date | null;
+  updatedAt?: string | Date | null;
 };
+
+function isoTimestamp(raw: string | Date | null | undefined): string | undefined {
+  if (raw == null) return undefined;
+  const ms = raw instanceof Date ? raw.getTime() : Date.parse(String(raw));
+  if (Number.isNaN(ms)) return undefined;
+  return new Date(ms).toISOString();
+}
 
 export function productToJson(p: ProductLike) {
   const braceletIds = p.matchingBraceletIds?.length
@@ -129,13 +139,28 @@ export function productToJson(p: ProductLike) {
     watchBraceletBundlePrice:
       p.watchBraceletBundlePrice == null ? undefined : p.watchBraceletBundlePrice,
     comboProductIds: comboIds,
+    sizeOptions: p.sizeOptions?.length ? [...p.sizeOptions] : undefined,
+    createdAt: isoTimestamp(p.createdAt),
+    updatedAt: isoTimestamp(p.updatedAt),
   };
+}
+
+/** Lighter payload for shop/home lists — omits embedded base64 blobs (can be multi-MB each). */
+export function productCoverImagePath(productId: string): string {
+  return `/api/products/${productId}/cover`;
+}
+
+function listPrimaryImage(productId: string, images: string[]): string[] {
+  const primary = images[0];
+  if (!primary) return [];
+  if (primary.startsWith('data:')) return [productCoverImagePath(productId)];
+  return [primary];
 }
 
 /** Lighter payload for shop/home lists — omits embedded base64 images (can be multi-MB each). */
 export function productToListJson(p: ProductLike) {
   const full = productToJson(p);
-  const images = full.images.filter((url) => !url.startsWith('data:')).slice(0, 1);
+  const images = listPrimaryImage(full.id, full.images);
   return {
     id: full.id,
     name: full.name,
@@ -157,5 +182,9 @@ export function productToListJson(p: ProductLike) {
     watchDetails: full.watchDetails,
     jewelryDetails: full.jewelryDetails,
     watchBraceletBundlePrice: full.watchBraceletBundlePrice,
+    comboProductIds: full.comboProductIds,
+    sizeOptions: full.sizeOptions,
+    createdAt: full.createdAt,
+    updatedAt: full.updatedAt,
   };
 }

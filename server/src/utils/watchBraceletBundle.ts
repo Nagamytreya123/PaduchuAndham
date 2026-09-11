@@ -15,6 +15,7 @@ export type OrderItemInput = {
   productId: string;
   qty: number;
   unitPricePaise?: number;
+  selectedSize?: string;
 };
 
 /** Split bundle total across watch and bracelet by list-price ratio (integer paise). */
@@ -55,7 +56,7 @@ export function allocateListRatioBundle(listPricesPaise: number[], bundleTotalPa
   return out;
 }
 
-type PoolUnit = { productId: string; unitPricePaise: number };
+type PoolUnit = { productId: string; unitPricePaise: number; selectedSize?: string };
 
 function pickIndicesForJewelleryCombo(
   unmatched: PoolUnit[],
@@ -123,7 +124,7 @@ export function validateOrderItemsWithBundles(
   items: OrderItemInput[],
   productsById: Map<string, BundleProductLean>,
   jewelleryCombos: JewelleryComboDefinition[] = [],
-): { amountPaise: number; lines: { productId: string; name: string; price: number; qty: number }[] } {
+): { amountPaise: number; lines: { productId: string; name: string; price: number; qty: number; selectedSize?: string }[] } {
   const pool: PoolUnit[] = [];
   for (const line of items) {
     const p = productsById.get(line.productId);
@@ -136,8 +137,9 @@ export function validateOrderItemsWithBundles(
     if (line.qty < 1 || !Number.isInteger(line.qty)) {
       throw new Error('Invalid quantity');
     }
+    const selectedSize = line.selectedSize?.trim() || undefined;
     for (let i = 0; i < line.qty; i++) {
-      pool.push({ productId: line.productId, unitPricePaise: declared });
+      pool.push({ productId: line.productId, unitPricePaise: declared, selectedSize });
     }
   }
 
@@ -221,25 +223,36 @@ export function validateOrderItemsWithBundles(
     }
   }
 
-  const groups = new Map<string, { productId: string; unitPricePaise: number; qty: number }>();
+  const groups = new Map<
+    string,
+    { productId: string; unitPricePaise: number; selectedSize?: string; qty: number }
+  >();
   for (const u of pool) {
-    const key = `${u.productId}:${u.unitPricePaise}`;
+    const key = `${u.productId}:${u.unitPricePaise}:${u.selectedSize ?? ''}`;
     const cur = groups.get(key);
     if (cur) cur.qty += 1;
-    else groups.set(key, { productId: u.productId, unitPricePaise: u.unitPricePaise, qty: 1 });
+    else {
+      groups.set(key, {
+        productId: u.productId,
+        unitPricePaise: u.unitPricePaise,
+        selectedSize: u.selectedSize,
+        qty: 1,
+      });
+    }
   }
 
   let amountPaise = 0;
-  const lines: { productId: string; name: string; price: number; qty: number }[] = [];
+  const lines: { productId: string; name: string; price: number; qty: number; selectedSize?: string }[] = [];
 
   for (const g of groups.values()) {
     const p = productsById.get(g.productId)!;
     amountPaise += g.unitPricePaise * g.qty;
     lines.push({
       productId: p._id,
-      name: p.name,
+      name: g.selectedSize ? `${p.name} (${g.selectedSize})` : p.name,
       price: g.unitPricePaise,
       qty: g.qty,
+      selectedSize: g.selectedSize,
     });
   }
 

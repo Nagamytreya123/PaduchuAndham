@@ -1,14 +1,17 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
 import { EditorialImageFrame } from '../EditorialImageFrame';
 import { IconChevronLeft, IconChevronRight } from '../../icons';
+import { editorialSurface } from '../../constants/editorialSurface';
 import { PRODUCT_IMAGE_FALLBACK, resolveMediaUrls } from '../../utils/productImage';
 
 type ProductDetailGalleryProps = {
   images: string[];
   productName: string;
+  inStock?: boolean;
 };
 
 /** White circular control + black chevron — matches editorial PDP mockup */
@@ -34,85 +37,110 @@ const galleryNavButtonSx = {
   },
 };
 
-export function ProductDetailGallery({ images, productName }: ProductDetailGalleryProps) {
-  const slides = resolveMediaUrls(images);
-  const displaySlides = slides.length > 0 ? slides : [PRODUCT_IMAGE_FALLBACK];
+export function ProductDetailGallery({ images, productName, inStock = true }: ProductDetailGalleryProps) {
+  const slideSetKey = useMemo(() => (images ?? []).join('\u0000'), [images]);
+  const displaySlides = useMemo(() => {
+    const slides = resolveMediaUrls(images);
+    return slides.length > 0 ? slides : [PRODUCT_IMAGE_FALLBACK];
+  }, [slideSetKey]);
   const [index, setIndex] = useState(0);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const touchStartXRef = useRef<number | null>(null);
   const hasMultiple = displaySlides.length > 1;
-
-  const syncIndexFromScroll = useCallback(() => {
-    const el = scrollRef.current;
-    if (!el || el.clientWidth <= 0) return;
-    const next = Math.round(el.scrollLeft / el.clientWidth);
-    setIndex(Math.max(0, Math.min(displaySlides.length - 1, next)));
-  }, [displaySlides.length]);
+  const safeIndex = Math.min(Math.max(index, 0), displaySlides.length - 1);
+  const currentSrc = displaySlides[safeIndex]!;
 
   const goTo = useCallback(
-    (target: number, behavior: ScrollBehavior = 'smooth') => {
-      const el = scrollRef.current;
-      if (!el) return;
+    (target: number) => {
+      if (displaySlides.length <= 1) return;
       const wrapped = ((target % displaySlides.length) + displaySlides.length) % displaySlides.length;
-      el.scrollTo({ left: wrapped * el.clientWidth, behavior });
-      setIndex(wrapped);
+      setIndex((current) => (current === wrapped ? current : wrapped));
     },
     [displaySlides.length],
   );
 
   useEffect(() => {
     setIndex(0);
-    scrollRef.current?.scrollTo({ left: 0, behavior: 'auto' });
-  }, [images]);
-
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el || !hasMultiple) return;
-
-    el.addEventListener('scroll', syncIndexFromScroll, { passive: true });
-    return () => el.removeEventListener('scroll', syncIndexFromScroll);
-  }, [hasMultiple, syncIndexFromScroll]);
+  }, [slideSetKey]);
 
   return (
     <Box sx={{ position: 'relative', px: 1 }}>
-      <Box
-        ref={scrollRef}
-        aria-label={`${productName} image gallery`}
-        sx={{
-          display: 'flex',
-          overflowX: hasMultiple ? 'auto' : 'hidden',
-          scrollSnapType: hasMultiple ? 'x mandatory' : 'none',
-          scrollBehavior: 'smooth',
-          WebkitOverflowScrolling: 'touch',
-          scrollbarWidth: 'none',
-          touchAction: 'pan-x pan-y pinch-zoom',
-          '&::-webkit-scrollbar': { display: 'none' },
-        }}
-      >
-        {displaySlides.map((src, i) => (
-          <Box
-            key={`${src}-${i}`}
-            sx={{
-              flex: '0 0 100%',
-              minWidth: 0,
-              scrollSnapAlign: 'start',
-              scrollSnapStop: 'always',
-            }}
-          >
-            <EditorialImageFrame
-              src={src}
-              alt={displaySlides.length > 1 ? `${productName} — image ${i + 1}` : productName}
-              inset
-              loading={i === 0 ? 'eager' : 'lazy'}
-              fetchPriority={i === 0 ? 'high' : undefined}
+      <Box sx={{ position: 'relative' }}>
+        <Box
+          aria-label={`${productName} image gallery`}
+          onTouchStart={(event) => {
+            const touch = event.touches[0];
+            touchStartXRef.current = touch?.clientX ?? null;
+          }}
+          onTouchEnd={(event) => {
+            const startX = touchStartXRef.current;
+            touchStartXRef.current = null;
+            if (startX == null || !hasMultiple) return;
+            const touch = event.changedTouches[0];
+            if (!touch) return;
+            const delta = touch.clientX - startX;
+            if (Math.abs(delta) < 48) return;
+            goTo(safeIndex + (delta > 0 ? -1 : 1));
+          }}
+          sx={{
+            opacity: inStock ? 1 : 0.58,
+            transition: 'opacity 0.25s ease',
+            touchAction: 'pan-y pinch-zoom',
+            ...(!inStock && { '& img': { filter: 'grayscale(35%)' } }),
+          }}
+        >
+          <EditorialImageFrame
+            key={currentSrc}
+            src={currentSrc}
+            alt={hasMultiple ? `${productName} — image ${safeIndex + 1}` : productName}
+            inset
+            loading={safeIndex === 0 ? 'eager' : 'lazy'}
+            fetchPriority={safeIndex === 0 ? 'high' : undefined}
+          />
+        </Box>
+        {!inStock ? (
+          <>
+            <Box
+              sx={{
+                position: 'absolute',
+                inset: 0,
+                bgcolor: 'rgba(255, 255, 255, 0.42)',
+                pointerEvents: 'none',
+              }}
             />
-          </Box>
-        ))}
+            <Box
+              sx={{
+                position: 'absolute',
+                left: 0,
+                right: 0,
+                bottom: hasMultiple ? 48 : 16,
+                display: 'flex',
+                justifyContent: 'center',
+                pointerEvents: 'none',
+                zIndex: 2,
+              }}
+            >
+              <Typography
+                sx={{
+                  ...editorialSurface.label,
+                  fontSize: '0.65rem',
+                  letterSpacing: '0.16em',
+                  bgcolor: 'rgba(15, 15, 16, 0.88)',
+                  color: '#F5F0E6',
+                  px: 1.75,
+                  py: 0.9,
+                }}
+              >
+                Out of stock
+              </Typography>
+            </Box>
+          </>
+        ) : null}
       </Box>
 
       <IconButton
         aria-label="Previous image"
         disabled={!hasMultiple}
-        onClick={() => goTo(index - 1)}
+        onClick={() => goTo(safeIndex - 1)}
         sx={{
           ...galleryNavButtonSx,
           left: 'calc(4% + 10px)',
@@ -124,7 +152,7 @@ export function ProductDetailGallery({ images, productName }: ProductDetailGalle
       <IconButton
         aria-label="Next image"
         disabled={!hasMultiple}
-        onClick={() => goTo(index + 1)}
+        onClick={() => goTo(safeIndex + 1)}
         sx={{
           ...galleryNavButtonSx,
           right: 'calc(4% + 10px)',
@@ -155,7 +183,7 @@ export function ProductDetailGallery({ images, productName }: ProductDetailGalle
           }}
         >
           {displaySlides.map((_, i) => {
-            const active = i === index;
+            const active = i === safeIndex;
             return (
               <Box
                 key={i}

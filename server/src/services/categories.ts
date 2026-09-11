@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { CategoryModel, type CategoryKind } from '../models/Category.js';
+import { CategoryModel, type CategoryKind, type CategorySizeMode } from '../models/Category.js';
 import { ProductModel } from '../models/Product.js';
 import { ReviewModel } from '../models/Review.js';
 import { JewelleryComboModel } from '../models/JewelleryCombo.js';
@@ -41,6 +41,7 @@ export type PublicCategory = {
   priceFilters: PublicPriceFilter[];
   priceFiltersEnabled: boolean;
   isCombo: boolean;
+  sizeMode: CategorySizeMode;
   isActive: boolean;
 };
 
@@ -151,6 +152,7 @@ async function listCategories(activeOnly: boolean): Promise<PublicCategory[]> {
       priceFilters: mapPriceFilters(d.priceFilters),
       priceFiltersEnabled: d.priceFiltersEnabled !== false,
       isCombo: d.isCombo === true,
+      sizeMode: d.sizeMode === 'option' ? 'option' : 'description',
       isActive: d.isActive !== false,
     };
   });
@@ -250,6 +252,63 @@ export function productCategoryFilter(names: string[]): Record<string, unknown> 
       category: new RegExp(`^${escapeRegex(name)}$`, 'i'),
     })),
   };
+}
+
+/** Price filters applicable to a category + optional subcategory (mirrors storefront). */
+export function priceFiltersForCategorySelection(
+  priceFilters: PublicPriceFilter[],
+  priceFiltersEnabled: boolean,
+  subcategoryRaw: string,
+): PublicPriceFilter[] {
+  if (!priceFiltersEnabled) return [];
+  if (priceFilters.length === 0) return [];
+  const subcategory = subcategoryRaw.trim();
+  if (subcategory) {
+    const forSub = priceFilters.filter(
+      (f) => (f.subcategory ?? '').trim().toLowerCase() === subcategory.toLowerCase(),
+    );
+    if (forSub.length > 0) return forSub;
+  }
+  return priceFilters.filter((f) => !f.subcategory);
+}
+
+export function resolvePriceFilterById(
+  available: PublicPriceFilter[],
+  idRaw: string,
+): PublicPriceFilter | null {
+  const key = idRaw.trim().toLowerCase();
+  if (!key || available.length === 0) return null;
+  return available.find((f) => f.id.toLowerCase() === key) ?? null;
+}
+
+export function buildPriceRangeMongoFilter(
+  minPaise: number | null,
+  maxPaise: number | null,
+): Record<string, unknown> | null {
+  if (minPaise == null && maxPaise == null) return null;
+  const price: Record<string, number> = {};
+  if (minPaise != null) price.$gte = minPaise;
+  if (maxPaise != null) price.$lte = maxPaise;
+  return { price };
+}
+
+/** Resolve an active storefront price filter for a category query. */
+export async function resolveStorefrontPriceFilter(
+  categoryRaw: string,
+  subcategoryRaw: string,
+  priceFilterIdRaw: string,
+): Promise<PublicPriceFilter | null> {
+  const id = priceFilterIdRaw.trim();
+  if (!id || !categoryRaw.trim()) return null;
+  const cat = await findCategoryByInput(categoryRaw, true);
+  if (!cat) return null;
+  const doc = await CategoryModel.findOne({ slug: cat.slug })
+    .select('priceFilters priceFiltersEnabled')
+    .lean();
+  if (!doc || doc.priceFiltersEnabled === false) return null;
+  const filters = mapPriceFilters(doc.priceFilters);
+  const available = priceFiltersForCategorySelection(filters, true, subcategoryRaw);
+  return resolvePriceFilterById(available, id);
 }
 
 /** Public product list filter — case-insensitive category and subcategory match. */
@@ -415,6 +474,7 @@ export async function updateCategory(
     priceFilters?: PriceFilterInput[];
     priceFiltersEnabled?: boolean;
     isCombo?: boolean;
+    sizeMode?: CategorySizeMode;
     isActive?: boolean;
   },
 ): Promise<PublicCategory> {
@@ -453,6 +513,10 @@ export async function updateCategory(
 
   if (patch.isCombo !== undefined) {
     doc.isCombo = patch.isCombo;
+  }
+
+  if (patch.sizeMode !== undefined) {
+    doc.sizeMode = patch.sizeMode === 'option' ? 'option' : 'description';
   }
 
   if (patch.isActive !== undefined) {

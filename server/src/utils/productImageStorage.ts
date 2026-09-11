@@ -1,5 +1,6 @@
 import type { Express } from 'express';
 import sharp from 'sharp';
+import { isS3UploadsEnabled, uploadProductImageToS3 } from './s3Upload.js';
 
 /** Raw upload limit — large files are compressed before storing as base64. */
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -115,19 +116,26 @@ export async function compressImageForStorage(
   return compressImageBuffer(buffer);
 }
 
-/** Compress, then convert to base64 data URI for DynamoDB storage. */
-export async function persistUploadedBuffer(buffer: Buffer, _mimetype: string): Promise<string> {
+/** Compress, then store on S3 when configured, otherwise embed as base64 in DynamoDB. */
+export async function persistUploadedBuffer(
+  buffer: Buffer,
+  mimetype: string,
+  originalName = 'image',
+): Promise<string> {
   if (!buffer?.length) {
     throw new Error('Uploaded image data was empty');
   }
-  const { buffer: compressed, mimetype } = await compressImageBuffer(buffer);
-  return bufferToDataUri(compressed, mimetype);
+  if (isS3UploadsEnabled()) {
+    return uploadProductImageToS3(buffer, originalName, mimetype);
+  }
+  const { buffer: compressed, mimetype: outMime } = await compressImageBuffer(buffer);
+  return bufferToDataUri(compressed, outMime);
 }
 
 export async function persistUploadedMulterFiles(files: Express.Multer.File[]): Promise<string[]> {
   const out: string[] = [];
   for (const file of files) {
-    out.push(await persistUploadedBuffer(file.buffer, file.mimetype));
+    out.push(await persistUploadedBuffer(file.buffer, file.mimetype, file.originalname));
   }
   return out;
 }

@@ -5,12 +5,16 @@ import { z } from 'zod';
 import Razorpay from 'razorpay';
 import { OrderModel } from '../models/Order.js';
 import { ProductModel, type ProductDoc } from '../models/Product.js';
+import { CategoryModel } from '../models/Category.js';
 import { ReviewModel } from '../models/Review.js';
 import { requireAuth } from '../middleware/auth.js';
 import { env } from '../config/env.js';
 import { isValidEntityId } from '../utils/entityId.js';
 import { completePaidOrder } from '../services/completePaidOrder.js';
 import { validateOrderItemsWithBundles, type JewelleryComboDefinition } from '../utils/watchBraceletBundle.js';
+import { computeShippingPaise, getSiteSettings } from '../services/siteSettings.js';
+import { CouponServiceError, validateCouponForCheckout } from '../services/coupon.js';
+import { assertCartAllowsCoupons, COUPON_COMBO_EXCLUDED_MESSAGE } from '../utils/couponEligibility.js';
 
 const router = Router();
 
@@ -29,7 +33,7 @@ async function buildProductImageMap(productIds: string[]): Promise<Map<string, s
   );
 }
 
-type OrderItemLean = { productId: unknown; name: string; price: number; qty: number };
+type OrderItemLean = { productId: unknown; name: string; price: number; qty: number; selectedSize?: string };
 type OrderLean = { status: string; items: OrderItemLean[] };
 
 /** Per-product review state for line items on delivered orders */
@@ -85,6 +89,7 @@ function serializeOrderItems(
       price: item.price,
       qty: item.qty,
       image: imageMap.get(pid) ?? null,
+      ...(item.selectedSize ? { selectedSize: item.selectedSize } : {}),
     };
     if (o.status === 'delivered') {
       const rev = reviewMap.get(pid);
@@ -113,9 +118,13 @@ const createBodySchema = z.object({
       qty: z.number().int().min(1),
       /** Per-unit price in paise (must match catalogue or a valid watch+bracelet bundle). */
       unitPricePaise: z.number().int().min(0).optional(),
+      /** Present on jewellery combos, watch+bracelet bundles, and combo-category sets. */
+      bundleGroupId: z.string().max(200).optional(),
+      selectedSize: z.string().min(1).max(80).optional(),
     }),
   ).min(1),
   address: addressSchema,
+  couponCode: z.string().min(1).max(32).optional(),
 });
 
 router.use(requireAuth);
@@ -141,6 +150,12 @@ router.post('/', checkoutLimiter, async (req, res) => {
   const products = (await ProductModel.find({ _id: { $in: uniqueIds } }).lean()) as ProductDoc[];
   const productMap = new Map<string, ProductDoc>(products.map((p) => [String(p._id), p]));
 
+  const categorySlugs = [...new Set(products.map((p) => String(p.category ?? '').trim().toLowerCase()).filter(Boolean))];
+  const categoryDocs = await CategoryModel.find({ slug: { $in: categorySlugs } }).select('slug sizeMode').lean();
+  const sizeModeBySlug = new Map(
+    categoryDocs.map((c) => [String(c.slug).toLowerCase(), c.sizeMode === 'option' ? 'option' : 'description']),
+  );
+
   for (const line of body.items) {
     const product = productMap.get(line.productId);
     if (!product) {
@@ -156,6 +171,35 @@ router.post('/', checkoutLimiter, async (req, res) => {
       res.status(400).json({
         error: `This product is no longer for sale: ${product.name}`,
         code: 'PRODUCT_INACTIVE',
+        productId: line.productId,
+      });
+      return;
+    }
+    if (line.bundleGroupId?.trim()) continue;
+    const sizeMode = sizeModeBySlug.get(String(product.category ?? '').trim().toLowerCase()) ?? 'description';
+    const selectedSize = line.selectedSize?.trim();
+    if (sizeMode === 'option') {
+      if (!selectedSize) {
+        res.status(400).json({
+          error: `Select a size for ${product.name}`,
+          code: 'SIZE_REQUIRED',
+          productId: line.productId,
+        });
+        return;
+      }
+      const allowed = new Set((product.sizeOptions ?? []).map((s) => String(s).trim().toLowerCase()));
+      if (!allowed.has(selectedSize.toLowerCase())) {
+        res.status(400).json({
+          error: `Invalid size for ${product.name}`,
+          code: 'SIZE_INVALID',
+          productId: line.productId,
+        });
+        return;
+      }
+    } else if (selectedSize) {
+      res.status(400).json({
+        error: `Size selection is not available for ${product.name}`,
+        code: 'SIZE_NOT_APPLICABLE',
         productId: line.productId,
       });
       return;
@@ -180,7 +224,7 @@ router.post('/', checkoutLimiter, async (req, res) => {
     price: number;
     qty: number;
   }[];
-  let amountPaise: number;
+  let subtotalPaise: number;
 
   const comboProductDocs = await ProductModel.find({
     isActive: true,
@@ -208,13 +252,67 @@ router.post('/', checkoutLimiter, async (req, res) => {
         },
       ]),
     );
-    const validated = validateOrderItemsWithBundles(body.items, bundleMap, productComboDefs);
-    amountPaise = validated.amountPaise;
+    const validated = validateOrderItemsWithBundles(
+      body.items.map((i) => ({
+        productId: i.productId,
+        qty: i.qty,
+        unitPricePaise: i.unitPricePaise,
+        selectedSize: i.selectedSize,
+      })),
+      bundleMap,
+      productComboDefs,
+    );
+    subtotalPaise = validated.amountPaise;
     lineItems = validated.lines;
   } catch (e) {
     res.status(400).json({ error: e instanceof Error ? e.message : 'Invalid cart pricing' });
     return;
   }
+
+  let discountPaise = 0;
+  let couponCode: string | undefined;
+  let couponId: string | undefined;
+
+  if (body.couponCode?.trim()) {
+    try {
+      const couponCartItems = body.items.map((i) => ({
+        productId: i.productId,
+        bundleGroupId: i.bundleGroupId,
+        unitPricePaise: i.unitPricePaise,
+        qty: i.qty,
+      }));
+      await assertCartAllowsCoupons(couponCartItems);
+      const hasBundlePricing = lineItems.some((li) => {
+        const p = productMap.get(li.productId);
+        return p != null && li.price !== p.price;
+      });
+      if (hasBundlePricing) {
+        res.status(400).json({ error: COUPON_COMBO_EXCLUDED_MESSAGE, code: 'COUPON_COMBO_EXCLUDED' });
+        return;
+      }
+      const validatedCoupon = await validateCouponForCheckout(
+        body.couponCode,
+        subtotalPaise,
+        req.user!.id,
+        couponCartItems,
+      );
+      discountPaise = validatedCoupon.discountPaise;
+      couponCode = validatedCoupon.code;
+      couponId = validatedCoupon.couponId;
+    } catch (e) {
+      if (e instanceof CouponServiceError) {
+        res.status(e.status).json({ error: e.message, code: e.code });
+        return;
+      }
+      throw e;
+    }
+  }
+
+  const discountedSubtotalPaise = Math.max(0, subtotalPaise - discountPaise);
+  const siteSettings = await getSiteSettings();
+  const shippingPaise = computeShippingPaise(subtotalPaise, siteSettings.shipping);
+  const amountPaise = discountedSubtotalPaise + shippingPaise;
+
   if (amountPaise < 100) {
     res.status(400).json({ error: 'Order total must be at least ₹1 (100 paise)' });
     return;
@@ -224,6 +322,11 @@ router.post('/', checkoutLimiter, async (req, res) => {
     user: req.user!.id,
     items: lineItems,
     amount: amountPaise,
+    subtotalPaise,
+    discountPaise: discountPaise > 0 ? discountPaise : undefined,
+    couponCode,
+    couponId,
+    shippingPaise,
     currency: 'INR',
     status: 'pending',
     address: {
@@ -276,6 +379,10 @@ router.post('/', checkoutLimiter, async (req, res) => {
     orderId: order._id.toString(),
     razorpayOrderId: razorpayOrder.id,
     amount: amountPaise,
+    subtotalPaise,
+    discountPaise,
+    couponCode,
+    shippingPaise,
     currency: 'INR',
     keyId: env.RAZORPAY_KEY_ID,
   });
@@ -300,6 +407,10 @@ router.get('/mine', async (req, res) => {
       id: o._id.toString(),
       status: o.status,
       amount: o.amount,
+      subtotalPaise: o.subtotalPaise,
+      discountPaise: o.discountPaise ?? 0,
+      couponCode: o.couponCode,
+      shippingPaise: o.shippingPaise ?? 0,
       currency: o.currency,
       createdAt: o.createdAt,
       items: serializeOrderItems({ status: o.status, items: o.items }, imageMap, reviewMap),
@@ -322,6 +433,10 @@ router.get('/mine/:id', async (req, res) => {
       id: o._id.toString(),
       status: o.status,
       amount: o.amount,
+      subtotalPaise: o.subtotalPaise,
+      discountPaise: o.discountPaise ?? 0,
+      couponCode: o.couponCode,
+      shippingPaise: o.shippingPaise ?? 0,
       currency: o.currency,
       items: serializeOrderItems({ status: o.status, items: o.items }, imageMap, reviewMap),
       address: o.address,

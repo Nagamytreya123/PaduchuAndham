@@ -18,6 +18,20 @@ import { emptyShippingForm, type SavedAddressRow, type ShippingAddressForm } fro
 import { StorefrontPageShell } from '../components/StorefrontPageShell';
 import { shopSurface } from '../constants/shopSurface';
 import { trackBeginCheckout } from '../analytics';
+import { computeShippingPaise, paiseUntilFreeShipping, type ShippingConfig } from '../utils/shipping';
+import { CouponCodeField } from '../components/CouponCodeField';
+import { CouponPromoBanner } from '../components/CouponPromoBanner';
+import type { ValidatedCoupon } from '../types/coupon';
+import {
+  cartBlocksCoupons,
+  cartItemsForCouponApi,
+} from '../utils/couponEligibility';
+import { clearStoredCouponCode } from '../utils/coupon';
+
+const DEFAULT_SHIPPING: ShippingConfig = {
+  chargePaise: 10_000,
+  freeShippingMinPaise: null,
+};
 
 function loadRazorpay(): Promise<boolean> {
   return new Promise((resolve) => {
@@ -48,6 +62,11 @@ export function CheckoutPage() {
   const [address, setAddress] = useState<ShippingAddressForm>(() => emptyShippingForm());
   const [savedRows, setSavedRows] = useState<SavedAddressRow[]>([]);
   const [selectedSavedId, setSelectedSavedId] = useState('');
+  const [shippingConfig, setShippingConfig] = useState<ShippingConfig>(DEFAULT_SHIPPING);
+  const [appliedCoupon, setAppliedCoupon] = useState<ValidatedCoupon | null>(null);
+  const [couponApplyRequest, setCouponApplyRequest] = useState<{ code: string; requestId: number } | null>(
+    null,
+  );
   const checkoutTracked = useRef(false);
 
   useEffect(() => {
@@ -55,6 +74,23 @@ export function CheckoutPage() {
     checkoutTracked.current = true;
     trackBeginCheckout(lines);
   }, [lines]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await apiFetch<{ settings: { shipping: ShippingConfig } }>('/api/site-settings');
+        if (!cancelled && res.settings?.shipping) {
+          setShippingConfig(res.settings.shipping);
+        }
+      } catch {
+        /* optional */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -95,8 +131,36 @@ export function CheckoutPage() {
     address.postalCode.trim().length > 0;
 
   const payloadItems = useMemo(
-    () => lines.map((l) => ({ productId: l.productId, qty: l.qty, unitPricePaise: l.price })),
+    () =>
+      lines.map((l) => ({
+        productId: l.productId,
+        qty: l.qty,
+        unitPricePaise: l.price,
+        ...(l.bundleGroupId?.trim() ? { bundleGroupId: l.bundleGroupId.trim() } : {}),
+        ...(l.selectedSize?.trim() ? { selectedSize: l.selectedSize.trim() } : {}),
+      })),
     [lines],
+  );
+  const couponCartItems = useMemo(() => cartItemsForCouponApi(lines), [lines]);
+  const couponsBlocked = useMemo(() => cartBlocksCoupons(lines), [lines]);
+
+  useEffect(() => {
+    if (!couponsBlocked || !appliedCoupon) return;
+    setAppliedCoupon(null);
+    setCouponApplyRequest(null);
+    clearStoredCouponCode();
+  }, [couponsBlocked, appliedCoupon]);
+
+  const shippingPaise = useMemo(
+    () => computeShippingPaise(totalPaise, shippingConfig),
+    [totalPaise, shippingConfig],
+  );
+  const discountPaise = appliedCoupon?.discountPaise ?? 0;
+  const discountedSubtotalPaise = Math.max(0, totalPaise - discountPaise);
+  const orderTotalPaise = discountedSubtotalPaise + shippingPaise;
+  const freeShippingGapPaise = useMemo(
+    () => paiseUntilFreeShipping(totalPaise, shippingConfig),
+    [totalPaise, shippingConfig],
   );
 
   const addressForOrder = useMemo(() => {
@@ -140,6 +204,7 @@ export function CheckoutPage() {
         body: JSON.stringify({
           items: payloadItems,
           address: addressForOrder,
+          ...(appliedCoupon ? { couponCode: appliedCoupon.code } : {}),
         }),
       });
 
@@ -229,14 +294,79 @@ export function CheckoutPage() {
         </Typography>
 
         <Paper elevation={0} sx={shopSurface.insetPanel}>
-          <Typography sx={{ ...shopSurface.amountLg, fontSize: '1.35rem', color: shopSurface.ink }}>
-            {formatInrFromPaise(totalPaise)}
-          </Typography>
+          {!appliedCoupon && !couponsBlocked && (
+            <CouponPromoBanner
+              subtotalPaise={totalPaise}
+              cartLines={lines}
+              onApplyCode={(code) => setCouponApplyRequest({ code, requestId: Date.now() })}
+              compact
+            />
+          )}
+          {!couponsBlocked ? (
+            <Box sx={{ mt: appliedCoupon ? 0 : 2 }}>
+              <CouponCodeField
+                subtotalPaise={totalPaise}
+                applied={appliedCoupon}
+                onAppliedChange={(coupon) => {
+                  setAppliedCoupon(coupon);
+                  if (!coupon) setCouponApplyRequest(null);
+                }}
+                applyRequest={couponApplyRequest}
+                cartItems={couponCartItems}
+              />
+            </Box>
+          ) : null}
+          <Stack spacing={1} sx={{ mt: 2 }}>
+            <Stack direction="row" justifyContent="space-between" alignItems="center">
+              <Typography sx={{ fontFamily: shopSurface.font.body, color: shopSurface.inkMuted }}>
+                Subtotal
+              </Typography>
+              <Typography sx={{ ...shopSurface.amount, color: shopSurface.ink }}>
+                {formatInrFromPaise(totalPaise)}
+              </Typography>
+            </Stack>
+            {discountPaise > 0 && (
+              <Stack direction="row" justifyContent="space-between" alignItems="center">
+                <Typography sx={{ fontFamily: shopSurface.font.body, color: '#0f7a75' }}>
+                  Coupon ({appliedCoupon?.code})
+                </Typography>
+                <Typography sx={{ ...shopSurface.amount, color: '#0f7a75' }}>
+                  −{formatInrFromPaise(discountPaise)}
+                </Typography>
+              </Stack>
+            )}
+            <Stack direction="row" justifyContent="space-between" alignItems="center">
+              <Typography sx={{ fontFamily: shopSurface.font.body, color: shopSurface.inkMuted }}>
+                Shipping
+              </Typography>
+              <Typography sx={{ ...shopSurface.amount, color: shopSurface.ink }}>
+                {shippingPaise === 0 ? 'Free' : formatInrFromPaise(shippingPaise)}
+              </Typography>
+            </Stack>
+            <Stack
+              direction="row"
+              justifyContent="space-between"
+              alignItems="center"
+              sx={{ pt: 1, borderTop: '1px solid rgba(5, 11, 24, 0.08)' }}
+            >
+              <Typography sx={{ ...shopSurface.amountLg, fontSize: '1.1rem', color: shopSurface.ink }}>
+                Total
+              </Typography>
+              <Typography sx={{ ...shopSurface.amountLg, fontSize: '1.35rem', color: shopSurface.ink }}>
+                {formatInrFromPaise(orderTotalPaise)}
+              </Typography>
+            </Stack>
+          </Stack>
           <Typography
             variant="body2"
-            sx={{ fontFamily: shopSurface.font.body, color: shopSurface.inkMuted, mt: 0.5 }}
+            sx={{ fontFamily: shopSurface.font.body, color: shopSurface.inkMuted, mt: 1.25 }}
           >
-            Order total · {lines.length} line(s) in your bag
+            {lines.length} {lines.length === 1 ? 'item' : 'items'} in your bag
+            {freeShippingGapPaise != null
+              ? ` · Add ${formatInrFromPaise(freeShippingGapPaise)} more for free shipping`
+              : shippingConfig.freeShippingMinPaise != null && shippingPaise === 0
+                ? ' · Free shipping applied'
+                : ''}
           </Typography>
         </Paper>
 

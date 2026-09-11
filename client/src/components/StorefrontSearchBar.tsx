@@ -5,11 +5,13 @@ import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
 import InputBase from '@mui/material/InputBase';
 import CircularProgress from '@mui/material/CircularProgress';
+import Popper from '@mui/material/Popper';
 import { apiFetch } from '../api/client';
 import { shopSurface } from '../constants/shopSurface';
-import { IconClose, IconSearch } from '../icons';
+import { IconClose } from '../icons';
 import type { ProductSummary } from '../types/product';
 import { formatInrFromPaise } from '../utils/format';
+import { SansDigitsText } from './SansDigitsText';
 import { handleProductImageError, PRODUCT_IMAGE_FALLBACK, resolveMediaUrl } from '../utils/productImage';
 import { useCategories } from '../context/CategoriesContext';
 
@@ -20,6 +22,7 @@ type StorefrontSearchBarProps = {
   onChange: (value: string) => void;
   onSubmit: (value: string) => void;
   variant?: Variant;
+  size?: 'default' | 'large';
   placeholder?: string;
   scrollTargetId?: string;
 };
@@ -38,9 +41,9 @@ const variantStyles: Record<
 > = {
   light: {
     shell: {
-      bgcolor: 'rgba(255, 255, 255, 0.88)',
-      border: '1px solid rgba(5, 11, 24, 0.1)',
-      boxShadow: '0 10px 30px rgba(5, 11, 24, 0.08)',
+      bgcolor: '#FFFFFF',
+      border: `1px solid ${shopSurface.ink}`,
+      boxShadow: '0 6px 22px rgba(5, 11, 24, 0.06)',
     },
     input: { color: shopSurface.ink },
     icon: shopSurface.inkMuted,
@@ -73,19 +76,24 @@ const variantStyles: Record<
   },
 };
 
+const SEARCH_BRAND_MARK = '/logo-icon.png';
+
 export function StorefrontSearchBar({
   value,
   onChange,
   onSubmit,
   variant = 'light',
+  size = 'default',
   placeholder = 'Search watches, bracelets, rings, materials…',
   scrollTargetId,
 }: StorefrontSearchBarProps) {
+  const isLarge = size === 'large';
   const listId = useId();
   const navigate = useNavigate();
   const { labelFor } = useCategories();
   const styles = variantStyles[variant];
-  const rootRef = useRef<HTMLDivElement>(null);
+  const anchorRef = useRef<HTMLDivElement>(null);
+  const popperRef = useRef<HTMLDivElement>(null);
   const [draft, setDraft] = useState(value);
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
@@ -125,7 +133,11 @@ export function StorefrontSearchBar({
 
   useEffect(() => {
     function onPointerDown(event: MouseEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (
+        !anchorRef.current?.contains(target) &&
+        !popperRef.current?.contains(target)
+      ) {
         setOpen(false);
         setActiveIndex(-1);
       }
@@ -161,19 +173,21 @@ export function StorefrontSearchBar({
   const showPanel = open && draft.trim().length >= 2;
 
   return (
-    <Box ref={rootRef} sx={{ position: 'relative', width: '100%' }}>
+    <Box sx={{ position: 'relative', width: '100%' }}>
       <Box
+        ref={anchorRef}
         sx={{
           display: 'flex',
           alignItems: 'center',
-          gap: 1,
-          px: 1.5,
-          py: 0.75,
+          gap: isLarge ? { xs: 0.5, sm: 0.75 } : 1,
+          px: isLarge ? { xs: 1, sm: 1.35, md: 1.5 } : 1.5,
+          py: isLarge ? { xs: 0.2, sm: 0.35, md: 0.4 } : 0.75,
+          minHeight: isLarge ? { xs: 32, sm: 34, md: 36 } : undefined,
           borderRadius: 999,
           transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
           ...styles.shell,
           ...(open && {
-            borderColor: variant === 'dark' ? 'rgba(214, 179, 106, 0.55)' : 'rgba(5, 11, 24, 0.22)',
+            borderColor: variant === 'dark' ? 'rgba(214, 179, 106, 0.55)' : shopSurface.ink,
             boxShadow:
               variant === 'dark'
                 ? '0 0 0 1px rgba(214, 179, 106, 0.18), 0 16px 40px rgba(0, 0, 0, 0.4)'
@@ -181,7 +195,19 @@ export function StorefrontSearchBar({
           }),
         }}
       >
-        <IconSearch sx={{ color: styles.icon, fontSize: 22, flexShrink: 0 }} />
+        <Box
+          component="img"
+          src={SEARCH_BRAND_MARK}
+          alt=""
+          aria-hidden
+          sx={{
+            height: isLarge ? { xs: 20, sm: 22, md: 24 } : { xs: 24, sm: 26 },
+            width: isLarge ? { xs: 20, sm: 22, md: 24 } : { xs: 24, sm: 26 },
+            objectFit: 'contain',
+            flexShrink: 0,
+            display: 'block',
+          }}
+        />
         <InputBase
           value={draft}
           onChange={(event) => {
@@ -229,17 +255,24 @@ export function StorefrontSearchBar({
           }}
           sx={{
             flex: 1,
+            minWidth: 0,
             fontFamily: shopSurface.font.body,
-            fontSize: { xs: '0.95rem', sm: '1rem' },
+            fontSize: isLarge
+              ? { xs: '0.75rem', sm: '0.8125rem', md: '0.85rem' }
+              : { xs: '0.95rem', sm: '1rem' },
             ...styles.input,
             '& input::placeholder': {
               color: styles.placeholder,
               opacity: 1,
             },
+            '& input': {
+              minWidth: 0,
+              textOverflow: 'ellipsis',
+            },
           }}
         />
         {loading ? (
-          <CircularProgress size={18} sx={{ color: styles.icon, flexShrink: 0 }} />
+          <CircularProgress size={isLarge ? 16 : 18} sx={{ color: styles.icon, flexShrink: 0 }} />
         ) : null}
         {draft ? (
           <IconButton
@@ -259,16 +292,21 @@ export function StorefrontSearchBar({
         ) : null}
       </Box>
 
-      {showPanel ? (
+      <Popper
+        open={showPanel}
+        anchorEl={anchorRef.current}
+        placement="bottom-start"
+        modifiers={[{ name: 'offset', options: { offset: [0, 10] } }]}
+        sx={{
+          zIndex: 1300,
+          width: anchorRef.current ? anchorRef.current.offsetWidth : undefined,
+        }}
+      >
         <Box
+          ref={popperRef}
           id={listId}
           role="listbox"
           sx={{
-            position: 'absolute',
-            top: 'calc(100% + 10px)',
-            left: 0,
-            right: 0,
-            zIndex: 20,
             borderRadius: 2.5,
             overflow: 'hidden',
             ...styles.panel,
@@ -334,7 +372,7 @@ export function StorefrontSearchBar({
                         textOverflow: 'ellipsis',
                       }}
                     >
-                      {product.name}
+                      <SansDigitsText text={product.name} />
                     </Typography>
                     <Typography
                       sx={{
@@ -388,7 +426,7 @@ export function StorefrontSearchBar({
             </Box>
           ) : null}
         </Box>
-      ) : null}
+      </Popper>
     </Box>
   );
 }

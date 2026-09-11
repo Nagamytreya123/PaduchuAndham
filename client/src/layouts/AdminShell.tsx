@@ -22,6 +22,7 @@ import {
   IconReviews,
   IconSettings,
   IconShipping,
+  IconCoupon,
 } from '../icons';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
@@ -42,6 +43,7 @@ const links = [
   { to: '/admin/products', label: 'Products', icon: <IconInventory fontSize="small" /> },
   { to: '/admin/categories', label: 'Categories', icon: <IconInventory fontSize="small" /> },
   { to: '/admin/orders', label: 'Orders', icon: <IconShipping fontSize="small" /> },
+  { to: '/admin/coupons', label: 'Coupons', icon: <IconCoupon fontSize="small" /> },
   { to: '/admin/reviews', label: 'Reviews', icon: <IconReviews fontSize="small" /> },
   { to: '/admin/settings', label: 'Storefront', icon: <IconSettings fontSize="small" /> },
 ];

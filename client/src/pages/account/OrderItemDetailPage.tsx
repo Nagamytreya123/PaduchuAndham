@@ -5,7 +5,8 @@ import Stack from '@mui/material/Stack';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
-import { LuxuryShowcaseLoader } from '../../components/loading';
+import { BrandFillLoader } from '../../components/loading';
+import { useMinimumLoading } from '../../hooks/useMinimumLoading';
 import { formatInrFromPaise } from '../../utils/format';
 import { shopSurface } from '../../constants/shopSurface';
 import { editorialFrameSx } from '../../constants/shopSurface';
@@ -50,10 +51,11 @@ function ItemHeroImage({ src, alt }: { src: string | null | undefined; alt: stri
 export function OrderItemDetailPage() {
   const { orderId, productId } = useParams<{ orderId: string; productId: string }>();
   const { order, loading, error, reload } = useOrderDetail(orderId);
+  const showLoading = useMinimumLoading(loading);
   const [quickReview, setQuickReview] = useState<QuickReviewState | null>(null);
 
-  if (loading) {
-    return <LuxuryShowcaseLoader variant="inline" tone="light" aria-label="Loading item" />;
+  if (showLoading) {
+    return <BrandFillLoader variant="inline" aria-label="Loading item" />;
   }
 
   if (error || !order || !productId) {

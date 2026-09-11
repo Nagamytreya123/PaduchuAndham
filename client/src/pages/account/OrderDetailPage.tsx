@@ -8,7 +8,8 @@ import Button from '@mui/material/Button';
 import Divider from '@mui/material/Divider';
 import Collapse from '@mui/material/Collapse';
 import { IconChevronDown, IconChevronRight, IconLocationPin, IconPayment, IconPhone } from '../../icons';
-import { LuxuryShowcaseLoader } from '../../components/loading';
+import { BrandFillLoader } from '../../components/loading';
+import { useMinimumLoading } from '../../hooks/useMinimumLoading';
 import { formatInrFromPaise } from '../../utils/format';
 import { useAuth } from '../../context/AuthContext';
 import { shopSurface } from '../../constants/shopSurface';
@@ -138,11 +139,12 @@ export function OrderDetailPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { order, loading, error, reload } = useOrderDetail(orderId);
+  const showLoading = useMinimumLoading(loading);
   const [priceOpen, setPriceOpen] = useState(false);
   const [quickReview, setQuickReview] = useState<QuickReviewState | null>(null);
 
-  if (loading) {
-    return <LuxuryShowcaseLoader variant="inline" tone="light" aria-label="Loading order" />;
+  if (showLoading) {
+    return <BrandFillLoader variant="inline" aria-label="Loading order" />;
   }
 
   if (error || !order) {
@@ -163,7 +165,11 @@ export function OrderDetailPage() {
   const contactName = order.address?.recipientName?.trim() || user?.name?.trim() || 'You';
   const contactPhone = order.address?.recipientMobile?.trim();
   const items = order.items ?? [];
-  const itemSubtotal = items.reduce((sum, line) => sum + line.price * line.qty, 0);
+  const itemSubtotal = order.subtotalPaise ?? items.reduce((sum, line) => sum + line.price * line.qty, 0);
+  const discountPaise = order.discountPaise ?? 0;
+  const shippingPaise =
+    order.shippingPaise ??
+    (order.amount > itemSubtotal - discountPaise ? order.amount - itemSubtotal + discountPaise : 0);
 
   return (
     <>
@@ -325,10 +331,19 @@ export function OrderDetailPage() {
                   value={formatInrFromPaise(line.price * line.qty)}
                 />
               ))}
-              {itemSubtotal !== order.amount && (
-                <DetailRow label="Adjustments" value={formatInrFromPaise(order.amount - itemSubtotal)} />
+              {discountPaise > 0 && (
+                <DetailRow
+                  label={order.couponCode ? `Coupon (${order.couponCode})` : 'Coupon discount'}
+                  value={`-${formatInrFromPaise(discountPaise)}`}
+                />
               )}
-              <DetailRow label="Shipping" value="Complimentary" />
+              {itemSubtotal !== order.amount - shippingPaise + discountPaise && discountPaise <= 0 && (
+                <DetailRow label="Adjustments" value={formatInrFromPaise(order.amount - itemSubtotal - shippingPaise)} />
+              )}
+              <DetailRow
+                label="Shipping"
+                value={shippingPaise === 0 ? 'Free' : formatInrFromPaise(shippingPaise)}
+              />
             </Stack>
           </Collapse>
 

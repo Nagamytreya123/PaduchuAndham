@@ -64,6 +64,8 @@ export type ProductSummary = {
   jewelryDetails?: JewelryDetails;
   /** Present on product detail API responses when linked bracelet products exist */
   matchingBracelets?: ProductSummary[];
+  /** Present on product detail API when this bracelet is linked from one or more watches */
+  matchingWatches?: Array<ProductSummary & { watchBraceletBundlePrice?: number }>;
   /** Present when admin loads catalog — IDs for editing linked bracelets */
   matchingBraceletIds?: string[];
   /** Combined price (paise) for this watch + one linked matching bracelet */
@@ -72,6 +74,12 @@ export type ProductSummary = {
   comboProductIds?: string[];
   /** Hydrated linked products on product detail API */
   comboProducts?: ProductSummary[];
+  /** Selectable sizes when the product category uses size-as-option mode. */
+  sizeOptions?: string[];
+  /** ISO timestamp — used for newest-first storefront ordering */
+  createdAt?: string;
+  /** ISO timestamp — used for recently-updated storefront highlights */
+  updatedAt?: string;
   /** Present on product detail API */
   reviewSummary?: ReviewSummary;
   /** Present on product detail API when session is resolved */
